@@ -1,0 +1,30 @@
+# pico-wait-online.service
+#
+# Oneshot service that blocks until the PicoGallery server is reachable.
+# pico-kiosk.service has Requires= this unit, so the browser will not
+# open until the server has answered HTTP 200 on /api/health.
+#
+# Installed by: scripts/kiosk-setup.sh
+# Destination:  ~/.config/systemd/user/pico-wait-online.service
+#
+# To view logs: journalctl --user -u pico-wait-online
+
+[Unit]
+Description=PicoGallery — wait until server is reachable
+Documentation=https://github.com/your-org/pico-gallery-photoprism
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# RemainAfterExit=yes means "succeeded" after ExecStart exits 0.
+# This tells systemd the condition is still met (server was once reachable).
+RemainAfterExit=yes
+
+# Load the kiosk env so $PICO_SERVER_URL and $PICO_WAIT_TIMEOUT are available.
+EnvironmentFile=%h/.config/picogallery/kiosk.env
+
+ExecStart=/bin/bash -c '/usr/local/bin/pico-wait-online "$PICO_SERVER_URL" "$PICO_WAIT_TIMEOUT"'
+
+[Install]
+WantedBy=default.target

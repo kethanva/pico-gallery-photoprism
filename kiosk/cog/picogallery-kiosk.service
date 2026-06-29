@@ -1,0 +1,30 @@
+[Unit]
+Description=PicoGallery kiosk (Cog/WPE WebKit under Cage)
+Documentation=https://github.com/your-org/picogallery
+After=network-online.target seatd.service
+Wants=network-online.target seatd.service
+
+[Service]
+# Runs as the dedicated kiosk user. Cage opens DRM/KMS directly via the seat,
+# so the user must be in the 'video', 'render', 'input' groups and have a seat
+# (provided by seatd). install.sh sets all of this up.
+User=picokiosk
+Group=picokiosk
+SupplementaryGroups=video render input seat
+PAMName=login
+TTYPath=/dev/tty1
+
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+Environment=PICO_KIOSK_ENV=/etc/picogallery/kiosk.env
+# seatd-managed seat access for the wlroots backend Cage uses.
+Environment=WLR_BACKENDS=drm
+Environment=WLR_LIBSEAT_BACKEND=seatd
+
+ExecStart=/usr/local/bin/picogallery-kiosk
+Restart=always
+RestartSec=3
+# Give the GPU/seat a moment on cold boot before the first attempt.
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+[Unit]
+Description=PicoGallery — turn the display off
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pico-display-power off

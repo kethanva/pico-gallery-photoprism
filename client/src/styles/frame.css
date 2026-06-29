@@ -1,0 +1,180 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  overflow: hidden;
+  width: 100dvw;
+  height: 100dvh;
+  font-family: system-ui, sans-serif;
+  color: var(--color-text);
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+/* Stage */
+.pico-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+/* Slide layers */
+.slide-layer {
+  position: absolute;
+  inset: 0;
+  will-change: opacity, transform;
+}
+
+.slide-layer img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Letterbox blur fill: blurred cover-scaled copy behind the contained photo. */
+.slide-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(32px) brightness(0.55);
+  transform: scale(1.12); /* hide the soft blurred edges */
+}
+
+/* Transitions */
+.slide-layer.entering { z-index: 2; }
+.slide-layer.leaving  { z-index: 1; }
+
+.slide-layer[data-transition="fade"].entering  { animation: fade-in var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+.slide-layer[data-transition="fade"].leaving   { animation: fade-out var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+
+.slide-layer[data-transition="slide_left"].entering  { animation: slide-left-in  var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+.slide-layer[data-transition="slide_left"].leaving   { animation: slide-left-out var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+
+.slide-layer[data-transition="slide_right"].entering  { animation: slide-right-in  var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+.slide-layer[data-transition="slide_right"].leaving   { animation: slide-right-out var(--transition-ms, 800ms) var(--ease-out-expo) both; }
+
+@keyframes fade-in    { from { opacity: 0 } to { opacity: 1 } }
+@keyframes fade-out   { from { opacity: 1 } to { opacity: 0 } }
+@keyframes slide-left-in   { from { transform: translateX(100%) } to { transform: translateX(0) } }
+@keyframes slide-left-out  { from { transform: translateX(0) } to { transform: translateX(-100%) } }
+@keyframes slide-right-in  { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+@keyframes slide-right-out { from { transform: translateX(0) } to { transform: translateX(100%) } }
+
+/* Ken Burns */
+@keyframes ken-burns {
+  from { transform: scale(1.0) translate(0, 0); }
+  to   { transform: scale(1.08) translate(-1%, -1%); }
+}
+
+.slide-layer.ken-burns img {
+  animation: ken-burns 30s ease-in-out both;
+}
+
+/* Reduced motion overrides */
+@media (prefers-reduced-motion: reduce) {
+  .slide-layer[data-transition].entering,
+  .slide-layer[data-transition].leaving,
+  .slide-layer.ken-burns img {
+    animation: none !important;
+  }
+}
+
+/* OSD pill */
+.osd-pill {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: oklch(5% 0 0 / 0.72);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity var(--duration-normal) ease;
+  white-space: nowrap;
+  max-width: 90vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.osd-pill.visible { opacity: 1; }
+
+/* Clock */
+.pico-clock {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-6);
+  z-index: 10;
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  font-weight: 200;
+  color: oklch(90% 0 0 / 0.9);
+  letter-spacing: 0.05em;
+  text-shadow: 0 1px 8px oklch(0% 0 0 / 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Disconnect badge */
+.disconnect-badge {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: 20;
+  background: var(--color-danger);
+  color: #fff;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  display: none;
+}
+
+.disconnect-badge.visible { display: block; }
+
+/* Loading state */
+.pico-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: oklch(60% 0 0);
+  font-size: var(--text-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Night mode — intensity driven by config (dimPercent → brightness, warmth → sepia). */
+.pico-stage.night-mode {
+  filter: brightness(var(--night-brightness, 0.7)) sepia(var(--night-sepia, 0.3));
+}
+
+/* Display schedule "off": full blackout over everything. */
+.display-off {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-normal, 300ms) ease;
+}
+
+.display-off.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
