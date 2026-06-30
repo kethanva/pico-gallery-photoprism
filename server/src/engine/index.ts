@@ -89,7 +89,8 @@ export class SlideshowEngine {
   }
 
   togglePause(): void {
-    this.paused ? this.resume() : this.pause();
+    if (this.paused) this.resume();
+    else this.pause();
   }
 
   goto(id: string): boolean {

@@ -19,7 +19,9 @@ export async function sseHandler(req: FastifyRequest, reply: FastifyReply): Prom
   try {
     const state = getEngine().getState();
     send({ type: 'state', data: state });
-  } catch {}
+  } catch {
+    // Engine not ready yet — the first bus event will deliver state instead.
+  }
 
   const unsub = bus.subscribe(send);
   const keepalive = setInterval(() => res.write(': ping\n\n'), 25000);

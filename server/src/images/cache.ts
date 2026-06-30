@@ -24,7 +24,9 @@ export class DiskImageCache {
     try {
       const entries = await readdir(this.dir);
       this.keys = entries.filter((e) => e.endsWith('.img'));
-    } catch {}
+    } catch {
+      // Fresh/unreadable cache dir — start with an empty key set.
+    }
   }
 
   cacheKey(contentHash: string, w: number, h: number, fit: string, fmt: string): string {
@@ -71,7 +73,9 @@ export class DiskImageCache {
         total -= entry.size;
         this.keys = this.keys.filter((k) => k !== entry.key);
         logger.debug({ key: entry.key }, 'Evicted cache entry');
-      } catch {}
+      } catch {
+        // Entry already gone or unlink failed — skip and keep evicting.
+      }
     }
   }
 }

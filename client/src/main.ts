@@ -16,7 +16,9 @@ async function waitForReady(maxWaitMs = 120_000): Promise<void> {
     try {
       const r = await fetch('/api/v1/ready');
       if (r.ok) return;
-    } catch {}
+    } catch {
+      // Server not up yet — keep polling until the deadline.
+    }
     await new Promise((res) => setTimeout(res, 2000));
   }
 }
@@ -55,7 +57,9 @@ async function mountFrame(root: HTMLElement): Promise<void> {
   const blank = document.createElement('div');
   blank.className = 'display-off';
   stage.appendChild(blank);
-  const setDisplay = (on: boolean): void => blank.classList.toggle('visible', !on);
+  const setDisplay = (on: boolean): void => {
+    blank.classList.toggle('visible', !on);
+  };
 
   clock?.start();
   night.start();

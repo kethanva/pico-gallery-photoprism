@@ -94,29 +94,46 @@ docker compose -f docker/docker-compose.yml up --build
 
 The appliance display surface is **Cog (WPE WebKit)** running under the **Cage**
 Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
-`seatd` and forces its single client (Cog) fullscreen. This is light enough for a
-Pi Zero–class device. Provision a Pi with:
+`seatd` and forces its single client (Cog) fullscreen.
+
+`scripts/install.sh` is a **one-click, end-to-end provisioner**. It detects the
+board + architecture, checks/fixes dependencies, installs packages, (optionally)
+installs Node + builds the server, writes config + systemd units, and verifies
+the result — idempotently. Three modes:
 
 ```bash
-sudo ./scripts/install.sh http://<server-host>:8188
-# also run the server on this Pi:
-sudo ./scripts/install.sh --with-server http://localhost:8188
-# optional nightly display blank (off 22:00 → on 07:00):
-sudo ./scripts/install.sh --blank-on=22:00 --blank-off=07:00 http://<server-host>:8188
+# Display only — the server runs on another host (works on any Pi, incl. Pi Zero):
+sudo ./scripts/install.sh --mode kiosk --server-url http://<server-host>:8188
+
+# Everything on this Pi (needs 64-bit / ARMv7 — Pi Zero 2 W, Pi 3/4/5):
+sudo ./scripts/install.sh --mode all --source directory --photos /home/pi/Pictures
+
+# Drive the frame from PhotoPrism, with a nightly display blank:
+sudo ./scripts/install.sh --mode all --source photoprism \
+  --photoprism-url http://nas:2342 --photoprism-user admin --photoprism-pass secret \
+  --blank-on 22:00 --blank-off 07:00
 ```
 
-`install.sh` installs `cog` + `cage` + `seatd`, a dedicated `picokiosk` user, a
-systemd unit, and a tight sudoers entry, then boots straight into the frame. It
-also installs:
+> The original **Pi Zero / Zero W is ARMv6**, which modern Node.js does not
+> support — those boards are kiosk-only (`--mode kiosk`) and point at a server
+> elsewhere. The installer detects this and tells you. `--mode auto` (the default)
+> picks the right mode for the board.
 
-* **launcher** (`/usr/local/bin/picogallery-kiosk`) — waits for the server's
-  `/api/v1/health` before opening Cog, so the frame never lands on a "network
-  error" page during boot.
-* **`pico-display-power`** + `pico-display-{on,off}.timer` (only with
-  `--blank-on/--blank-off`) — daily display power via `vcgencmd`, DSI backlight,
-  or DRM DPMS.
+What it sets up:
 
-Source for the launcher/unit/sudoers lives in [`kiosk/cog/`](kiosk/cog/). See
+* **kiosk** — `cog` + `cage` + `seatd`, a `picokiosk` user, the launcher
+  (`/usr/local/bin/picogallery-kiosk`, which waits for `/api/v1/health` before
+  opening Cog), a systemd unit, a tight sudoers entry, and the KMS/`gpu_mem` boot
+  settings Cage needs.
+* **server** — Node 22 (NodeSource) + pnpm, a resource-capped build (with swap on
+  low-RAM boards), `/etc/picogallery/config.toml`, and a hardened
+  `picogallery.service` running as the repo owner.
+* **`pico-display-power`** + `pico-display-{on,off}.timer` when `--blank-on/--blank-off`
+  are given — daily display power via `vcgencmd`, DSI backlight, or DRM DPMS.
+
+Other flags: `--dry-run` (preview), `-y/--yes` (no prompts), `--verbose`,
+`--uninstall`. Run `sudo ./scripts/install.sh --help` for the full list. Source
+for the launcher/units/sudoers lives in [`kiosk/cog/`](kiosk/cog/); see
 [docs/deployment.md](docs/deployment.md) for details.
 
 ### Mimic the kiosk on a dev machine
@@ -145,16 +162,23 @@ the kiosk would show it, use the host browser:
 | `./run.sh appliance [config]` | Mimic the whole appliance: build, start the server, then open the frame kiosk. |
 | `./run.sh photoprism <url>` | Start the PhotoPrism Vue proxy host on `:8190` pointing to the specified backend URL. |
 
-### `scripts/install.sh` (Pi, Cog+Cage) Flags
+### `scripts/install.sh` (Pi end-to-end provisioner) Flags
 
-Run on the device as root: `sudo ./scripts/install.sh [flags] <frame-url>`.
+Run on the device as root: `sudo ./scripts/install.sh [flags]`.
 
 | Flag | Parameter | Description |
 |---|---|---|
-| `<frame-url>` | `URL` | Positional. The PicoGallery frame to display (default: `http://localhost:8188`). |
-| `--with-server` | (None) | Also install a systemd unit for the PicoGallery server from this repo. |
-| `--blank-on=` | `HH:MM` | Time to blank the display. Requires `--blank-off`. |
-| `--blank-off=` | `HH:MM` | Time to wake the display. Requires `--blank-on`. |
+| `--mode` | `auto\|kiosk\|server\|all` | What to install. `auto` (default) picks by board/arch. |
+| `--server-url` | `URL` | Frame/API URL the kiosk opens (required in `kiosk` mode). |
+| `--source` | `directory\|photoprism\|webdav` | Server photo source (server modes; default `directory`). |
+| `--photos` | `PATH` | Photo directory for the `directory` source. |
+| `--photoprism-url/-user/-pass` | — | PhotoPrism connection (for `--source photoprism`). |
+| `--webdav-url/-user/-pass` | — | WebDAV connection (for `--source webdav`). |
+| `--blank-on` / `--blank-off` | `HH:MM` | Nightly display-blank window (both required together). |
+| `-y, --yes` | (None) | Don't prompt; accept safe defaults. |
+| `--dry-run` | (None) | Print actions without changing the system. |
+| `--verbose` | (None) | Verbose output. |
+| `--uninstall` | (None) | Remove PicoGallery services, users, config, and cache. |
 
 ---
 

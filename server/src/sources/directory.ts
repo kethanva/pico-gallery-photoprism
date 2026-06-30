@@ -18,9 +18,8 @@ const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.tiff', '
  */
 async function readExif(filePath: string): Promise<{ takenAt?: string; width?: number; height?: number }> {
   try {
-    const x = (await exifr.parse(filePath, { tiff: true, exif: true, ifd0: true })) as
-      | Record<string, unknown>
-      | undefined;
+    // Default parse reads TIFF/IFD0/EXIF (incl. DateTimeOriginal + dimensions).
+    const x = (await exifr.parse(filePath)) as Record<string, unknown> | undefined;
     if (!x) return {};
     const date = (x['DateTimeOriginal'] ?? x['CreateDate'] ?? x['ModifyDate']) as Date | undefined;
     const takenAt = date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : undefined;
@@ -109,7 +108,9 @@ export class DirectorySource implements PhotoSource {
         if (!takenAt) {
           try {
             takenAt = (await stat(filePath)).mtime.toISOString();
-          } catch {}
+          } catch {
+            // No EXIF date and stat failed — leave takenAt undefined.
+          }
         }
         photos.push({
           id: `directory:${filePath}`,
