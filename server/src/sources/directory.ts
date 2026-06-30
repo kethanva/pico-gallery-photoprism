@@ -88,7 +88,9 @@ export class DirectorySource implements PhotoSource {
   async getOriginal(meta: PhotoMeta, _w: number, _h: number): Promise<GetOriginalResult> {
     const filePath = meta.id.slice(this.name.length + 1);
     const bytes = await readFile(filePath);
-    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    // The cache identity comes from scan() (path+mtime+size), so a hit never
+    // reaches here; only hash the bytes if scan somehow left it unset.
+    const contentHash = meta.contentHash ?? createHash('sha256').update(bytes).digest('hex');
     const stream = Readable.from([bytes]);
     const ext = extname(filePath).toLowerCase();
     const contentType = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : 'image/jpeg';
@@ -121,16 +123,24 @@ export class DirectorySource implements PhotoSource {
         if (i >= found.length) return;
         const { filePath, album } = found[i]!;
         // Prefer the EXIF capture date (so ordering/on-this-day are accurate);
-        // fall back to the file mtime when there is no EXIF date.
+        // fall back to the file mtime when there is no EXIF date. The same stat
+        // yields a cheap, stable cache identity (path+mtime+size) so repeat
+        // views are served from the resized-image cache without re-reading the
+        // file off the SD card. Editing a file changes mtime/size → new key →
+        // automatic re-resize.
         const exif = await readExif(filePath);
         let takenAt = exif.takenAt;
-        if (!takenAt) {
-          try {
-            takenAt = (await stat(filePath)).mtime.toISOString();
-          } catch {
-            // No EXIF date and stat failed — leave takenAt undefined.
-          }
+        let mtimeMs = 0;
+        let size = 0;
+        try {
+          const st = await stat(filePath);
+          mtimeMs = st.mtimeMs;
+          size = st.size;
+          if (!takenAt) takenAt = st.mtime.toISOString();
+        } catch {
+          // stat failed — leave takenAt undefined and use a path-only identity.
         }
+        const contentHash = createHash('sha256').update(`${filePath}:${mtimeMs}:${size}`).digest('hex');
         photos[i] = {
           id: `directory:${filePath}`,
           sourceName: 'directory',
@@ -140,6 +150,7 @@ export class DirectorySource implements PhotoSource {
           width: exif.width ?? 0,
           height: exif.height ?? 0,
           favorite: false,
+          contentHash,
         };
       }
     };

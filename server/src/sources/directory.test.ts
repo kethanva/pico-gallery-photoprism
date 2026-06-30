@@ -28,6 +28,12 @@ describe('DirectorySource', () => {
       // At least one sample carries real EXIF dimensions (proves exifr is wired,
       // not just the mtime fallback).
       expect(photos.some((p) => p.width > 0 && p.height > 0)).toBe(true);
+
+      // Every photo gets a stable cache identity (path+mtime+size) so repeat
+      // views are served from cache without re-reading the file; distinct files
+      // get distinct hashes.
+      for (const p of photos) expect(p.contentHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(new Set(photos.map((p) => p.contentHash)).size).toBe(photos.length);
     } finally {
       await src.dispose();
     }

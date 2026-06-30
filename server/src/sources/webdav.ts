@@ -11,6 +11,10 @@ const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.tiff', '
 interface DavEntry {
   href: string;
   isDir: boolean;
+  // A stable per-file identity (etag, else last-modified) used as the cache key
+  // so repeat views skip re-downloading the original. Undefined → fall back to
+  // the href (path), which is stable for the lifetime of a scan.
+  tag?: string;
 }
 
 // WebDAV servers use different namespace prefixes for the DAV: namespace
@@ -19,6 +23,8 @@ interface DavEntry {
 const RESPONSE_RE = /<(?:[a-z0-9]+:)?response\b[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?response>/gi;
 const HREF_RE = /<(?:[a-z0-9]+:)?href\b[^>]*>(.*?)<\/(?:[a-z0-9]+:)?href>/i;
 const COLLECTION_RE = /<(?:[a-z0-9]+:)?collection\b/i;
+const ETAG_RE = /<(?:[a-z0-9]+:)?getetag\b[^>]*>(.*?)<\/(?:[a-z0-9]+:)?getetag>/i;
+const LASTMOD_RE = /<(?:[a-z0-9]+:)?getlastmodified\b[^>]*>(.*?)<\/(?:[a-z0-9]+:)?getlastmodified>/i;
 
 function parsePropfind(xml: string): DavEntry[] {
   const entries: DavEntry[] = [];
@@ -27,7 +33,8 @@ function parsePropfind(xml: string): DavEntry[] {
     const block = m[1] ?? '';
     const href = HREF_RE.exec(block)?.[1]?.trim() ?? '';
     const isDir = COLLECTION_RE.test(block);
-    entries.push({ href, isDir });
+    const tag = ETAG_RE.exec(block)?.[1]?.trim() || LASTMOD_RE.exec(block)?.[1]?.trim() || undefined;
+    entries.push({ href, isDir, tag });
   }
   return entries;
 }
@@ -60,7 +67,9 @@ export class WebDavSource implements PhotoSource {
     const resp = await this.doFetch(url);
     if (!resp.ok) throw new Error(`WebDAV fetch failed: ${resp.status}`);
     const bytes = Buffer.from(await resp.arrayBuffer());
-    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    // Identity comes from scan() (etag/last-modified/path), so a cache hit never
+    // reaches here; only hash the bytes if it was somehow left unset.
+    const contentHash = meta.contentHash ?? createHash('sha256').update(bytes).digest('hex');
     const stream = Readable.from(bytes);
     const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
     return { stream, contentType, contentHash };
@@ -83,6 +92,7 @@ export class WebDavSource implements PhotoSource {
           height: 0,
           favorite: false,
           downloadUrl: e.href.startsWith('http') ? e.href : `${origin}${e.href}`,
+          contentHash: e.tag ?? e.href,
         };
       });
     logger.info({ count: this.photos.length }, 'WebDAV scan complete');
@@ -93,7 +103,7 @@ export class WebDavSource implements PhotoSource {
     const resp = await this.doFetch(url, {
       method: 'PROPFIND',
       headers: { Depth: depth, 'Content-Type': 'application/xml' },
-      body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+      body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getetag/><d:getlastmodified/></d:prop></d:propfind>',
     });
     if (!resp.ok) {
       logger.error({ status: resp.status }, 'WebDAV PROPFIND failed');

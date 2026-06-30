@@ -1,4 +1,5 @@
 import os from 'os';
+import type { Readable } from 'stream';
 import sharp from 'sharp';
 import type { PhotoMeta } from '@pico/shared';
 import type { PhotoSource } from '../sources/source.js';
@@ -42,26 +43,50 @@ export class ImageService {
   ): Promise<{ data: Buffer; contentType: string; cacheKey: string; hit: boolean }> {
     const resolvedFmt = fmt === 'auto' ? negotiateFormat(acceptHeader) : fmt;
 
-    // Fast path: if PhotoMeta already carries a contentHash (PhotoPrism, WebDAV), check cache first.
+    // When the source already knows a stable identity for the original
+    // (PhotoPrism file hash, directory path+mtime+size, WebDAV etag), key the
+    // cache off it. A repeat view is then a pure disk-cache hit: we never
+    // re-fetch the original or re-read it off the SD card — the expensive part
+    // on a 24/7 frame cycling every few seconds. The lookup key and the store
+    // key must be the same, so we resolve identity *before* fetching and reuse
+    // it for the put.
     if (meta.contentHash) {
-      const earlyKey = this.cache.cacheKey(meta.contentHash, w, h, fit, resolvedFmt);
-      const cached = await this.cache.get(earlyKey);
+      const key = this.cache.cacheKey(meta.contentHash, w, h, fit, resolvedFmt);
+      const cached = await this.cache.get(key);
       if (cached) {
-        return { data: cached, contentType: mimeFor(resolvedFmt), cacheKey: earlyKey, hit: true };
+        return { data: cached, contentType: mimeFor(resolvedFmt), cacheKey: key, hit: true };
       }
+      const { stream } = await source.getOriginal(meta, w, h);
+      const output = await this.resize(stream, w, h, fit, resolvedFmt, meta);
+      await this.cache.put(key, output);
+      return { data: output, contentType: mimeFor(resolvedFmt), cacheKey: key, hit: false };
     }
 
-    const { stream: srcStream, contentHash } = await source.getOriginal(meta, w, h);
-
-    // After fetching (which computes/confirms the real content hash), check again before resizing.
-    const finalKey = this.cache.cacheKey(contentHash, w, h, fit, resolvedFmt);
-    const cachedFinal = await this.cache.get(finalKey);
-    if (cachedFinal) {
-      return { data: cachedFinal, contentType: mimeFor(resolvedFmt), cacheKey: finalKey, hit: true };
+    // No pre-known identity: fetch first, then key off a hash of the bytes. This
+    // still pays the fetch on every view, which is why every real source sets a
+    // contentHash above; this branch is the safety net for ones that can't.
+    const { stream, contentHash } = await source.getOriginal(meta, w, h);
+    const key = this.cache.cacheKey(contentHash, w, h, fit, resolvedFmt);
+    const cached = await this.cache.get(key);
+    if (cached) {
+      return { data: cached, contentType: mimeFor(resolvedFmt), cacheKey: key, hit: true };
     }
+    const output = await this.resize(stream, w, h, fit, resolvedFmt, meta);
+    await this.cache.put(key, output);
+    return { data: output, contentType: mimeFor(resolvedFmt), cacheKey: key, hit: false };
+  }
 
+  /** Buffer a source stream, guard it, HEIC-transcode if needed, then resize to fmt. */
+  private async resize(
+    stream: Readable,
+    w: number,
+    h: number,
+    fit: 'cover' | 'contain',
+    fmt: 'webp' | 'jpeg' | 'avif',
+    meta: PhotoMeta
+  ): Promise<Buffer> {
     const chunks: Buffer[] = [];
-    for await (const chunk of srcStream) chunks.push(chunk as Buffer);
+    for await (const chunk of stream) chunks.push(chunk as Buffer);
     let input: Buffer = Buffer.concat(chunks);
 
     checkGuard(input, this.maxMb, this.maxMegapixels);
@@ -78,12 +103,10 @@ export class ImageService {
     const fitMode = fit === 'cover' ? ('cover' as const) : ('inside' as const);
     const output = await pipeline
       .resize(w, h, { fit: fitMode, withoutEnlargement: true })
-      .toFormat(resolvedFmt, { quality: 85 })
+      .toFormat(fmt, { quality: 85 })
       .toBuffer();
-
-    await this.cache.put(finalKey, output);
-    logger.debug({ id: meta.id, w, h, fit, fmt: resolvedFmt, bytes: output.length }, 'Image resized');
-    return { data: output, contentType: mimeFor(resolvedFmt), cacheKey: finalKey, hit: false };
+    logger.debug({ id: meta.id, w, h, fit, fmt, bytes: output.length }, 'Image resized');
+    return output;
   }
 }
 

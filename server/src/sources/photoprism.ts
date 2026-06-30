@@ -63,7 +63,9 @@ export class PhotoPrismSource implements PhotoSource {
     const resp = await this.doFetch(thumbUrl);
     if (!resp.ok) throw new Error(`PhotoPrism fetch failed: ${resp.status}`);
     const bytes = Buffer.from(await resp.arrayBuffer());
-    const contentHash = createHash('sha256').update(bytes).digest('hex');
+    // PhotoPrism's per-file Hash is the cache identity (set on PhotoMeta), so a
+    // hit never reaches here; only hash the bytes if it was somehow left unset.
+    const contentHash = meta.contentHash ?? createHash('sha256').update(bytes).digest('hex');
     const stream = Readable.from(bytes);
     const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
     return { stream, contentType, contentHash };
