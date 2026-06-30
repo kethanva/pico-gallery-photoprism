@@ -36,36 +36,62 @@ sudo apt install -y git curl
 
 ---
 
-## 3. Clone PicoGallery V2
+## 3. Install PicoGallery V2
 
-It's recommended to clone the repository to `/opt/picogallery`:
-```bash
-sudo mkdir -p /opt/picogallery
-sudo chown -R $USER:$USER /opt/picogallery
-git clone https://github.com/your-username/pico-gallery-photoprism.git /opt/picogallery
-cd /opt/picogallery
-```
+You can install PicoGallery V2 either using a pre-built release artifact (recommended, faster, saves RAM/CPU on Pi Zeros) or compile it from source.
+
+### Option A: Pre-built Release Artifact (Recommended)
+
+1. Create the installation directory:
+   ```bash
+   sudo mkdir -p /opt/picogallery
+   sudo chown -R $USER:$USER /opt/picogallery
+   cd /opt/picogallery
+   ```
+
+2. Download and extract the latest release artifact from GitHub:
+   ```bash
+   # Replace <version> with the actual version tag, e.g. v2.0.0
+   curl -sSLO https://github.com/your-username/pico-gallery-photoprism/releases/download/<version>/picogallery-release.tar.gz
+   tar -xzf picogallery-release.tar.gz
+   rm picogallery-release.tar.gz
+   ```
+
+3. If running the server locally, install Node.js v22 and `pnpm`:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt install -y nodejs
+   sudo npm install -g pnpm
+   ```
+
+4. Now proceed to configuration and running the installer. The installer will automatically detect the pre-built assets and skip the heavy compilation phase.
 
 ---
 
-## 4. Install Server Dependencies (Optional, for Pi Zero 2 W)
+### Option B: From Source (For Developers)
 
-*(Skip this step if you are running the PicoGallery Server on another machine like a NAS or PC, and only using the Pi as a display.)*
+Use this method if you want to run from a live git checkout and compile files locally.
 
-If running the server locally on the Pi, install Node.js and pnpm:
+1. Clone the repository:
+   ```bash
+   sudo mkdir -p /opt/picogallery
+   sudo chown -R $USER:$USER /opt/picogallery
+   git clone https://github.com/your-username/pico-gallery-photoprism.git /opt/picogallery
+   cd /opt/picogallery
+   ```
 
-```bash
-# Install Node.js v22
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
+2. Install Node.js v22 and `pnpm`:
+   ```bash
+   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+   sudo apt install -y nodejs
+   sudo npm install -g pnpm
+   ```
 
-# Install pnpm
-sudo npm install -g pnpm
-
-# Install PicoGallery dependencies and build the server/client
-./run.sh setup
-./run.sh build
-```
+3. Install workspace dependencies and compile:
+   ```bash
+   pnpm install
+   pnpm build
+   ```
 
 ---
 
