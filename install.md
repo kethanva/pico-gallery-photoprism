@@ -107,19 +107,19 @@ Run the installer based on your setup:
 ### Option A: Standalone Setup (Server runs on the Pi)
 This installs the kiosk and creates a systemd service for the local server.
 ```bash
-sudo ./scripts/install.sh --with-server http://localhost:8188
+sudo ./install.sh --with-server http://localhost:8188
 ```
 
 ### Option B: Display Only (Server runs elsewhere)
 Point the kiosk to the IP of the machine hosting the server (e.g. `192.168.1.100`).
 ```bash
-sudo ./scripts/install.sh http://192.168.1.100:8188
+sudo ./install.sh http://192.168.1.100:8188
 ```
 
 ### Display Sleep Schedule
 You can optionally configure the display to turn off at night to save power:
 ```bash
-sudo ./scripts/install.sh --with-server --blank-off="08:00" --blank-on="23:00" http://localhost:8188
+sudo ./install.sh --with-server --blank-off="08:00" --blank-on="23:00" http://localhost:8188
 ```
 *(In this example, the screen turns off at 23:00 and turns back on at 08:00).*
 

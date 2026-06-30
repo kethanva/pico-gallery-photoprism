@@ -6,7 +6,7 @@
 #   2. rpi_backlight sysfs      — official DSI touchscreen
 #   3. DRM connector dpms sysfs — generic HDMI fallback
 #
-# Installed to /usr/local/bin/pico-display-power by scripts/install.sh and driven
+# Installed to /usr/local/bin/pico-display-power by install.sh and driven
 # by the pico-display-{on,off}.timer units.
 #
 # Usage: pico-display-power on|off

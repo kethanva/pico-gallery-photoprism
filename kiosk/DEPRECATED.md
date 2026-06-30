@@ -6,7 +6,7 @@
 The canonical kiosk is now **Cog (WPE WebKit) under the Cage Wayland compositor**:
 
 - Launcher / unit / sudoers: [`kiosk/cog/`](cog/)
-- Installer: [`scripts/install.sh`](../scripts/install.sh)
+- Installer: [`install.sh`](../install.sh)
 - Local mimic on a dev machine: `./run.sh kiosk`
 
 Why the switch: QtWebEngine bundles a full Chromium and pulls the whole Qt stack —

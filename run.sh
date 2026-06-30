@@ -191,7 +191,7 @@ cmd_kiosk() {
     echo "macOS: Cog+Cage is Linux-only. Mimicking the frame in your browser → $url"
   else
     echo "cog/cage not installed; mimicking the frame in your browser → $url"
-    echo "  (on the Pi, run: sudo ./scripts/install.sh $url)"
+    echo "  (on the Pi, run: sudo ./install.sh $url)"
   fi
   open_in_browser "$url"
 }

@@ -12,11 +12,11 @@
 #
 # QUICK START
 #   Display only (server runs elsewhere):
-#     sudo ./scripts/install.sh --mode kiosk --server-url http://192.168.1.50:8188
+#     sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
 #   Everything on this Pi (Pi Zero 2 W / Pi 4+; needs 64-bit or armv7):
-#     sudo ./scripts/install.sh --mode all --source directory --photos /home/pi/Pictures
+#     sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures
 #
-# Run `sudo ./scripts/install.sh --help` for all options.
+# Run `sudo ./install.sh --help` for all options.
 #
 # Hard constraint: the original Pi Zero / Zero W is ARMv6, which modern Node.js
 # does not support — those boards can only run the *kiosk*, pointed at a server
@@ -28,7 +28,7 @@ set -Eeuo pipefail
 # ── Constants ────────────────────────────────────────────────────────────────
 readonly SCRIPT_VERSION="2.0.0"
 readonly SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly REPO_ROOT="$(cd "$SCRIPT_PATH/.." && pwd)"
+readonly REPO_ROOT="$SCRIPT_PATH"
 readonly KIOSK_ASSETS="$REPO_ROOT/kiosk/cog"
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
@@ -114,7 +114,7 @@ usage() {
   cat <<EOF
 PicoGallery V2 installer v$SCRIPT_VERSION
 
-Usage: sudo ./scripts/install.sh [options]
+Usage: sudo ./install.sh [options]
 
 Modes (--mode):
   auto      Pick a sensible mode for this board (default)
@@ -142,9 +142,9 @@ Options:
   -h, --help                This help
 
 Examples:
-  sudo ./scripts/install.sh --mode kiosk --server-url http://192.168.1.50:8188
-  sudo ./scripts/install.sh --mode all --source directory --photos /home/pi/Pictures -y
-  sudo ./scripts/install.sh --mode all --source photoprism \\
+  sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
+  sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures -y
+  sudo ./install.sh --mode all --source photoprism \\
        --photoprism-url http://nas:2342 --photoprism-user admin --photoprism-pass secret
 EOF
 }

@@ -55,7 +55,7 @@ kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via `seatd`
 and forces its single client (Cog) fullscreen.
 
 ```bash
-sudo ./scripts/install.sh http://<server-host>:8188
+sudo ./install.sh http://<server-host>:8188
 sudo systemctl start picogallery-kiosk
 journalctl -u picogallery-kiosk -f
 ```

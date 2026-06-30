@@ -96,20 +96,20 @@ The appliance display surface is **Cog (WPE WebKit)** running under the **Cage**
 Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
 `seatd` and forces its single client (Cog) fullscreen.
 
-`scripts/install.sh` is a **one-click, end-to-end provisioner**. It detects the
+`install.sh` is a **one-click, end-to-end provisioner**. It detects the
 board + architecture, checks/fixes dependencies, installs packages, (optionally)
 installs Node + builds the server, writes config + systemd units, and verifies
 the result — idempotently. Three modes:
 
 ```bash
 # Display only — the server runs on another host (works on any Pi, incl. Pi Zero):
-sudo ./scripts/install.sh --mode kiosk --server-url http://<server-host>:8188
+sudo ./install.sh --mode kiosk --server-url http://<server-host>:8188
 
 # Everything on this Pi (needs 64-bit / ARMv7 — Pi Zero 2 W, Pi 3/4/5):
-sudo ./scripts/install.sh --mode all --source directory --photos /home/pi/Pictures
+sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures
 
 # Drive the frame from PhotoPrism, with a nightly display blank:
-sudo ./scripts/install.sh --mode all --source photoprism \
+sudo ./install.sh --mode all --source photoprism \
   --photoprism-url http://nas:2342 --photoprism-user admin --photoprism-pass secret \
   --blank-on 22:00 --blank-off 07:00
 ```
@@ -132,7 +132,7 @@ What it sets up:
   are given — daily display power via `vcgencmd`, DSI backlight, or DRM DPMS.
 
 Other flags: `--dry-run` (preview), `-y/--yes` (no prompts), `--verbose`,
-`--uninstall`. Run `sudo ./scripts/install.sh --help` for the full list. Source
+`--uninstall`. Run `sudo ./install.sh --help` for the full list. Source
 for the launcher/units/sudoers lives in [`kiosk/cog/`](kiosk/cog/); see
 [docs/deployment.md](docs/deployment.md) for details.
 
@@ -162,9 +162,9 @@ the kiosk would show it, use the host browser:
 | `./run.sh appliance [config]` | Mimic the whole appliance: build, start the server, then open the frame kiosk. |
 | `./run.sh photoprism <url>` | Start the PhotoPrism Vue proxy host on `:8190` pointing to the specified backend URL. |
 
-### `scripts/install.sh` (Pi end-to-end provisioner) Flags
+### `install.sh` (Pi end-to-end provisioner) Flags
 
-Run on the device as root: `sudo ./scripts/install.sh [flags]`.
+Run on the device as root: `sudo ./install.sh [flags]`.
 
 | Flag | Parameter | Description |
 |---|---|---|
