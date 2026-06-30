@@ -265,9 +265,14 @@ preflight() {
 
   [[ "$IS_PI" -eq 1 ]] || warn "Not detected as a Raspberry Pi — continuing anyway (useful for testing)."
 
-  # Disk space: kiosk needs little; building the server needs room for node_modules.
+  # Disk space: kiosk needs little; building the server needs room for node_modules
+  # (~800 MB) and, on low-RAM boards, the ~1 GB build swapfile we add to / as well.
   local need_mb=400
-  [[ "$MODE_WANTS_SERVER" -eq 1 ]] && need_mb=1500
+  if [[ "$MODE_WANTS_SERVER" -eq 1 ]]; then
+    need_mb=1500
+    local cur_swap; cur_swap=$(( $(awk '/SwapTotal/{print $2}' /proc/meminfo 2>/dev/null || echo 0) / 1024 ))
+    if (( RAM_MB < 900 && cur_swap < 900 )); then need_mb=$(( need_mb + 1100 )); fi
+  fi
   if (( DISK_FREE_MB < need_mb )); then
     die "Low disk space: ${DISK_FREE_MB} MB free, need ~${need_mb} MB. Expand the filesystem (raspi-config) or free space."
   fi
@@ -323,8 +328,13 @@ step_kms_boot() {
     debug "KMS driver already enabled"
   fi
   if ! grep -qE '^\s*gpu_mem=' "$BOOT_CFG"; then
-    info "Setting gpu_mem=128"
-    run bash -c "printf 'gpu_mem=128\n' >> '$BOOT_CFG'"
+    # Under the full KMS driver the GPU allocates from CMA on demand, so a big
+    # gpu_mem reservation just steals system RAM. Reserve little on 512 MB
+    # boards (Pi Zero 2 W) where server+kiosk share the memory.
+    local gpu_mem=128
+    if (( RAM_MB <= 640 )); then gpu_mem=64; fi
+    info "Setting gpu_mem=$gpu_mem"
+    run bash -c "printf 'gpu_mem=$gpu_mem\n' >> '$BOOT_CFG'"
     REBOOT_REQUIRED=1
   fi
 }
@@ -350,8 +360,13 @@ step_swap() {
       run chmod 600 "$sf"; run mkswap "$sf"
     fi
     run swapon "$sf" || true
+    # Persist it: the 512 MB runtime (Node server + WebKit kiosk) also benefits
+    # from swap as an OOM cushion, not just the build.
+    if [[ "$DRY_RUN" -eq 0 ]] && ! grep -q "$sf" /etc/fstab 2>/dev/null; then
+      printf '%s none swap sw 0 0\n' "$sf" >> /etc/fstab
+    fi
   fi
-  ok "Swap ready for the build."
+  ok "Swap ready (build + runtime cushion)."
 }
 
 # Install Node (NodeSource) for arm64/armv7/x86_64; gate ARMv6 out.
@@ -382,10 +397,31 @@ step_node() {
 # Install workspace deps + build shared→server→client (resource-capped for small Pis).
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
-  step "Building PicoGallery (this is the slow part on a Pi)"
-  export NODE_OPTIONS="--max-old-space-size=$(( RAM_MB < 900 ? 460 : 1024 ))"
-  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$NODE_OPTIONS" pnpm install --frozen-lockfile )
-  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$NODE_OPTIONS" pnpm build )
+  step "Building PicoGallery (the slow part on a Pi — minutes on a Zero 2 W)"
+  # Cap the V8 heap so a 512 MB board builds against swap instead of OOM-killing.
+  local heap=1024
+  if (( RAM_MB < 900 )); then heap=460; fi
+  local nopts="--max-old-space-size=$heap"
+
+  info "Installing workspace dependencies (Node heap capped at ${heap} MB)"
+  # Prefer the committed lockfile for reproducibility; fall back to a normal
+  # install if it ever drifts, so a fresh checkout still provisions cleanly.
+  # Clear the ERR trap around the probe (set -E would otherwise fire it inside
+  # the subshell and print a spurious "Aborted" before we recover).
+  local frozen_rc=0
+  trap - ERR; set +e
+  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --frozen-lockfile )
+  frozen_rc=$?
+  set -e; trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
+  if (( frozen_rc != 0 )); then
+    warn "Frozen install failed (lockfile drift?) — retrying without --frozen-lockfile"
+    ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --no-frozen-lockfile )
+  fi
+
+  # Build serially: parallel tsc + vite OOMs a 512 MB Pi. pnpm keeps topological
+  # order with concurrency 1, so shared builds before server and client.
+  info "Building shared → server → client (serial, low-memory)"
+  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm -r --workspace-concurrency=1 run build )
   [[ "$DRY_RUN" -eq 1 ]] || [[ -f "$REPO_ROOT/server/dist/index.js" ]] || die "Build did not produce server/dist/index.js"
   ok "Build complete"
 }
@@ -499,6 +535,10 @@ step_server_unit() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   step "Server systemd unit"
   local node_bin; node_bin="$(command -v node || echo /usr/bin/node)"
+  # On a 512 MB board the server shares RAM with the WebKit kiosk; bound the V8
+  # heap so a long-running playlist/cache can't balloon and OOM the frame.
+  local runtime_env=""
+  if (( RAM_MB < 900 )); then runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=256"; fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write /etc/systemd/system/picogallery.service\n' "$C_DIM" "$C_RESET"
   else
@@ -513,6 +553,7 @@ User=$RUN_USER
 Group=$RUN_GROUP
 Environment=NODE_ENV=production
 Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
+$runtime_env
 WorkingDirectory=$REPO_ROOT
 ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
 Restart=always
@@ -564,6 +605,17 @@ EOF
   run install -m 0440 "$KIOSK_ASSETS/picogallery-kiosk.sudoers" /etc/sudoers.d/picogallery-kiosk
   run visudo -cf /etc/sudoers.d/picogallery-kiosk
 
+  # All-mode: the kiosk targets the local server, so order it after the server.
+  # (The launcher also waits on /health, so this just makes the common case clean.)
+  if [[ "$MODE" == "all" && "$DRY_RUN" -eq 0 ]]; then
+    install -d -m 0755 /etc/systemd/system/picogallery-kiosk.service.d
+    cat >/etc/systemd/system/picogallery-kiosk.service.d/10-after-server.conf <<EOF
+[Unit]
+After=picogallery.service
+Wants=picogallery.service
+EOF
+  fi
+
   step_blank_schedule
 
   run systemctl daemon-reload
@@ -614,11 +666,11 @@ step_verify() {
     fi
     info "Waiting for /api/v1/health…"
     local up=0
-    for _ in $(seq 1 20); do
+    for _ in $(seq 1 30); do
       if curl -fsS --max-time 3 "http://localhost:$SERVER_PORT/api/v1/health" >/dev/null 2>&1; then up=1; break; fi
       sleep 1
     done
-    [[ "$up" -eq 1 ]] && ok "server answered /health" || { err "server did not answer /health in 20s"; failures=$((failures+1)); }
+    [[ "$up" -eq 1 ]] && ok "server answered /health" || { err "server did not answer /health in 30s — journalctl -u picogallery"; failures=$((failures+1)); }
   fi
 
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
@@ -639,7 +691,14 @@ do_uninstall() {
     run rm -f "/etc/systemd/system/$unit"
   done
   run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /etc/sudoers.d/picogallery-kiosk
+  run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
   run systemctl daemon-reload
+  # Remove the swapfile we may have created (and its fstab entry).
+  if [[ -f /var/swap.picogallery ]]; then
+    run swapoff /var/swap.picogallery 2>/dev/null || true
+    run sed -i '\#/var/swap.picogallery#d' /etc/fstab 2>/dev/null || true
+    run rm -f /var/swap.picogallery
+  fi
   run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
   id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
   id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
