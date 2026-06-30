@@ -1,7 +1,7 @@
 import { readdir, stat, readFile } from 'fs/promises';
 import { createHash } from 'crypto';
 import { join, extname, basename, dirname, relative } from 'path';
-import { homedir } from 'os';
+import { homedir, cpus } from 'os';
 import { Readable } from 'stream';
 import exifr from 'exifr';
 import type { PhotoMeta, AuthStatus } from '@pico/shared';
@@ -10,6 +10,11 @@ import type { DirectoryConfig } from '../config/index.js';
 import { logger } from '../telemetry/logger.js';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.tiff', '.tif', '.heic', '.avif']);
+
+// Read EXIF for many files at once (bounded). exifr reads only the metadata
+// bytes, so this is light on memory; the parallelism cuts a large library's
+// boot-time scan to ~1/cores on a quad-core Pi without thrashing.
+const SCAN_CONCURRENCY = Math.min(8, Math.max(1, cpus().length || 1));
 
 /**
  * Read the real capture date + pixel dimensions from EXIF (exifr reads only the
@@ -95,14 +100,28 @@ export class DirectorySource implements PhotoSource {
   }
 
   private async scan(): Promise<void> {
-    const photos: PhotoMeta[] = [];
+    // Phase 1: walk the roots and collect matching files (cheap dir reads).
+    const found: Array<{ filePath: string; album: string }> = [];
     const roots = this.cfg.paths.map(resolvePath);
     for (const root of roots) {
       for await (const filePath of walkDir(root, this.cfg.recursive ?? true)) {
         const album = relative(root, dirname(filePath)) || basename(root);
         if (this.cfg.allowedAlbums && !this.cfg.allowedAlbums.includes(album)) continue;
-        // Prefer the EXIF capture date (so ordering/on-this-day are accurate); fall
-        // back to the file mtime when there is no EXIF date.
+        found.push({ filePath, album });
+      }
+    }
+
+    // Phase 2: read EXIF in parallel (bounded). Order is irrelevant here — the
+    // playlist orderer sorts later — so workers fill a pre-sized array by index.
+    const photos: PhotoMeta[] = new Array(found.length);
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const i = next++;
+        if (i >= found.length) return;
+        const { filePath, album } = found[i]!;
+        // Prefer the EXIF capture date (so ordering/on-this-day are accurate);
+        // fall back to the file mtime when there is no EXIF date.
         const exif = await readExif(filePath);
         let takenAt = exif.takenAt;
         if (!takenAt) {
@@ -112,7 +131,7 @@ export class DirectorySource implements PhotoSource {
             // No EXIF date and stat failed — leave takenAt undefined.
           }
         }
-        photos.push({
+        photos[i] = {
           id: `directory:${filePath}`,
           sourceName: 'directory',
           filename: basename(filePath),
@@ -121,10 +140,12 @@ export class DirectorySource implements PhotoSource {
           width: exif.width ?? 0,
           height: exif.height ?? 0,
           favorite: false,
-        });
+        };
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(SCAN_CONCURRENCY, found.length) }, worker));
+
     this.photos = photos;
-    logger.info({ count: photos.length }, 'Directory scan complete');
+    logger.info({ count: photos.length, concurrency: SCAN_CONCURRENCY }, 'Directory scan complete');
   }
 }

@@ -8,6 +8,9 @@ export const SlideshowStateSchema = z.object({
   paused: z.boolean(),
   displayOn: z.boolean(),
   photo: PhotoMetaSchema.nullable(),
+  // The upcoming photo, so the client can prefetch it during the current
+  // slide's dwell (warms the server resize + browser cache ahead of the swap).
+  nextPhoto: PhotoMetaSchema.nullable(),
   startedAt: z.string(),
 });
 export type SlideshowState = z.infer<typeof SlideshowStateSchema>;

@@ -2,10 +2,12 @@ import { loadConfig } from './config/index.js';
 import { buildSources } from './sources/registry.js';
 import { SlideshowEngine, setEngine } from './engine/index.js';
 import { buildApp } from './http/app.js';
+import { tuneSharpForHost } from './images/service.js';
 import { logger } from './telemetry/logger.js';
 
 async function main(): Promise<void> {
   logger.info('pico-gallery v2 starting');
+  tuneSharpForHost();
 
   const cfg = await loadConfig();
   logger.info({ port: cfg.http.port, sources: cfg.sources.length }, 'Config loaded');

@@ -25,6 +25,11 @@ Restart=always
 RestartSec=3
 # Give the GPU/seat a moment on cold boot before the first attempt.
 TimeoutStartSec=30
+# Recycle the WebKit process daily. WPE's web process RSS creeps over days on a
+# 24/7 frame and a page reload can't reclaim it — only restarting Cog does.
+# Restart=always brings it back (a few-second black flash; the launcher's
+# /health wait makes reconnect immediate since the server stays up).
+RuntimeMaxSec=86400
 
 [Install]
 WantedBy=multi-user.target

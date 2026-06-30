@@ -12,10 +12,15 @@ export class SlideshowEngine {
   private displayOn = true;
   private timer: ReturnType<typeof setInterval> | null = null;
   private scheduleCheck: ReturnType<typeof setInterval> | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private refreshing = false;
   private startedAt = new Date().toISOString();
 
   // How often to re-check the display on/off schedule window.
   private static readonly SCHEDULE_CHECK_MS = 30_000;
+  // How often to rebuild the playlist from sources (pick up added/removed photos
+  // and re-paged remote sources) without dropping the cursor.
+  private static readonly REFRESH_MS = 15 * 60_000;
 
   constructor(
     private readonly sources: Map<string, PhotoSource>,
@@ -31,6 +36,9 @@ export class SlideshowEngine {
     if (this.cfg.display.schedule) {
       this.scheduleCheck = setInterval(() => this.evaluateSchedule(), SlideshowEngine.SCHEDULE_CHECK_MS);
     }
+    // Periodically rebuild the playlist so newly added/removed photos (and
+    // re-paged remote sources) appear without a server restart.
+    this.refreshTimer = setInterval(() => void this.refresh(), SlideshowEngine.REFRESH_MS);
     this.broadcast();
     logger.info('Slideshow engine started');
   }
@@ -40,6 +48,33 @@ export class SlideshowEngine {
     if (this.scheduleCheck) {
       clearInterval(this.scheduleCheck);
       this.scheduleCheck = null;
+    }
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  /**
+   * Rebuild the playlist from the sources, keeping the cursor anchored to the
+   * current photo by id (falls back to the start if it has since disappeared).
+   * Cheap for local sources (re-reads their cached scan); guarded against
+   * overlap so a slow remote refresh can't pile up.
+   */
+  async refresh(): Promise<void> {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    try {
+      const currentId = this.playlist.current()?.id;
+      const fresh = await Playlist.build(this.sources, this.cfg.display);
+      if (currentId) fresh.goto(currentId);
+      this.playlist = fresh;
+      this.broadcast();
+      logger.debug({ total: fresh.length }, 'Playlist refreshed');
+    } catch (err) {
+      logger.error({ err }, 'Playlist refresh failed');
+    } finally {
+      this.refreshing = false;
     }
   }
 
@@ -60,6 +95,7 @@ export class SlideshowEngine {
       paused: this.paused,
       displayOn: this.displayOn,
       photo: this.playlist.current(),
+      nextPhoto: this.playlist.peekNext(),
       startedAt: this.startedAt,
     };
   }

@@ -6,7 +6,7 @@ import { ClockOverlay } from './overlay/clock.js';
 import { NightMode } from './overlay/night.js';
 import { DisconnectBadge } from './overlay/disconnect.js';
 import { SlideshowEventSource } from './api/events.js';
-import { api } from './api/client.js';
+import { api, imageUrl } from './api/client.js';
 import type { DisplayConfig, SlideshowState } from '@pico/shared';
 import { mountRemote } from './control/remote.js';
 
@@ -66,6 +66,22 @@ async function mountFrame(root: HTMLElement): Promise<void> {
 
   let lastState: SlideshowState | null = null;
 
+  // Warm the upcoming image during the current slide's dwell: fetching it now
+  // triggers the server-side resize (and, on a Pi, the slow HEIC decode) ahead
+  // of time and fills the browser cache, so the next swap is a cache hit. Plain
+  // <img> fetch, fire-and-forget; the layer swap still re-decodes from cache.
+  let prefetchedUrl: string | null = null;
+  const prefetchNext = (state: SlideshowState): void => {
+    const n = state.nextPhoto;
+    if (!n) return;
+    const url = imageUrl(n.id, window.innerWidth, window.innerHeight, cfg.fillScreen ? 'cover' : 'contain');
+    if (url === prefetchedUrl) return;
+    prefetchedUrl = url;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+  };
+
   const es = new SlideshowEventSource();
   es.onConnect(() => badge.hide());
   es.onDisconnect(() => badge.show());
@@ -76,6 +92,7 @@ async function mountFrame(root: HTMLElement): Promise<void> {
       if (cfg.showOsd) osd?.show(state);
     }
     setDisplay(state.displayOn);
+    prefetchNext(state);
     lastState = state;
   });
   es.connect();

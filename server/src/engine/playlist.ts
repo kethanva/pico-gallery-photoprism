@@ -37,6 +37,12 @@ export class Playlist {
     return this.photos[this.index] ?? null;
   }
 
+  /** The photo that `next()` would land on — used to prefetch ahead of the swap. */
+  peekNext(): PhotoMeta | null {
+    if (this.photos.length === 0) return null;
+    return this.photos[(this.index + 1) % this.photos.length] ?? null;
+  }
+
   next(): PhotoMeta | null {
     if (this.photos.length === 0) return null;
     this.index = (this.index + 1) % this.photos.length;
