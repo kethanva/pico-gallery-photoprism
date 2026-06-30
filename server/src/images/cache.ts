@@ -46,8 +46,11 @@ export class DiskImageCache {
   }
 
   async put(key: string, data: Buffer): Promise<void> {
-    await writeFile(join(this.dir, `${key}.img`), data, { mode: 0o600 });
-    this.keys.push(`${key}.img`);
+    const file = `${key}.img`;
+    await writeFile(join(this.dir, file), data, { mode: 0o600 });
+    // Re-writing an existing key (e.g. after eviction) must not add a duplicate
+    // entry, or evictIfNeeded would stat + count the same file twice.
+    if (!this.keys.includes(file)) this.keys.push(file);
     await this.evictIfNeeded();
   }
 

@@ -43,15 +43,20 @@ export async function buildApp(cfg: RootConfig) {
 
   app.setErrorHandler(errorHandler);
 
-  // Auth middleware if token configured
+  // Auth middleware if token configured. Health/readiness probes stay public so
+  // the kiosk launcher (and load balancers) can poll them without the token.
   const token = cfg.http.authToken;
   if (token) {
+    const publicPaths = new Set(['/api/v1/health', '/api/v1/ready']);
     app.addHook('onRequest', async (req, reply) => {
-      if (req.url.startsWith('/api/')) {
-        const auth = req.headers.authorization;
-        if (!auth || auth !== `Bearer ${token}`) {
-          reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
-        }
+      if (!req.url.startsWith('/api/')) return;
+      const path = req.url.split('?')[0];
+      if (publicPaths.has(path)) return;
+      const auth = req.headers.authorization;
+      if (!auth || auth !== `Bearer ${token}`) {
+        // Returning the reply halts the lifecycle; without it Fastify still runs
+        // the route handler and then throws FST_ERR_REP_ALREADY_SENT.
+        return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
       }
     });
   }

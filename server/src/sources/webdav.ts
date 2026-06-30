@@ -13,14 +13,20 @@ interface DavEntry {
   isDir: boolean;
 }
 
+// WebDAV servers use different namespace prefixes for the DAV: namespace
+// (`d:`, `D:`, `ns0:`, or none), so match any prefix case-insensitively rather
+// than hard-coding `d:`.
+const RESPONSE_RE = /<(?:[a-z0-9]+:)?response\b[^>]*>([\s\S]*?)<\/(?:[a-z0-9]+:)?response>/gi;
+const HREF_RE = /<(?:[a-z0-9]+:)?href\b[^>]*>(.*?)<\/(?:[a-z0-9]+:)?href>/i;
+const COLLECTION_RE = /<(?:[a-z0-9]+:)?collection\b/i;
+
 function parsePropfind(xml: string): DavEntry[] {
   const entries: DavEntry[] = [];
-  const responseRe = /<d:response>([\s\S]*?)<\/d:response>/g;
   let m;
-  while ((m = responseRe.exec(xml)) !== null) {
+  while ((m = RESPONSE_RE.exec(xml)) !== null) {
     const block = m[1] ?? '';
-    const href = /<d:href>(.*?)<\/d:href>/.exec(block)?.[1] ?? '';
-    const isDir = block.includes('<d:collection/>');
+    const href = HREF_RE.exec(block)?.[1]?.trim() ?? '';
+    const isDir = COLLECTION_RE.test(block);
     entries.push({ href, isDir });
   }
   return entries;

@@ -16,9 +16,12 @@ export async function runTransition(
   entering.classList.add('entering');
   leaving.classList.add('leaving');
 
-  if (actual === 'cut') return;
-
-  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  // 'cut' has no animation, so swap instantly — but still fall through to the
+  // cleanup below. Returning early here would leave the .entering/.leaving
+  // classes on the layers and corrupt the next transition.
+  if (actual !== 'cut') {
+    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  }
 
   entering.classList.remove('entering');
   leaving.classList.remove('leaving');
