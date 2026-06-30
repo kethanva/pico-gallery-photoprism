@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.cache/
+*.tsbuildinfo
+.env
+.env.local
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.avif
+/server/cache/
+/docker/.data/

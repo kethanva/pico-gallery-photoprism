@@ -1,0 +1,6 @@
+[Unit]
+Description=PicoGallery — turn the display on
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/pico-display-power on

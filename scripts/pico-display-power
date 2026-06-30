@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#
+# pico-display-power — unified display power toggle for Raspberry Pi.
+#
+# Cage (Wayland compositor) does NOT support DPMS or any screen blanking
+# controls — unlike X11 where you can use `xset dpms force off`.  This
+# script abstracts the three different hardware paths for turning the
+# display on or off, trying each in order until one succeeds.
+#
+# Power paths (tried in order):
+#   1. vcgencmd display_power 0|1  — Pi 4 / Pi 5 (GPU firmware command)
+#      Requires the user to be in the 'video' group.
+#   2. /sys/class/backlight/rpi_backlight/bl_power  — Pi DSI touchscreen
+#      Requires the user to be in the 'video' group.
+#   3. /sys/class/drm/*/dpms (sysfs)  — Generic HDMI fallback
+#      May require the user to be in the 'video' group on some distros.
+#
+# Usage:
+#   pico-display-power on
+#   pico-display-power off
+#
+# Called by:
+#   pico-display-on.service  (triggered by pico-display-on.timer)
+#   pico-display-off.service (triggered by pico-display-off.timer)
+#
+# Copied to /usr/local/bin/ by kiosk-setup.sh.
+
+set -euo pipefail
+
+ACTION="${1:?Usage: pico-display-power on|off}"
+
+turn_on() {
+  # Path 1: vcgencmd (Pi 4 / Pi 5 — GPU firmware)
+  if command -v vcgencmd &>/dev/null; then
+    if vcgencmd display_power 1 &>/dev/null; then
+      echo "[pico-display-power] on via vcgencmd"
+      return 0
+    fi
+  fi
+
+  # Path 2: DSI backlight (official Pi touchscreen)
+  local BL_POWER="/sys/class/backlight/rpi_backlight/bl_power"
+  if [[ -w "$BL_POWER" ]]; then
+    echo 0 > "$BL_POWER"
+    echo "[pico-display-power] on via rpi_backlight"
+    return 0
+  fi
+
+  # Path 3: DRM sysfs connector DPMS (HDMI generic fallback)
+  local found=0
+  for dpms in /sys/class/drm/*/dpms; do
+    if [[ -w "$dpms" ]]; then
+      echo on > "$dpms"
+      found=1
+    fi
+  done
+  if [[ $found -eq 1 ]]; then
+    echo "[pico-display-power] on via DRM sysfs"
+    return 0
+  fi
+
+  echo "[pico-display-power] WARNING: no supported power path found — display unchanged" >&2
+}
+
+turn_off() {
+  # Path 1: vcgencmd
+  if command -v vcgencmd &>/dev/null; then
+    if vcgencmd display_power 0 &>/dev/null; then
+      echo "[pico-display-power] off via vcgencmd"
+      return 0
+    fi
+  fi
+
+  # Path 2: DSI backlight
+  local BL_POWER="/sys/class/backlight/rpi_backlight/bl_power"
+  if [[ -w "$BL_POWER" ]]; then
+    echo 1 > "$BL_POWER"
+    echo "[pico-display-power] off via rpi_backlight"
+    return 0
+  fi
+
+  # Path 3: DRM sysfs
+  local found=0
+  for dpms in /sys/class/drm/*/dpms; do
+    if [[ -w "$dpms" ]]; then
+      echo off > "$dpms"
+      found=1
+    fi
+  done
+  if [[ $found -eq 1 ]]; then
+    echo "[pico-display-power] off via DRM sysfs"
+    return 0
+  fi
+
+  echo "[pico-display-power] WARNING: no supported power path found — display unchanged" >&2
+}
+
+case "$ACTION" in
+  on)  turn_on  ;;
+  off) turn_off ;;
+  *)
+    echo "Usage: pico-display-power on|off" >&2
+    exit 1
+    ;;
+esac

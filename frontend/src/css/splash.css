@@ -1,0 +1,232 @@
+/* Splash Screen Styles */
+
+#busy-overlay {
+    display: none;
+    position: fixed;
+    touch-action: none;
+    transition: none;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100%;
+    z-index: 100;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+#busy-overlay.progress {
+    cursor: wait;
+    background-color: rgba(0, 0, 0, 0.32);
+}
+
+#busy-overlay.busy {
+    cursor: wait;
+    background-color: #ffffff00;
+}
+
+#busy-overlay.progress .splash-center {
+    display: block;
+}
+
+#busy-overlay .splash-center {
+    display: none;
+}
+
+#photoprism.container {
+    position: fixed;
+    max-width: 100%;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0;
+}
+
+div.fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+a.logo-large,
+div.logo-large {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+#photoprism.container.splash-screen {
+    background: #141417;
+}
+
+/* Error Screen */
+
+a.logo-large {
+    display: block;
+    text-decoration: none;
+    color: #efefef;
+    width: 280px;
+    height: 280px;
+}
+
+/* Splash Screen */
+
+#loading-info {
+    background-blend-mode: difference;
+}
+
+#loading-info,
+.splash-info {
+    position: fixed;
+    padding: 24px;
+    height: auto;
+}
+
+.splash-info {
+    border-top-right-radius: 0;
+    border-top-left-radius: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+}
+
+.days > span {
+    display: none;
+}
+
+#splash-info > .legal-info {
+    display: inline-block;
+}
+
+#splash-info.day-0 .quote-0,
+#splash-info.day-1 .quote-1,
+#splash-info.day-2 .quote-3,
+#splash-info.day-3 .quote-3,
+#splash-info.day-4 .quote-4,
+#splash-info.day-5 .quote-5,
+#splash-info.day-6 .quote-6 {
+    display: block;
+}
+
+#splash-info {
+    display: none;
+    font-weight: 400;
+}
+
+#loading-info {
+    bottom: 10%;
+    min-width: 200px;
+}
+
+#loading-info span,
+#loading-info a,
+.splash-info span,
+.splash-info a {
+    text-decoration: none;
+    font-size: 15px;
+    width: auto;
+    padding: 0;
+    margin: 0;
+}
+
+#splash-info,
+#splash-info a {
+    text-align: center;
+    color: #858581;
+}
+
+#splash-info .about {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+#splash-info .highlight {
+    color: #bbbbb5;
+}
+
+#noscript-info {
+    display: block;
+    text-align: center;
+}
+
+#splash-info .legal-info,
+#noscript-info a {
+    color: #bbbbb5;
+}
+
+.splash-warning {
+    display: block;
+    font-weight: 600;
+    color: #bbbaba;
+    margin: 0 auto;
+    max-width: 580px;
+    line-height: 1.5;
+}
+
+#noscript-info.splash-info,
+#noscript-info.splash-info a {
+    font-weight: 500;
+    font-size: 16px;
+}
+
+.splash-center,
+#busy-overlay .splash-center {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    margin: 0;
+    padding: 0;
+    text-align: center !important;
+}
+
+.splash-center .splash-logo,
+#busy-overlay .splash-center .splash-logo {
+    width: 125px;
+    height: 125px;
+    left: 50%;
+    right: 50%;
+    margin: auto auto 42px auto;
+    text-align: center !important;
+}
+
+#splash-animation .splash-logo svg {
+    -webkit-animation: hue 4s infinite linear;
+    -moz-animation: hue 4s infinite linear;
+    animation: hue 4s infinite linear;
+}
+
+.splash-center progress,
+#busy-overlay .splash-center progress {
+    width: 180px;
+    accent-color: #c8c2e8;
+    color-scheme: dark;
+}
+
+@media (min-width: 900px) {
+    .splash-center .splash-logo {
+        width: 140px;
+        height: 140px;
+    }
+
+    .splash-center progress,
+    #busy-overlay .splash-center progress {
+        width: 230px;
+    }
+}
+
+div.logo-large {
+    width: 300px;
+    height: 300px;
+}
+
+div.loading-bar {
+    position: fixed;
+    bottom: 15%;
+    right: 10%;
+    left: 10%;
+}

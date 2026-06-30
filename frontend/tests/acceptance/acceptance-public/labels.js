@@ -1,0 +1,242 @@
+import { Selector } from "testcafe";
+import testcafeconfig from "../../testcafeconfig.json";
+import Menu from "../page-model/menu";
+import Album from "../page-model/album";
+import Toolbar from "../page-model/toolbar";
+import ContextMenu from "../page-model/context-menu";
+import Photo from "../page-model/photo";
+import Page from "../page-model/page";
+import Label from "../page-model/label";
+import PhotoEdit from "../page-model/photo-edit";
+import { helperBeforeFixture, helperBeforeEach, helperAfterEach } from "../page-model/helpers";
+
+fixture`Test labels`
+.page`${testcafeconfig.url}`
+.beforeEach(async t => {
+  await helperBeforeEach(t);
+})
+.afterEach(async t => {
+  await helperAfterEach(t);
+})
+.before(async ctx => {
+  await helperBeforeFixture(ctx);
+});
+
+const menu = new Menu();
+const album = new Album();
+const toolbar = new Toolbar();
+const contextmenu = new ContextMenu();
+const photo = new Photo();
+const page = new Page();
+const label = new Label();
+const photoedit = new PhotoEdit();
+
+test.meta("testID", "labels-001").meta({ type: "short", mode: "public" })(
+  "Common: Remove/Activate Add/Delete Label from photo",
+  async (t) => {
+    await menu.openPage("labels");
+    await toolbar.search("beacon");
+    const LabelBeaconUid = await label.getNthLabeltUid(0);
+    await label.openLabelWithUid(LabelBeaconUid);
+    await t.click(toolbar.cardsViewAction);
+    const PhotoBeaconUid = await photo.getNthPhotoUid("all", 0);
+    await page.clickCardTitleOfUID(PhotoBeaconUid);
+    const PhotoKeywords = await photoedit.keywords.value;
+
+    await t.expect(PhotoKeywords).contains("beacon");
+
+    await t
+      .click(photoedit.labelsTab)
+      .click(photoedit.removeLabel)
+      .typeText(photoedit.inputLabelName, "Test")
+      .click(Selector(photoedit.addLabel))
+      .click(photoedit.detailsTab);
+    const PhotoKeywordsAfterEdit = await photoedit.keywords.value;
+
+    await t.expect(PhotoKeywordsAfterEdit).notContains("beacon");
+
+    await t.click(photoedit.dialogClose);
+    await menu.openPage("labels");
+    await toolbar.search("beacon");
+
+    await t.expect(Selector("div.no-results").visible).ok();
+
+    await toolbar.search("test");
+    const LabelTest = await label.getNthLabeltUid(0);
+    await label.openLabelWithUid(LabelTest);
+    await t.click(toolbar.cardsViewAction);
+    await page.clickCardTitleOfUID(PhotoBeaconUid);
+    await t
+      .click(photoedit.labelsTab)
+      .click(photoedit.deleteLabel)
+      .click(photoedit.activateLabel)
+      .click(photoedit.detailsTab);
+    const PhotoKeywordsAfterUndo = await photoedit.keywords.value;
+
+    await t.expect(PhotoKeywordsAfterUndo).notContains("beacon").expect(PhotoKeywordsAfterUndo).notContains("test");
+
+    await t.click(photoedit.dialogClose);
+    await menu.openPage("labels");
+    await toolbar.search("test");
+
+    await t.expect(Selector("div.no-results").visible).ok();
+
+    await toolbar.search("beacon");
+    await label.checkLabelVisibility(LabelBeaconUid, true);
+  }
+);
+
+test.meta("testID", "labels-002").meta({ mode: "public" })(
+  "Common: Toggle between important and all labels",
+  async (t) => {
+    await menu.openPage("labels");
+    const ImportantLabelsCount = await label.getLabelCount();
+    await toolbar.triggerToolbarAction("show-all");
+    const AllLabelsCount = await label.getLabelCount();
+
+    await t.expect(AllLabelsCount).gt(ImportantLabelsCount);
+
+    await toolbar.triggerToolbarAction("show-important");
+    const ImportantLabelsCount2 = await label.getLabelCount();
+
+    await t.expect(ImportantLabelsCount).eql(ImportantLabelsCount2);
+  }
+);
+
+test.meta("testID", "labels-003").meta({ mode: "public" })("Common: Rename Label", async (t) => {
+  await menu.openPage("labels");
+  await toolbar.search("zebra");
+  const LabelZebraUid = await label.getNthLabeltUid(0);
+  await label.openNthLabel(0);
+  const PhotoCountZebra = await photo.getPhotoCount("all");
+  const FirstPhotoZebraUid = await photo.getNthPhotoUid("all", 0);
+  await menu.openPage("labels");
+  await toolbar.search("zebra");
+  await t
+    .click(Selector("div.inline-edit").withText("Zebra"))
+    .typeText(Selector(".input-title input"), "Horse", { replace: true })
+    .click(Selector("button.action-confirm"));
+  await toolbar.search("horse");
+  await label.checkLabelVisibility(LabelZebraUid, true);
+  await label.openLabelWithUid(LabelZebraUid);
+  const PhotoCountHorse = await photo.getPhotoCount("all");
+
+  await t.expect(PhotoCountZebra).eql(PhotoCountHorse);
+
+  await photo.checkPhotoVisibility(FirstPhotoZebraUid, true);
+  await menu.openPage("labels");
+  await toolbar.search("zebra");
+  await t
+    .click(Selector("div.inline-edit").withText("Horse"))
+    .typeText(Selector(".input-title input"), "Zebra", { replace: true })
+    .click(Selector("button.action-confirm"));
+  await toolbar.search("horse");
+
+  await t.expect(Selector("div.no-results").visible).ok();
+});
+
+test.meta("testID", "labels-004").meta({ mode: "public" })("Common: Add label to albums", async (t) => {
+  await menu.openPage("albums");
+  await toolbar.search("Christmas");
+  const ChristmasAlbumUid = await album.getNthAlbumUid("all", 0);
+  await album.openAlbumWithUid(ChristmasAlbumUid);
+  const InitialPhotoCountChristmas = await photo.getPhotoCount("all");
+  await menu.openPage("albums");
+  await toolbar.search("Holiday");
+  const HolidayAlbumUid = await album.getNthAlbumUid("all", 0);
+  await album.openAlbumWithUid(HolidayAlbumUid);
+  const InitialPhotoCountHoliday = await photo.getPhotoCount("all");
+  await menu.openPage("labels");
+  await toolbar.search("sunglasses");
+  const LabelSunglasses = await label.getNthLabeltUid(0);
+  await label.openLabelWithUid(LabelSunglasses);
+  const FirstPhotoSunglasses = await photo.getNthPhotoUid("all", 0);
+  const SecondPhotoSunglasses = await photo.getNthPhotoUid("all", 1);
+  const ThirdPhotoSunglasses = await photo.getNthPhotoUid("all", 2);
+  const FourthPhotoSunglasses = await photo.getNthPhotoUid("all", 3);
+  const FifthPhotoSunglasses = await photo.getNthPhotoUid("all", 4);
+
+  await menu.openPage("labels");
+  await label.triggerHoverAction("uid", LabelSunglasses, "select");
+  await contextmenu.checkContextMenuCount("1");
+  await contextmenu.triggerContextMenuAction("album", ["Christmas", "Holiday"]);
+  await menu.openPage("albums");
+  await album.openAlbumWithUid(ChristmasAlbumUid);
+  const PhotoCountAfterAddChristmas = await photo.getPhotoCount("all");
+
+  await t.expect(PhotoCountAfterAddChristmas).eql(InitialPhotoCountChristmas + 5);
+
+  await photo.triggerHoverAction("uid", FirstPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", SecondPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", ThirdPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", FourthPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", FifthPhotoSunglasses, "select");
+
+  await contextmenu.triggerContextMenuAction("remove", "");
+  const PhotoCountAfterDeleteChristmas = await photo.getPhotoCount("all");
+
+  await t.expect(PhotoCountAfterDeleteChristmas).eql(PhotoCountAfterAddChristmas - 5);
+  await menu.openPage("albums");
+  await album.openAlbumWithUid(HolidayAlbumUid);
+  await photo.triggerHoverAction("uid", FirstPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", SecondPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", ThirdPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", FourthPhotoSunglasses, "select");
+  await photo.triggerHoverAction("uid", FifthPhotoSunglasses, "select");
+
+  await contextmenu.triggerContextMenuAction("remove", "");
+  const PhotoCountHolidayAfterDelete = await photo.getPhotoCount("all");
+
+  await t.expect(PhotoCountHolidayAfterDelete).eql(InitialPhotoCountHoliday);
+});
+
+test.meta("testID", "labels-005").meta({ mode: "public" })("Common: Delete label", async (t) => {
+  await menu.openPage("labels");
+  await toolbar.search("dome");
+  const LabelDomeUid = await label.getNthLabeltUid(0);
+  await label.openLabelWithUid(LabelDomeUid);
+  const FirstPhotoDomeUid = await photo.getNthPhotoUid("all", 0);
+  await menu.openPage("labels");
+  await toolbar.search("dome");
+  await label.triggerHoverAction("uid", LabelDomeUid, "select");
+  await contextmenu.checkContextMenuCount("1");
+  await contextmenu.triggerContextMenuAction("delete", "");
+  await toolbar.search("dome");
+
+  await t.expect(Selector("div.no-results").visible).ok();
+
+  await menu.openPage("browse");
+  await toolbar.search("uid:" + FirstPhotoDomeUid);
+  await t.click(toolbar.cardsViewAction);
+  await page.clickCardTitleOfUID(FirstPhotoDomeUid);
+  await t.click(photoedit.labelsTab);
+
+  await t.expect(Selector("td").withText("Dome").visible).notOk();
+  await t.expect(Selector("td").withText("Image").visible).notOk();
+
+  await t.typeText(photoedit.inputLabelName, "Dome").click(photoedit.addLabel);
+
+  await t.expect(Selector("td").withText("Dome").visible).ok();
+});
+
+test.meta("testID", "labels-006").meta({ mode: "public" })("Common: Test mark label as favorite", async (t) => {
+  await menu.openPage("labels");
+  const FirstLabelUid = await label.getNthLabeltUid(0);
+  const SecondLabelUid = await label.getNthLabeltUid(1);
+  await label.triggerHoverAction("uid", SecondLabelUid, "favorite");
+  await toolbar.triggerToolbarAction("refresh");
+  const FirstLabelUidAfterFavorite = await label.getNthLabeltUid(0);
+
+  await t.expect(FirstLabelUid).notEql(FirstLabelUidAfterFavorite);
+  await t.expect(SecondLabelUid).eql(FirstLabelUidAfterFavorite);
+
+  await label.checkHoverActionState("uid", SecondLabelUid, "favorite", true);
+  await label.triggerHoverAction("uid", SecondLabelUid, "favorite");
+  await label.checkHoverActionState("uid", SecondLabelUid, "favorite", false);
+  await label.checkHoverActionState("uid", FirstLabelUid, "favorite", false);
+  await t
+    .click(Selector("div[data-uid=" + FirstLabelUid + "] div.meta-title"))
+    .click(Selector('input[aria-label="Favorite"]'))
+    .click(Selector("button.action-confirm"));
+  await label.checkHoverActionState("uid", FirstLabelUid, "favorite", true);
+});

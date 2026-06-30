@@ -1,0 +1,100 @@
+# PicoGallery V2 configuration
+# Copy to ~/.config/picogallery/config.toml and edit.
+# Every key can be overridden with PICO_<SECTION>_<KEY> env vars.
+
+[display]
+slide_duration_secs = 10
+transition          = "fade"   # cut | fade | slide_left | slide_right
+transition_ms       = 800
+fill_screen         = false
+letterbox_blur      = true
+ken_burns           = false
+show_osd            = true
+show_clock          = false
+order               = "shuffle"  # shuffle | chronological | newest_first | date_cluster
+on_this_day_boost   = true
+max_image_mb        = 50
+max_megapixels      = 24
+
+# Optional night mode (HH:MM, overnight windows supported)
+# [display.night]
+# start       = "21:00"
+# end         = "07:00"
+# dim_percent = 25
+# warmth      = 30
+
+# Optional display schedule (turn HDMI off overnight)
+# [display.schedule]
+# on  = "07:00"
+# off = "22:00"
+
+[cache]
+max_mb = 256
+# dir  = "/var/cache/picogallery"
+
+[http]
+host = "0.0.0.0"
+port = 8188
+# When set, POST /api/v1/control requires this token (Authorization: Bearer …
+# or X-Pico-Token). Open the remote once with ?token=… to persist it locally.
+# auth_token  = "change-me-on-exposed-networks"
+# cors_origins = ["http://localhost:5173"]
+
+# ─── Device (Raspberry Pi kiosk, optional) ───────────────────────────────────
+# Drives the physical panel off/on with the [display.schedule] window.
+# No-ops on non-Linux hosts.
+# [device]
+# hdmi_power = true
+# display_on_cmd  = "vcgencmd display_power 1"
+# display_off_cmd = "vcgencmd display_power 0"
+
+# ─── Sources ─────────────────────────────────────────────────────────────────
+# Enable at least one source. Multiple sources are merged into one playlist.
+
+[[sources]]
+name    = "directory"
+enabled = true
+paths   = ["~/Pictures/PicoGallery"]
+recursive = true
+# allowed_albums      = ["Vacation 2024", "Family"]
+# rescan_interval_secs = 3600
+# order = "shuffle"  # shuffle | alphabetical | date_modified
+
+# [[sources]]
+# name     = "photoprism"
+# enabled  = false
+# url      = "http://photoprism.local:2342"
+# username = "admin"
+# password = "insecure"          # or use app_password below
+# # app_password = "abcd-efgh-ijkl-mnop"
+#
+# # Filtering (all optional, combined with AND)
+# # album       = "january-2024"
+# # favorites   = true
+# # quality     = 3               # 1=low … 5=excellent
+# # country     = "fr"
+# # year        = 2024
+# # after       = "2020-01-01"
+# # mono        = true
+# # panorama    = true
+# # orientation = "portrait"
+# # people      = ["Alice", "Bob"]
+# # labels      = ["beach", "dog"]
+# # memories    = true            # only photos taken on today's date in any year
+# # query       = "label:beach"   # raw PhotoPrism Q-language
+# include_private  = false
+# include_archived = false
+# order    = "newest"
+# per_page = 100
+# max_thumb      = "fit_1920"
+# skip_tls_verify = false
+
+# [[sources]]
+# name     = "webdav"
+# enabled  = false
+# url      = "https://nextcloud.local/remote.php/dav/files/admin/Photos"
+# username = "admin"
+# password = "password"
+# # token     = "bearer-token"
+# recursive = true
+# skip_tls_verify = false

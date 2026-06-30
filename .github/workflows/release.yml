@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Build projects
+        run: pnpm build
+        
+      - name: Create Release Archive
+        run: |
+          mkdir -p picogallery-release/server
+          mkdir -p picogallery-release/client
+          mkdir -p picogallery-release/shared
+          
+          # Copy essential directories
+          cp -r server/dist picogallery-release/server/
+          cp -r client/dist picogallery-release/client/
+          if [ -d "shared/dist" ]; then cp -r shared/dist picogallery-release/shared/; fi
+          cp -r kiosk picogallery-release/
+          cp -r systemd picogallery-release/
+          
+          # Copy essential package configs
+          cp package.json pnpm-workspace.yaml pnpm-lock.yaml picogallery-release/
+          cp server/package.json picogallery-release/server/
+          cp client/package.json picogallery-release/client/
+          if [ -f "shared/package.json" ]; then cp shared/package.json picogallery-release/shared/; fi
+          
+          # Copy scripts and configs
+          cp install.sh run.sh config.example.toml README.md picogallery-release/
+          
+          # Tar everything up
+          tar -czf picogallery-release.tar.gz -C picogallery-release .
+          
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: picogallery-release.tar.gz
+          generate_release_notes: true

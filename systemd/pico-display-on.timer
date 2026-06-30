@@ -1,0 +1,28 @@
+# pico-display-on.timer
+#
+# Daily calendar timer that fires pico-display-on.service.
+# Edit OnCalendar to change the wake time (default: 07:00 local time).
+#
+# Persistent=true means: if the Pi was off at 07:00, fire the service
+# the next time the Pi boots (so the display is on when you return to it).
+#
+# Installed by: scripts/kiosk-setup.sh
+# Destination:  ~/.config/systemd/user/pico-display-on.timer
+#
+# To change schedule without re-running setup:
+#   nano ~/.config/systemd/user/pico-display-on.timer
+#   systemctl --user daemon-reload
+#   systemctl --user restart pico-display-on.timer
+
+[Unit]
+Description=PicoGallery — wake display at 07:00
+
+[Timer]
+# Every day at 07:00 local time.
+# Format: Weekday YYYY-MM-DD HH:MM:SS  (wildcards with *)
+OnCalendar=*-*-* 07:00:00
+# Persistent: catch up if the Pi was powered off at the scheduled time
+Persistent=true
+
+[Install]
+WantedBy=timers.target
