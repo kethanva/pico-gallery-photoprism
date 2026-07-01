@@ -442,8 +442,11 @@ step_build() {
       ok "Pre-packaged node_modules found — skipping package installation."
       if [[ "$(uname -m)" == "aarch64" ]]; then
         step "Ensuring native bindings (sharp) for aarch64"
-        sed -i 's/"workspace:\*"/"file:..\/shared"/g' "$REPO_ROOT/server/package.json"
-        ( cd "$REPO_ROOT/server" && npm install --os=linux --cpu=arm64 sharp@0.33.5 --no-save --fund=false --audit=false )
+        local sharp_ver
+        sharp_ver=$(grep '"sharp":' "$REPO_ROOT/server/package.json" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+        [[ -z "$sharp_ver" ]] && sharp_ver="0.33.5"
+        mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64"
+        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64" && npm pack @img/sharp-linux-arm64@$sharp_ver >/dev/null 2>&1 && tar -xzf *.tgz --strip-components=1 && rm *.tgz )
         ok "Native bindings repaired."
       fi
       return 0
