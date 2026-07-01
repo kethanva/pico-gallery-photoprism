@@ -307,17 +307,47 @@ Configure multiple photo libraries simultaneously under the `[[sources]]` table 
 ---
 
 ## Development
-
+ 
 ```bash
 ./run.sh typecheck    # tsc --noEmit across all packages
 ./run.sh build        # shared → server → client
 pnpm test             # vitest (server)
 ```
-
+ 
 Requires Node ≥ 22.13 and pnpm. HEIC/HEIF photos are decoded via `heic-convert` because sharp's prebuilt libvips ships without an HEIC decoder.
-
+ 
+## Troubleshooting
+ 
+### Kiosk stuck on white screen (old cached layout) or console boot screen
+If you are transitioning from an older PhotoPrism UI Proxy installation to the dedicated slideshow server, the browser (WPE WebKit/Cog) may have cached the previous Vue SPA offline application shell via its Service Worker. 
+ 
+To clear the cache and restart the kiosk immediately, run the following commands on the Pi:
+```bash
+# 1. Stop the kiosk service
+sudo systemctl stop picogallery-kiosk
+ 
+# 2. Delete the browser cache and local storage files
+sudo rm -rf /home/picokiosk/.cache /home/picokiosk/.local
+ 
+# 3. Start the kiosk back up
+sudo systemctl start picogallery-kiosk
+```
+*(Note: As of `v2.4.1`, the installer `install.sh` automatically performs this cache purge on every reinstall or update.)*
+ 
+### Check logs and status
+If the screen remains blank or stuck at the system terminal, check the status of the backend and kiosk services:
+```bash
+# Check the backend slideshow server
+sudo systemctl status picogallery
+journalctl -u picogallery -n 50 --no-pager
+ 
+# Check the frontend kiosk browser
+sudo systemctl status picogallery-kiosk
+journalctl -u picogallery-kiosk -n 50 --no-pager
+```
+ 
 ## Docs
-
+ 
 - [docs/architecture.md](docs/architecture.md) — how the pieces fit
 - [docs/api.md](docs/api.md) — HTTP + SSE contract
 - [docs/sources.md](docs/sources.md) — PhotoPrism / WebDAV

@@ -54,8 +54,6 @@ jobs:
           
           # Copy node_modules (production-only, cross-platform)
           cp -a node_modules picogallery-release/
-          cp -a server/node_modules picogallery-release/server/
-          if [ -d "shared/node_modules" ]; then cp -a shared/node_modules picogallery-release/shared/; fi
           
           # Copy essential package configs
           cp package.json pnpm-workspace.yaml pnpm-lock.yaml picogallery-release/
