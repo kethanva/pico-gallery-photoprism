@@ -62,7 +62,10 @@ You can install PicoGallery V2 either using a pre-built release artifact (recomm
    sudo apt install -y nodejs
    ```
 
-4. Now proceed to configuration and running the installer. The installer will automatically detect the pre-built assets and skip the heavy compilation phase.
+4. Run the installer (make sure to specify your PhotoPrism backend url with port `:2342`):
+   ```bash
+   sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
+   ```
 
 ---
 

@@ -102,6 +102,24 @@ Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
 > [!NOTE]
 > **Full PhotoPrism UI on HDMI Out:** The installer is configured to launch the complete **PhotoPrism Vue SPA frontend** on the Pi Zero 2 HDMI output (port `8188`), proxying your backend requests over the network. If you want to use the dedicated slideshow digital photo frame instead, check the commented configuration lines in `/etc/systemd/system/picogallery.service` to revert back to `server/dist/index.js`.
 
+### Quick Install (Pre-built Release)
+
+Run these commands on the Pi to download and install the latest pre-compiled release in less than 10 seconds:
+
+```bash
+mkdir -p /opt/picogallery && cd /opt/picogallery
+
+# Download and unpack the latest release package dynamically
+curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
+tar -xzf picogallery-release.tar.gz
+rm picogallery-release.tar.gz
+
+# Run the installer
+sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
+```
+
+---
+
 `install.sh` is a **one-click, end-to-end provisioner**. It detects the
 board + architecture, checks/fixes dependencies, installs packages, (optionally)
 installs Node + builds the server, writes config + systemd units, and verifies
