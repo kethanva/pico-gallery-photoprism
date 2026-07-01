@@ -572,18 +572,20 @@ step_server_unit() {
   else
     cat >/etc/systemd/system/picogallery.service <<EOF
 [Unit]
-Description=PicoGallery server
+Description=PicoGallery server (PhotoPrism UI Proxy)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=$RUN_USER
 Group=$RUN_GROUP
-Environment=NODE_ENV=production
-Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
-$runtime_env
+# Environment=NODE_ENV=production
+# Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
+# $runtime_env
+Environment=PICO_PP_PORT=8188
 WorkingDirectory=$REPO_ROOT
-ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
+# ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
+ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs "$PP_URL"
 Restart=always
 RestartSec=3
 # Hardening (server only reads the repo + writes the cache)

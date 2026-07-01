@@ -26,13 +26,16 @@ jobs:
         run: pnpm install --frozen-lockfile
         
       - name: Build projects
-        run: pnpm build
+        run: |
+          pnpm build
+          cd frontend && npm ci && npm run build
         
       - name: Create Release Archive
         run: |
           mkdir -p picogallery-release/server
           mkdir -p picogallery-release/client
           mkdir -p picogallery-release/shared
+          mkdir -p picogallery-release/frontend
           
           # Build production-only, cross-platform dependencies
           pnpm prune --prod
@@ -41,6 +44,7 @@ jobs:
           cp -r server/dist picogallery-release/server/
           cp -r client/dist picogallery-release/client/
           if [ -d "shared/dist" ]; then cp -r shared/dist picogallery-release/shared/; fi
+          cp -r frontend/dist picogallery-release/frontend/
           cp -r kiosk picogallery-release/
           cp -r systemd picogallery-release/
           

@@ -167,6 +167,11 @@ function serveStatic(req, res) {
 
 // ── Server ───────────────────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
+  if (req.url === '/api/v1/health' || req.url === '/api/v1/ready') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
   if ((req.url || '').startsWith('/api/')) {
     proxyRequest(req, res);
   } else {
