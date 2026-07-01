@@ -607,7 +607,7 @@ Wants=network-online.target
 User=$RUN_USER
 Group=$RUN_GROUP
 # Environment=NODE_ENV=production
-# Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
+Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
 # $runtime_env
 Environment=PICO_PP_PORT=8188
 WorkingDirectory=$REPO_ROOT

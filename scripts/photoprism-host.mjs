@@ -180,6 +180,29 @@ async function proxyRequest(req, res) {
         console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);
         activeSessionId = null;
       }
+      
+      // Intercept /api/v1/config to trick the Vue SPA into bypassing the login screen
+      if (req.method === 'GET' && req.url.startsWith('/api/v1/config') && up.statusCode === 200) {
+        let body = '';
+        up.on('data', chunk => body += chunk);
+        up.on('end', () => {
+          try {
+            const config = JSON.parse(body);
+            config.public = true;
+            config.login = false;
+            const modifiedBody = JSON.stringify(config);
+            const modifiedHeaders = { ...up.headers };
+            modifiedHeaders['content-length'] = Buffer.byteLength(modifiedBody);
+            res.writeHead(200, modifiedHeaders);
+            res.end(modifiedBody);
+          } catch (e) {
+            res.writeHead(up.statusCode, up.headers);
+            res.end(body);
+          }
+        });
+        return;
+      }
+
       res.writeHead(up.statusCode || 502, up.headers);
       up.pipe(res);
     }
