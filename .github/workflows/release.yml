@@ -48,6 +48,8 @@ jobs:
           cp -r client/dist picogallery-release/client/
           if [ -d "shared/dist" ]; then cp -r shared/dist picogallery-release/shared/; fi
           cp -r frontend/dist picogallery-release/frontend/
+          cp frontend/index.html picogallery-release/frontend/dist/
+          cp frontend/config.json picogallery-release/frontend/dist/
           cp -r kiosk picogallery-release/
           
           # Copy node_modules (production-only, cross-platform)

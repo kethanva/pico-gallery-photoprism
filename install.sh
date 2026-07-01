@@ -429,6 +429,11 @@ step_build() {
       info "Building PhotoPrism frontend Vue SPA (missing in workspace)"
       ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
     fi
+    if [[ "$DRY_RUN" -ne 1 ]]; then
+      mkdir -p "$REPO_ROOT/frontend/dist"
+      cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html"
+      cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json"
+    fi
     if [[ -d "$REPO_ROOT/node_modules" ]]; then
       ok "Pre-packaged node_modules found — skipping package installation."
       return 0
@@ -472,6 +477,12 @@ step_build() {
   if [[ ! -d "$REPO_ROOT/frontend/dist" ]]; then
     info "Building PhotoPrism frontend Vue SPA"
     ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+  fi
+
+  if [[ "$DRY_RUN" -ne 1 ]]; then
+    mkdir -p "$REPO_ROOT/frontend/dist"
+    cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html"
+    cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json"
   fi
   
   [[ "$DRY_RUN" -eq 1 ]] || [[ -f "$REPO_ROOT/server/dist/index.js" ]] || die "Build did not produce server/dist/index.js"

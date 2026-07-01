@@ -1,0 +1,7 @@
+{
+  "serverUrl": "http://192.168.68.71:8188",
+  "fullscreen": false,
+  "ignoreCertificateErrors": true,
+  "startupPage": "/library",
+  "windowTitle": "Photo Frame"
+}
