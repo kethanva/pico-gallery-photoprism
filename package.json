@@ -17,5 +17,11 @@
     "prettier": "^3.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
+  },
+  "pnpm": {
+    "supportedArchitectures": {
+      "os": ["linux", "darwin"],
+      "cpu": ["x64", "arm64"]
+    }
   }
 }
