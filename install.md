@@ -51,8 +51,7 @@ You can install PicoGallery V2 either using a pre-built release artifact (recomm
 
 2. Download and extract the latest release artifact from GitHub:
    ```bash
-   # Replace <version> with the actual version tag, e.g. v2.0.4
-   curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/download/v2.0.4/picogallery-release.tar.gz
+   curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
    tar -xzf picogallery-release.tar.gz
    rm picogallery-release.tar.gz
    ```
