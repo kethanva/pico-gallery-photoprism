@@ -19,8 +19,9 @@
 #          --photoprism-user admin --photoprism-pass 'secret'
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
-# never scans a local photo directory. The on-device Node server is a caching
-# adapter that fetches/resizes from PhotoPrism and serves the local Cog frontend.
+# never scans a local photo directory. The on-device Node server is a reverse proxy
+# host that serves the complete PhotoPrism Vue SPA frontend locally and proxies
+# API/WebSocket connections to the backend. Cog opens this frontend on port 8188.
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -117,7 +118,7 @@ valid_hhmm() { [[ "$1" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; }
 # ── Usage ────────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
-PicoGallery V2 installer v$SCRIPT_VERSION
+PicoGallery (PhotoPrism UI Kiosk) installer v$SCRIPT_VERSION
 
 Usage: sudo ./install.sh [options]
 
