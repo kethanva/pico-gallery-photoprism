@@ -644,6 +644,10 @@ install_seat_udev_rule() {
 # PicoGallery: assign input devices to seat0 so the Cage/wlroots kiosk can read
 # keyboards and mice. Needed on images where logind isn't tagging seats (DietPi).
 SUBSYSTEM=="input", TAG+="seat"
+
+# Disable USB autosuspend for all USB devices to prevent minimal distributions (DietPi)
+# from turning off power to the mouse sensor/keyboard when they are inactive.
+ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
 EOF
   chmod 0644 "$SEAT_UDEV_RULE"
   run udevadm control --reload
