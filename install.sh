@@ -424,6 +424,10 @@ step_build() {
 
   if [[ -f "$REPO_ROOT/server/dist/index.js" ]]; then
     step "Setting up PicoGallery from pre-built artifact"
+    if [[ ! -d "$REPO_ROOT/frontend/dist" ]]; then
+      info "Building PhotoPrism frontend Vue SPA (missing in workspace)"
+      ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+    fi
     if [[ -d "$REPO_ROOT/node_modules" ]]; then
       ok "Pre-packaged node_modules found — skipping package installation."
       return 0
@@ -463,7 +467,14 @@ step_build() {
   # order with concurrency 1, so shared builds before server and client.
   info "Building shared → server → client (serial, low-memory)"
   ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm -r --workspace-concurrency=1 run build )
+  
+  if [[ ! -d "$REPO_ROOT/frontend/dist" ]]; then
+    info "Building PhotoPrism frontend Vue SPA"
+    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+  fi
+  
   [[ "$DRY_RUN" -eq 1 ]] || [[ -f "$REPO_ROOT/server/dist/index.js" ]] || die "Build did not produce server/dist/index.js"
+  [[ "$DRY_RUN" -eq 1 ]] || [[ -d "$REPO_ROOT/frontend/dist" ]] || die "Build did not produce frontend/dist"
   ok "Build complete"
 }
 
@@ -627,11 +638,11 @@ purge_legacy_kiosk() {
     run rm -f "$path"
     run rm -rf "/etc/systemd/system/${base}.d"
     run systemctl reset-failed "$base" 2>/dev/null || true
-  done < <(ls /etc/systemd/system/pico-*.service \
-              /etc/systemd/system/pico-*.timer \
-              /etc/systemd/system/photoprism-*.service \
-              /run/systemd/system/pico-*.service \
-              /lib/systemd/system/pico-google-photos.service 2>/dev/null | sort -u)
+  done < <( (ls /etc/systemd/system/pico-*.service \
+                 /etc/systemd/system/pico-*.timer \
+                 /etc/systemd/system/photoprism-*.service \
+                 /run/systemd/system/pico-*.service \
+                 /lib/systemd/system/pico-google-photos.service 2>/dev/null || true) | sort -u)
   if [[ "$removed" -eq 1 ]]; then
     run systemctl daemon-reload
     ok "Removed conflicting legacy kiosk unit(s)"
