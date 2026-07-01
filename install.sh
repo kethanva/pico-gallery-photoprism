@@ -636,10 +636,27 @@ step_kiosk() {
 
   info "Creating kiosk user '$KIOSK_USER' + seat/GPU groups"
   id "$KIOSK_USER" >/dev/null 2>&1 || run useradd --system --create-home --shell /usr/sbin/nologin "$KIOSK_USER"
+  # Guarantee the 'seat' group exists BEFORE the loop and before the kiosk unit
+  # ever starts. The unit declares SupplementaryGroups=...seat, and systemd fails
+  # a service outright (216/GROUP) if a named supplementary group is missing — a
+  # silent "kiosk never starts, console frozen" failure on images where the seatd
+  # package didn't create the group.
+  getent group seat >/dev/null 2>&1 || run groupadd --system seat
   for grp in video render input seat tty; do
     getent group "$grp" >/dev/null 2>&1 && run usermod -aG "$grp" "$KIOSK_USER" || true
   done
   run systemctl enable --now seatd.service
+  # Cage acquires the seat through seatd's control socket, which is group-owned.
+  # Debian doesn't always name that group 'seat', so also join whatever group
+  # actually owns the live socket — otherwise Cage can't open the seat and the
+  # frame stays black even though the unit reports "started".
+  if [[ "$DRY_RUN" -eq 0 && -S /run/seatd.sock ]]; then
+    local seat_sock_grp
+    seat_sock_grp="$(stat -c '%G' /run/seatd.sock 2>/dev/null || true)"
+    if [[ -n "$seat_sock_grp" && "$seat_sock_grp" != "root" ]]; then
+      getent group "$seat_sock_grp" >/dev/null 2>&1 && run usermod -aG "$seat_sock_grp" "$KIOSK_USER" || true
+    fi
+  fi
 
   # Delete any retired kiosk unit from a previous project version FIRST — otherwise
   # two kiosks fight over tty1/DRM and the console hangs at multi-user.target.

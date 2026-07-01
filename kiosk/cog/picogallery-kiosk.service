@@ -11,6 +11,12 @@ Conflicts=getty@tty1.service
 # forever — a forever-loop repeatedly seizes the keyboard and locks out the console.
 StartLimitIntervalSec=120
 StartLimitBurst=5
+# When the kiosk finally gives up (start-limit hit → 'failed'), bring the tty1
+# login back so the device is never left staring at a dead black VT. OnFailure
+# fires only on terminal failure — not on the normal Restart= retries or the
+# daily RuntimeMaxSec recycle — so it doesn't fight Conflicts= during a transient
+# restart. This is the deterministic backstop to the getty enable in install.sh.
+OnFailure=getty@tty1.service
 
 [Service]
 # Runs as the dedicated kiosk user. Cage opens DRM/KMS directly via the seat,
