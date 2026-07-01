@@ -41,7 +41,7 @@ jobs:
           mkdir -p picogallery-release/frontend
           
           # Build production-only, cross-platform dependencies using pnpm deploy
-          pnpm deploy --filter @pico/server --prod picogallery-release/server
+          pnpm deploy --filter @pico/server --prod --legacy picogallery-release/server
           
           # Copy frontend and client dists
           cp -r client/dist picogallery-release/client/
