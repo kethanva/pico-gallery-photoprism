@@ -440,6 +440,12 @@ step_build() {
     fi
     if [[ -d "$REPO_ROOT/server/node_modules" ]]; then
       ok "Pre-packaged node_modules found — skipping package installation."
+      if [[ "$(uname -m)" == "aarch64" ]]; then
+        step "Ensuring native bindings (sharp) for aarch64"
+        sed -i 's/"workspace:\*"/"file:..\/shared"/g' "$REPO_ROOT/server/package.json"
+        ( cd "$REPO_ROOT/server" && npm install --os=linux --cpu=arm64 sharp@0.33.5 --no-save --fund=false --audit=false )
+        ok "Native bindings repaired."
+      fi
       return 0
     fi
     info "Installing production dependencies only"
