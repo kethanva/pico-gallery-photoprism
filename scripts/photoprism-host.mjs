@@ -58,6 +58,79 @@ const backendAgent = backend.protocol === 'https:' ? https : http;
 // PhotoPrism instances on a LAN often use self-signed certs.
 const rejectUnauthorized = distConfig.ignoreCertificateErrors === false;
 
+let ppUser = '';
+let ppPass = '';
+try {
+  const configPath = process.env.PICO_CONFIG || '/etc/picogallery/config.toml';
+  const toml = readFileSync(configPath, 'utf8');
+  const userMatch = toml.match(/username\s*=\s*"([^"]+)"/);
+  const passMatch = toml.match(/password\s*=\s*"([^"]+)"/);
+  if (userMatch) ppUser = userMatch[1];
+  if (passMatch) ppPass = passMatch[1];
+} catch (e) {
+  // Ignore missing config
+}
+
+let activeSessionId = null;
+let isFetchingSession = false;
+let sessionFetchQueue = [];
+
+function fetchSession() {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({ username: ppUser, password: ppPass });
+    const req = backendAgent.request(new URL('/api/v1/session', backend), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'Host': backend.host
+      },
+      rejectUnauthorized
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          try {
+            const data = JSON.parse(body);
+            resolve(data.id);
+          } catch(e) { reject(e); }
+        } else {
+          reject(new Error(`Failed to login: ${res.statusCode} ${body}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
+}
+
+async function getSessionId() {
+  if (!ppUser || !ppPass) return null;
+  if (activeSessionId) return activeSessionId;
+  
+  if (isFetchingSession) {
+    return new Promise(resolve => sessionFetchQueue.push(resolve));
+  }
+  isFetchingSession = true;
+  
+  try {
+    console.log('[proxy] authenticating as', ppUser, '...');
+    const id = await fetchSession();
+    activeSessionId = id;
+    sessionFetchQueue.forEach(resolve => resolve(id));
+    return id;
+  } catch (e) {
+    console.error('[proxy] autologin failed:', e.message);
+    sessionFetchQueue.forEach(resolve => resolve(null));
+    return null;
+  } finally {
+    isFetchingSession = false;
+    sessionFetchQueue = [];
+  }
+}
+
 // ── Static MIME types ────────────────────────────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -89,15 +162,24 @@ const servedConfig = JSON.stringify({
 });
 
 // ── Proxy /api/v1/* → backend ────────────────────────────────────────────────
-function proxyRequest(req, res) {
+async function proxyRequest(req, res) {
   const target = new URL(req.url, backend);
   const headers = { ...req.headers, host: backend.host };
   delete headers['accept-encoding']; // avoid double-compression surprises
+
+  const sessionId = await getSessionId();
+  if (sessionId) {
+    headers['X-Session-ID'] = sessionId;
+  }
 
   const upstream = backendAgent.request(
     target,
     { method: req.method, headers, rejectUnauthorized },
     (up) => {
+      if (sessionId && (up.statusCode === 401 || up.statusCode === 403)) {
+        console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);
+        activeSessionId = null;
+      }
       res.writeHead(up.statusCode || 502, up.headers);
       up.pipe(res);
     }
@@ -180,13 +262,19 @@ const server = http.createServer((req, res) => {
 });
 
 // Proxy websocket upgrades (PhotoPrism uses /api/v1/ws via sockette).
-server.on('upgrade', (req, socket, head) => {
+server.on('upgrade', async (req, socket, head) => {
   if (!(req.url || '').startsWith('/api/')) {
     socket.destroy();
     return;
   }
   const target = new URL(req.url, backend);
   const headers = { ...req.headers, host: backend.host };
+  
+  const sessionId = await getSessionId();
+  if (sessionId) {
+    headers['X-Session-ID'] = sessionId;
+  }
+
   const upstream = backendAgent.request(target, {
     method: req.method,
     headers,
