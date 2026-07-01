@@ -49,6 +49,7 @@ Environment=WLR_BACKENDS=drm,libinput
 # libseat is left to auto-probe it can land on the dead logind backend and wlroots
 # then opens zero input devices — dead keyboard AND mouse at the compositor.
 Environment=LIBSEAT_BACKEND=seatd
+Environment=XCURSOR_THEME=Adwaita
 
 ExecStart=/usr/local/bin/picogallery-kiosk
 Restart=always

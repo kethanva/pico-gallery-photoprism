@@ -692,7 +692,7 @@ step_kiosk() {
   [[ "$MODE_WANTS_KIOSK" -eq 1 ]] || return 0
   step "Kiosk (Cog/WPE WebKit under Cage)"
   [[ -d "$KIOSK_ASSETS" ]] || die "Kiosk assets missing at $KIOSK_ASSETS (run from a full repo checkout)."
-  apt_install cog cage seatd curl
+  apt_install cog cage seatd curl adwaita-icon-theme
 
   info "Creating kiosk user '$KIOSK_USER' + seat/GPU groups"
   id "$KIOSK_USER" >/dev/null 2>&1 || run useradd --system --create-home --shell /usr/sbin/nologin "$KIOSK_USER"
