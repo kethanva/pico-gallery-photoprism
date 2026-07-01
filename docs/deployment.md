@@ -54,6 +54,17 @@ The canonical display surface is **Cog (WPE WebKit)** under the **Cage** Wayland
 kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via `seatd`
 and forces its single client (Cog) fullscreen.
 
+### What the frame shows on :8188
+
+The default (`photoprism`) source makes the appliance a **PhotoPrism frame**: the
+`picogallery.service` unit runs [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs),
+which serves the full **PhotoPrism Vue UI** (`frontend/dist`) on `:8188` and
+reverse-proxies its API/WebSocket to the real PhotoPrism backend. Cog opens that,
+so you get the normal PhotoPrism browse experience; its **native slideshow** is the
+display mode and **`Esc` exits** it back to the library (a Cog kiosk delivers `Esc`
+to the page, so it works). A `webdav` source has no PhotoPrism UI, so the unit
+falls back to the built-in `@pico/server` slideshow client instead.
+
 ```bash
 sudo ./install.sh http://<server-host>:8188
 sudo systemctl start picogallery-kiosk

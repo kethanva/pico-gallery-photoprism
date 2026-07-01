@@ -615,6 +615,18 @@ step_server_unit() {
   # heap so a long-running playlist/cache can't balloon and OOM the frame.
   local runtime_env=""
   if (( RAM_MB < 900 )); then runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=256"; fi
+
+  # Boot surface (what Cog opens on :8188). Default photoprism source: serve the
+  # full PhotoPrism Vue UI via photoprism-host.mjs and reverse-proxy its API to the
+  # real backend — the appliance is a PhotoPrism frame, and its native slideshow
+  # (Esc to exit) is the display mode. A webdav source has no PhotoPrism UI to show,
+  # so fall back to the built-in slideshow server.
+  local exec_start
+  if [[ "$SOURCE_KIND" == "photoprism" ]]; then
+    exec_start="$node_bin $REPO_ROOT/scripts/photoprism-host.mjs $PP_URL"
+  else
+    exec_start="$node_bin $REPO_ROOT/server/dist/index.js"
+  fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write /etc/systemd/system/picogallery.service\n' "$C_DIM" "$C_RESET"
   else
@@ -630,9 +642,10 @@ Group=$RUN_GROUP
 Environment=NODE_ENV=production
 Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
 $runtime_env
+# photoprism-host.mjs (the default surface) listens here; FRAME_URL/Cog open :8188.
 Environment=PICO_PP_PORT=8188
 WorkingDirectory=$REPO_ROOT
-ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
+ExecStart=$exec_start
 Restart=always
 RestartSec=3
 # Hardening (server only reads the repo + writes the cache)
