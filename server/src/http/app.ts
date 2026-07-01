@@ -56,8 +56,16 @@ export async function buildApp(cfg: RootConfig) {
       if (!req.url.startsWith('/api/')) return;
       const path = req.url.split('?')[0];
       if (publicPaths.has(path)) return;
-      const auth = req.headers.authorization;
-      if (!auth || auth !== `Bearer ${token}`) {
+
+      // Local kiosk running on localhost bypasses token auth
+      if (req.ip === '127.0.0.1' || req.ip === '::1') return;
+
+      // Support Bearer token header or query string token (fallback for EventSource/images)
+      const authHeader = req.headers.authorization;
+      const queryToken = (req.query as Record<string, string> | undefined)?.token;
+      const providedToken = authHeader ? authHeader.replace(/^Bearer\s+/i, '') : queryToken;
+
+      if (!providedToken || providedToken !== token) {
         // Returning the reply halts the lifecycle; without it Fastify still runs
         // the route handler and then throws FST_ERR_REP_ALREADY_SENT.
         return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });

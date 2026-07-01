@@ -23,6 +23,15 @@ interface PrismSession {
   downloadToken: string; // used in thumbnail URL path: /api/v1/t/{hash}/{downloadToken}/{size}
 }
 
+function snapThumbSize(size: number): number {
+  // Standard PhotoPrism fit sizes: https://docs.photoprism.app/developer-guide/api/resources/thumbnails/
+  const sizes = [320, 720, 1280, 1920, 2048, 3840];
+  for (const s of sizes) {
+    if (size <= s) return s;
+  }
+  return 3840;
+}
+
 export class PhotoPrismSource implements PhotoSource {
   readonly name = 'photoprism';
   readonly displayName = 'PhotoPrism';
@@ -59,7 +68,8 @@ export class PhotoPrismSource implements PhotoSource {
   async getOriginal(meta: PhotoMeta, w: number, h: number): Promise<GetOriginalResult> {
     const hash = meta.contentHash ?? meta.extra?.['hash'] ?? meta.id.split(':')[1];
     const dlToken = this.session?.downloadToken ?? 'public';
-    const thumbUrl = `${this.cfg.url}/api/v1/t/${hash}/${dlToken}/fit_${Math.max(w, h)}`;
+    const size = snapThumbSize(Math.max(w, h));
+    const thumbUrl = `${this.cfg.url}/api/v1/t/${hash}/${dlToken}/fit_${size}`;
     const resp = await this.doFetch(thumbUrl);
     if (!resp.ok) throw new Error(`PhotoPrism fetch failed: ${resp.status}`);
     const bytes = Buffer.from(await resp.arrayBuffer());

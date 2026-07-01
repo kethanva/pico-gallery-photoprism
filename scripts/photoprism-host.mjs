@@ -56,7 +56,7 @@ if (!backendRaw) {
 const backend = new URL(backendRaw.replace(/\/+$/, ''));
 const backendAgent = backend.protocol === 'https:' ? https : http;
 // PhotoPrism instances on a LAN often use self-signed certs.
-const rejectUnauthorized = distConfig.ignoreCertificateErrors === false;
+const rejectUnauthorized = distConfig.ignoreCertificateErrors !== true;
 
 let ppUser = '';
 let ppPass = '';
@@ -67,7 +67,7 @@ try {
   const passMatch = toml.match(/password\s*=\s*"([^"]+)"/);
   if (userMatch) ppUser = userMatch[1];
   if (passMatch) ppPass = passMatch[1];
-} catch (e) {
+} catch {
   // Ignore missing config
 }
 
@@ -195,7 +195,7 @@ async function proxyRequest(req, res) {
             modifiedHeaders['content-length'] = Buffer.byteLength(modifiedBody);
             res.writeHead(200, modifiedHeaders);
             res.end(modifiedBody);
-          } catch (e) {
+          } catch {
             res.writeHead(up.statusCode, up.headers);
             res.end(body);
           }
