@@ -453,11 +453,11 @@ step_build() {
 
         # 1. Download sharp-linux-arm64
         mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64"
-        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64" && npm pack @img/sharp-linux-arm64@$sharp_ver >/dev/null 2>&1 && tar -xzf *.tgz --strip-components=1 && rm *.tgz )
+        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64" && rm -f *.tgz && npm pack @img/sharp-linux-arm64@$sharp_ver >/dev/null && tar -xzf *.tgz --strip-components=1 && rm -f *.tgz )
 
         # 2. Download sharp-libvips-linux-arm64
         mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64"
-        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64" && npm pack @img/sharp-libvips-linux-arm64@$libvips_ver >/dev/null 2>&1 && tar -xzf *.tgz --strip-components=1 && rm *.tgz )
+        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64" && rm -f *.tgz && npm pack @img/sharp-libvips-linux-arm64@$libvips_ver >/dev/null && tar -xzf *.tgz --strip-components=1 && rm -f *.tgz )
         
         ok "Native bindings repaired."
       fi
