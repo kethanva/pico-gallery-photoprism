@@ -46,7 +46,6 @@ jobs:
           if [ -d "shared/dist" ]; then cp -r shared/dist picogallery-release/shared/; fi
           cp -r frontend/dist picogallery-release/frontend/
           cp -r kiosk picogallery-release/
-          cp -r systemd picogallery-release/
           
           # Copy node_modules (production-only, cross-platform)
           cp -a node_modules picogallery-release/
