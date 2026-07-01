@@ -9,6 +9,7 @@ import { SlideshowEventSource } from './api/events.js';
 import { api, imageUrl } from './api/client.js';
 import type { DisplayConfig, SlideshowState } from '@pico/shared';
 import { mountRemote } from './control/remote.js';
+import { bindFrameKeyboard } from './control/keyboard.js';
 
 async function waitForReady(maxWaitMs = 120_000): Promise<void> {
   const deadline = Date.now() + maxWaitMs;
@@ -81,6 +82,8 @@ async function mountFrame(root: HTMLElement): Promise<void> {
     img.decoding = 'async';
     img.src = url;
   };
+
+  bindFrameKeyboard(() => lastState);
 
   const es = new SlideshowEventSource();
   es.onConnect(() => badge.hide());

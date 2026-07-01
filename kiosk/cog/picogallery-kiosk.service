@@ -43,7 +43,12 @@ Environment=PICO_KIOSK_ENV=/etc/picogallery/kiosk.env
 # fine but silently disables all keyboard/mouse input (no libinput backend
 # started), leaving the frame up with a dead keyboard/mouse.
 Environment=WLR_BACKENDS=drm,libinput
-Environment=WLR_LIBSEAT_BACKEND=seatd
+# Force the seatd libseat backend. The correct variable is LIBSEAT_BACKEND
+# (libseat reads it directly) — WLR_LIBSEAT_BACKEND is not a real variable and is
+# a silent no-op. On DietPi logind (dbus-org.freedesktop.login1) is broken, so if
+# libseat is left to auto-probe it can land on the dead logind backend and wlroots
+# then opens zero input devices — dead keyboard AND mouse at the compositor.
+Environment=LIBSEAT_BACKEND=seatd
 
 ExecStart=/usr/local/bin/picogallery-kiosk
 Restart=always
