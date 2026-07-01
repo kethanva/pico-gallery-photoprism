@@ -99,6 +99,9 @@ The appliance display surface is **Cog (WPE WebKit)** running under the **Cage**
 Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
 `seatd` and forces its single client (Cog) fullscreen.
 
+> [!NOTE]
+> **Full PhotoPrism UI on HDMI Out:** The installer is configured to launch the complete **PhotoPrism Vue SPA frontend** on the Pi Zero 2 HDMI output (port `8188`), proxying your backend requests over the network. If you want to use the dedicated slideshow digital photo frame instead, check the commented configuration lines in `/etc/systemd/system/picogallery.service` to revert back to `server/dist/index.js`.
+
 `install.sh` is a **one-click, end-to-end provisioner**. It detects the
 board + architecture, checks/fixes dependencies, installs packages, (optionally)
 installs Node + builds the server, writes config + systemd units, and verifies
@@ -126,7 +129,7 @@ What it sets up:
   (`/usr/local/bin/picogallery-kiosk`, which waits for `/api/v1/health` before
   opening Cog), a systemd unit, a tight sudoers entry, and the KMS/`gpu_mem` boot
   settings Cage needs.
-* **server** — Node 22 (NodeSource) (pnpm is only required if building from source; pre-built release uses pre-packaged dependencies and doesn't require pnpm), a resource-capped build (with swap on low-RAM boards), `/etc/picogallery/config.toml`, and a hardened `picogallery.service` running as the repo owner.
+* **server** — Node 22 (NodeSource) (pre-built release packages all dependencies and compiled static assets, so `pnpm` is not required). Runs the `photoprism-host` proxy server on port `8188` to reverse-proxy your PhotoPrism backend and serve the Vue SPA. The original slideshow server is commented out in `/etc/systemd/system/picogallery.service` for reference.
 * **`pico-display-power`** + `pico-display-{on,off}.timer` when `--blank-on/--blank-off`
   are given — daily display power via `vcgencmd`, DSI backlight, or DRM DPMS.
 
