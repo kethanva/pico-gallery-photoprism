@@ -591,6 +591,42 @@ EOF
   ok "picogallery.service enabled"
 }
 
+# Remove kiosk units left by earlier versions of this project. It was renamed over
+# its life (pico-google-photos → photoprism-kiosk → picogallery), and each older
+# installer/hand-setup left a differently-named kiosk unit behind:
+#   • pico-google-photos.service — the retired Cage + Chromium frame
+#   • photoprism-kiosk.service    — the retired Qt6/QtWebEngine app
+#   • pico-kiosk.service, pico-wait-online.service — older repo unit set
+# A survivor is fatal: two kiosks both grab tty1 + the DRM master + the seat with no
+# mutual Conflicts, so they race, neither paints, and the console hangs at
+# multi-user.target (exactly the boot-hang seen on the device). Purge every unit in
+# this project's `pico-*` / `photoprism-*` namespaces except the ones we currently own.
+purge_legacy_kiosk() {
+  local owned=" picogallery.service picogallery-kiosk.service pico-display-on.service pico-display-off.service pico-display-on.timer pico-display-off.timer "
+  local removed=0 path base
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    base="$(basename "$path")"
+    [[ "$owned" == *" $base "* ]] && continue      # never touch a unit we own
+    removed=1
+    warn "Removing stale kiosk unit (fights the frame for tty1/DRM): $base"
+    run systemctl disable --now "$base" 2>/dev/null || true
+    run rm -f "$path"
+    run rm -rf "/etc/systemd/system/${base}.d"
+    run systemctl reset-failed "$base" 2>/dev/null || true
+  done < <(ls /etc/systemd/system/pico-*.service \
+              /etc/systemd/system/pico-*.timer \
+              /etc/systemd/system/photoprism-*.service \
+              /run/systemd/system/pico-*.service \
+              /lib/systemd/system/pico-google-photos.service 2>/dev/null | sort -u)
+  if [[ "$removed" -eq 1 ]]; then
+    run systemctl daemon-reload
+    ok "Removed conflicting legacy kiosk unit(s)"
+  else
+    debug "no legacy kiosk units present"
+  fi
+}
+
 # Cog + Cage kiosk: packages, user, env, launcher, unit, sudoers, optional blank timers.
 step_kiosk() {
   [[ "$MODE_WANTS_KIOSK" -eq 1 ]] || return 0
@@ -604,6 +640,24 @@ step_kiosk() {
     getent group "$grp" >/dev/null 2>&1 && run usermod -aG "$grp" "$KIOSK_USER" || true
   done
   run systemctl enable --now seatd.service
+
+  # Delete any retired kiosk unit from a previous project version FIRST — otherwise
+  # two kiosks fight over tty1/DRM and the console hangs at multi-user.target.
+  purge_legacy_kiosk
+
+  # Free tty1 for Cage *without* removing the console recovery path. DietPi (and most
+  # images) autologin a console on tty1; Cage needs that VT + the DRM master. The unit
+  # carries Conflicts=getty@tty1, so systemd stops getty transiently whenever the kiosk
+  # starts and — crucially — logind's autovt respawns getty on tty1 the moment the
+  # kiosk stops. That means a kiosk that can't paint hands the console back instead of
+  # leaving frozen boot text on a dead VT (which is what a permanent `disable` did).
+  # Only stop it now so this very install doesn't leave a getty holding tty1 before the
+  # first kiosk start; leave it ENABLED so recovery works on every future failure.
+  # Explicitly (re-)enable first: an older version of this installer permanently
+  # `disable`d getty@tty1, which is what left devices with a frozen, login-less console
+  # when the kiosk didn't paint. Enabling here repairs those devices on reinstall.
+  run systemctl enable getty@tty1.service 2>/dev/null || true
+  run systemctl stop getty@tty1.service 2>/dev/null || true
 
   run install -d -m 0755 "$CONFIG_DIR"
   if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -693,6 +747,30 @@ step_verify() {
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
     systemctl is-enabled --quiet picogallery-kiosk.service && ok "kiosk service enabled" || { err "kiosk service not enabled"; failures=$((failures+1)); }
     systemctl is-active --quiet seatd.service && ok "seatd active" || { warn "seatd not active (needed for Cage)"; }
+    # A second kiosk (a leftover from an older project name) is fatal — it grabs
+    # tty1/DRM and hangs the console at boot. purge_legacy_kiosk should have cleared
+    # these; fail the verify if any survived so it's caught here, not on the HDMI.
+    local stray
+    stray="$(ls /etc/systemd/system/pico-google-photos.service \
+                /etc/systemd/system/photoprism-kiosk.service \
+                /etc/systemd/system/pico-kiosk.service 2>/dev/null || true)"
+    if [[ -n "$stray" ]]; then
+      err "conflicting legacy kiosk unit still present: $stray — remove it (systemctl disable --now <unit>; rm the unit) or it will hang the display"
+      failures=$((failures+1))
+    else
+      ok "no conflicting legacy kiosk units"
+    fi
+    # KMS must be live or Cage can't open /dev/dri/card0 (silent frozen console).
+    if [[ "$IS_PI" -eq 1 ]]; then
+      if [[ -e /dev/dri/card0 || -e /dev/dri/card1 ]]; then
+        ok "DRM/KMS device present (/dev/dri)"
+      elif [[ "${REBOOT_REQUIRED:-0}" -eq 1 ]]; then
+        warn "no /dev/dri card yet — KMS overlay was just added; the required reboot activates it"
+      else
+        err "no /dev/dri card — KMS not active; Cage cannot render. Ensure dtoverlay=vc4-kms-v3d in $BOOT_CFG and reboot"
+        failures=$((failures+1))
+      fi
+    fi
   fi
 
   [[ "$failures" -eq 0 ]] || warn "$failures check(s) failed — see $LOG_FILE and the hints above."
@@ -703,13 +781,22 @@ step_verify() {
 do_uninstall() {
   step "Uninstalling PicoGallery"
   confirm "Remove PicoGallery services, users, config, and cache?" || die "Aborted."
-  for unit in picogallery-kiosk.service picogallery.service pico-display-on.timer pico-display-off.timer pico-display-on.service pico-display-off.service; do
+  # Current units + every legacy kiosk name this project shipped under previous
+  # names (see purge_legacy_kiosk), so uninstall leaves nothing to fight a reinstall.
+  for unit in picogallery-kiosk.service picogallery.service \
+              pico-display-on.timer pico-display-off.timer \
+              pico-display-on.service pico-display-off.service \
+              pico-google-photos.service photoprism-kiosk.service \
+              pico-kiosk.service pico-wait-online.service; do
     run systemctl disable --now "$unit" 2>/dev/null || true
     run rm -f "/etc/systemd/system/$unit"
+    run rm -rf "/etc/systemd/system/$unit.d"
   done
   run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /etc/sudoers.d/picogallery-kiosk
   run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
   run systemctl daemon-reload
+  # Give the console back: re-enable the tty1 login the kiosk install disabled.
+  run systemctl enable --now getty@tty1.service 2>/dev/null || true
   # Remove the swapfile we may have created (and its fstab entry).
   if [[ -f /var/swap.picogallery ]]; then
     run swapoff /var/swap.picogallery 2>/dev/null || true

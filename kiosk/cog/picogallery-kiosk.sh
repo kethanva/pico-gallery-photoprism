@@ -24,6 +24,14 @@ ENV_FILE="${PICO_KIOSK_ENV:-/etc/picogallery/kiosk.env}"
 FRAME_URL="${FRAME_URL:-http://localhost:8188}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-120}"
 
+# Cage/WPE needs a writable XDG_RUNTIME_DIR for its Wayland socket. The systemd
+# unit supplies one via RuntimeDirectory=; this fallback covers a manual debug
+# launch (e.g. run.sh kiosk) where that isn't set.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/picogallery-kiosk}"
+if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+  mkdir -p "$XDG_RUNTIME_DIR" && chmod 0700 "$XDG_RUNTIME_DIR"
+fi
+
 command -v cage >/dev/null 2>&1 || { echo "cage not installed (apt install cage)" >&2; exit 1; }
 command -v cog  >/dev/null 2>&1 || { echo "cog not installed (apt install cog)"  >&2; exit 1; }
 

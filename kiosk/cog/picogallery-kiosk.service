@@ -1,8 +1,16 @@
 [Unit]
 Description=PicoGallery kiosk (Cog/WPE WebKit under Cage)
 Documentation=https://github.com/your-org/picogallery
-After=network-online.target seatd.service
+After=network-online.target seatd.service getty@tty1.service
 Wants=network-online.target seatd.service
+# Cage needs tty1 + the DRM master; the distro's console (DietPi/getty) owns them.
+# Conflicts stops getty@tty1 whenever the kiosk starts so the two never fight over
+# the VT (a fight that otherwise grabs the physical keyboard in a restart loop).
+Conflicts=getty@tty1.service
+# If the kiosk can't render, give up after a few quick tries instead of looping
+# forever — a forever-loop repeatedly seizes the keyboard and locks out the console.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 # Runs as the dedicated kiosk user. Cage opens DRM/KMS directly via the seat,
@@ -14,7 +22,13 @@ SupplementaryGroups=video render input seat
 PAMName=login
 TTYPath=/dev/tty1
 
-Environment=XDG_RUNTIME_DIR=/run/user/%U
+# The picokiosk system user has no logind session, so /run/user/<uid> is never
+# created. Have systemd make a private runtime dir (0700, owned by the user) each
+# start and point XDG_RUNTIME_DIR at it — without this, Cage fails to create its
+# wl_display and dies immediately.
+RuntimeDirectory=picogallery-kiosk
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/picogallery-kiosk
 Environment=PICO_KIOSK_ENV=/etc/picogallery/kiosk.env
 # seatd-managed seat access for the wlroots backend Cage uses.
 Environment=WLR_BACKENDS=drm
