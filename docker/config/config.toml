@@ -15,21 +15,14 @@ max_mb = 512
 host = "0.0.0.0"
 port = 8188
 
-# Demo source: the bundled sample_photos folder, mounted at /photos.
+# Photos come from a PhotoPrism backend. Point `url` at your PhotoPrism host
+# (the commented `photoprism` service in docker-compose.yml spins one up locally).
 [[sources]]
-name      = "directory"
-enabled   = true
-paths     = ["/photos"]
-recursive = true
-order     = "alphabetical"
-
-# To drive the frame from PhotoPrism instead, comment out the directory source
-# above and configure this one (see docs/sources.md):
-# [[sources]]
-# name             = "photoprism"
-# enabled          = true
-# url              = "http://photoprism:2342"
-# username         = "admin"
-# password         = "please-change"
-# include_private  = false
-# include_archived = false
+name             = "photoprism"
+enabled          = true
+url              = "http://photoprism:2342"
+username         = "admin"
+password         = "please-change"
+include_private  = false
+include_archived = false
+order            = "newest"

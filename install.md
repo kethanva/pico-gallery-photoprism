@@ -57,11 +57,10 @@ You can install PicoGallery V2 either using a pre-built release artifact (recomm
    rm picogallery-release.tar.gz
    ```
 
-3. If running the server locally, install Node.js v22 and `pnpm`:
+3. If running the server locally, install Node.js v22 (the pre-built release package includes all dependencies, so `pnpm` is not required):
    ```bash
    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
    sudo apt install -y nodejs
-   sudo npm install -g pnpm
    ```
 
 4. Now proceed to configuration and running the installer. The installer will automatically detect the pre-built assets and skip the heavy compilation phase.
@@ -108,7 +107,7 @@ Edit the configuration file:
 sudo nano /etc/picogallery/config.toml
 ```
 
-Provide the path to your photos or configure PhotoPrism/WebDAV sources:
+Configure the server settings and PhotoPrism/WebDAV sources:
 ```toml
 [http]
 port = 8188
@@ -117,9 +116,12 @@ host = "0.0.0.0"
 [cache]
 dir = "/var/cache/picogallery"
 
-[sources.local]
-type = "local"
-paths = ["/home/pi/photos"]
+[[sources]]
+name     = "photoprism"
+enabled  = true
+url      = "http://192.168.68.71:2342"
+username = "admin"
+password = "please-change"
 ```
 
 ---

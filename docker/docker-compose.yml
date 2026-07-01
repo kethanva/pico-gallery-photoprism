@@ -2,9 +2,9 @@
 #
 #   docker compose -f docker/docker-compose.yml up --build
 #
-# Serves the frame at http://localhost:8188 from ./sample_photos by default.
-# Uncomment the `photoprism` service and the matching source in your config.toml
-# to drive the frame from a PhotoPrism library instead.
+# The frame at http://localhost:8188 pulls photos from the `photoprism` service
+# below. Point config/config.toml's `[[sources]]` url at your own PhotoPrism host
+# instead if you already run one on the network.
 
 services:
   picogallery:
@@ -15,20 +15,21 @@ services:
       - "8188:8188"
     volumes:
       - ./config:/config:ro          # put config.toml here
-      - ../sample_photos:/photos:ro  # demo directory source
       - pico-cache:/cache
+    depends_on:
+      - photoprism
     restart: unless-stopped
 
-  # photoprism:
-  #   image: photoprism/photoprism:latest
-  #   ports: ["2342:2342"]
-  #   environment:
-  #     PHOTOPRISM_ADMIN_PASSWORD: "please-change"
-  #     PHOTOPRISM_HTTP_PORT: 2342
-  #   volumes:
-  #     - ./photoprism/originals:/photoprism/originals
-  #     - ./photoprism/storage:/photoprism/storage
-  #   restart: unless-stopped
+  photoprism:
+    image: photoprism/photoprism:latest
+    ports: ["2342:2342"]
+    environment:
+      PHOTOPRISM_ADMIN_PASSWORD: "please-change"
+      PHOTOPRISM_HTTP_PORT: 2342
+    volumes:
+      - ./photoprism/originals:/photoprism/originals
+      - ./photoprism/storage:/photoprism/storage
+    restart: unless-stopped
 
 volumes:
   pico-cache:

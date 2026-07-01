@@ -49,24 +49,16 @@ port = 8188
 # display_off_cmd = "vcgencmd display_power 0"
 
 # ─── Sources ─────────────────────────────────────────────────────────────────
-# Enable at least one source. Multiple sources are merged into one playlist.
+# Photos come from a PhotoPrism backend over the network. There is no local
+# directory source — the frame never scans the device's own filesystem.
 
 [[sources]]
-name    = "directory"
-enabled = true
-paths   = ["~/Pictures/PicoGallery"]
-recursive = true
-# allowed_albums      = ["Vacation 2024", "Family"]
-# rescan_interval_secs = 3600
-# order = "shuffle"  # shuffle | alphabetical | date_modified
-
-# [[sources]]
-# name     = "photoprism"
-# enabled  = false
-# url      = "http://photoprism.local:2342"
-# username = "admin"
-# password = "insecure"          # or use app_password below
-# # app_password = "abcd-efgh-ijkl-mnop"
+name     = "photoprism"
+enabled  = true
+url      = "http://192.168.68.71:2342"
+username = "admin"
+password = "insecure"          # or use app_password below
+# app_password = "abcd-efgh-ijkl-mnop"
 #
 # # Filtering (all optional, combined with AND)
 # # album       = "january-2024"
@@ -82,12 +74,12 @@ recursive = true
 # # labels      = ["beach", "dog"]
 # # memories    = true            # only photos taken on today's date in any year
 # # query       = "label:beach"   # raw PhotoPrism Q-language
-# include_private  = false
-# include_archived = false
-# order    = "newest"
-# per_page = 100
-# max_thumb      = "fit_1920"
-# skip_tls_verify = false
+include_private  = false
+include_archived = false
+order    = "newest"
+per_page = 100
+max_thumb      = "fit_1920"
+skip_tls_verify = false
 
 # [[sources]]
 # name     = "webdav"

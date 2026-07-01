@@ -64,7 +64,7 @@ graph TD
 http/        Fastify app, routes, SSE, error envelope
 engine/      playlist + cursor + scheduler + event bus (pure, testable)
 images/      sharp resize, content-hash disk cache, guards, HEIC fallback
-sources/     directory | photoprism | webdav behind one PhotoSource interface
+sources/     photoprism | webdav behind one PhotoSource interface
 config/      TOML + env loader, Zod-validated RootConfig
 telemetry/   pino logger
 ```

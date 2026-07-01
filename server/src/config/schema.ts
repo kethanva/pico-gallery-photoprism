@@ -1,16 +1,6 @@
 import { z } from 'zod';
 import { DisplayConfigSchema } from '@pico/shared';
 
-const DirectorySourceSchema = z.object({
-  name: z.literal('directory'),
-  enabled: z.boolean().default(true),
-  paths: z.array(z.string()).min(1),
-  recursive: z.boolean().default(true),
-  allowedAlbums: z.array(z.string()).optional(),
-  rescanIntervalSecs: z.number().positive().default(3600),
-  order: z.enum(['shuffle', 'alphabetical', 'date_modified']).default('shuffle'),
-});
-
 const PhotoPrismSourceSchema = z.object({
   name: z.literal('photoprism'),
   enabled: z.boolean().default(true),
@@ -59,12 +49,10 @@ const WebDavSourceSchema = z.object({
 });
 
 export const SourceConfigSchema = z.discriminatedUnion('name', [
-  DirectorySourceSchema,
   PhotoPrismSourceSchema,
   WebDavSourceSchema,
 ]);
 export type SourceConfig = z.infer<typeof SourceConfigSchema>;
-export type DirectoryConfig = z.infer<typeof DirectorySourceSchema>;
 export type PhotoPrismConfig = z.infer<typeof PhotoPrismSourceSchema>;
 export type WebDavConfig = z.infer<typeof WebDavSourceSchema>;
 

@@ -33,10 +33,11 @@ docker compose -f docker/docker-compose.yml up --build
 ```
 
 - The image builds all packages and runs `server/dist/index.js`.
-- Mount your config at `/config/config.toml` and photos read-only.
+- Mount your config at `/config/config.toml`.
 - Image cache persists in the `pico-cache` named volume (`cache.dir = "/cache"`).
-- Uncomment the `photoprism` service in the compose file to bring up a library
-  alongside the frame; point a `photoprism` source at `http://photoprism:2342`.
+- The compose file brings up a `photoprism` service alongside the frame; the
+  bundled config points its `photoprism` source at `http://photoprism:2342`.
+  Point it at your own PhotoPrism host instead if you already run one.
 
 Standalone build:
 
@@ -44,7 +45,6 @@ Standalone build:
 docker build -f docker/Dockerfile -t picogallery:latest .
 docker run -p 8188:8188 \
   -v "$PWD/docker/config:/config:ro" \
-  -v "$PWD/sample_photos:/photos:ro" \
   -v pico-cache:/cache picogallery:latest
 ```
 

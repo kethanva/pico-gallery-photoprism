@@ -60,22 +60,25 @@ graph TD
 
 ```bash
 ./run.sh setup            # pnpm install
-# point a source at sample_photos (HEIC supported) or your PhotoPrism — see below
+# point the source at your PhotoPrism backend — see below
 PICO_CONFIG=./config.local.toml ./run.sh dev   # server :8188 + Vite :5173
 ```
 
 Open <http://localhost:5173> for the frame, `/remote` for the phone control.
 
-Minimal config to drive the bundled demo photos:
+Minimal config — photos come from a PhotoPrism backend over the network (there is
+no local directory source; the frame never scans the device's own filesystem):
 
 ```toml
 [http]
 port = 8188
 
 [[sources]]
-name      = "directory"
-paths     = ["./sample_photos"]
-order     = "alphabetical"
+name     = "photoprism"
+url      = "http://192.168.68.71:2342"
+username = "admin"
+password = "change-me"
+order    = "newest"
 ```
 
 Config is resolved from `$PICO_CONFIG`, then `~/.config/picogallery/config.toml`,
@@ -87,7 +90,7 @@ then `/etc/picogallery/config.toml`. Every key is overridable with
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build
-# frame at http://localhost:8188 from ./sample_photos
+# frame at http://localhost:8188, photos pulled from the bundled PhotoPrism service
 ```
 
 ## Raspberry Pi kiosk (Cog + Cage / WPE WebKit)
@@ -105,11 +108,9 @@ the result — idempotently. Three modes:
 # Display only — the server runs on another host (works on any Pi, incl. Pi Zero):
 sudo ./install.sh --mode kiosk --server-url http://<server-host>:8188
 
-# Everything on this Pi (needs 64-bit / ARMv7 — Pi Zero 2 W, Pi 3/4/5):
-sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures
-
-# Drive the frame from PhotoPrism, with a nightly display blank:
-sudo ./install.sh --mode all --source photoprism \
+# Everything on this Pi (needs 64-bit / ARMv7 — Pi Zero 2 W, Pi 3/4/5)
+# pointing to a PhotoPrism backend, with a nightly display blank:
+sudo ./install.sh --mode all \
   --photoprism-url http://nas:2342 --photoprism-user admin --photoprism-pass secret \
   --blank-on 22:00 --blank-off 07:00
 ```
@@ -125,9 +126,7 @@ What it sets up:
   (`/usr/local/bin/picogallery-kiosk`, which waits for `/api/v1/health` before
   opening Cog), a systemd unit, a tight sudoers entry, and the KMS/`gpu_mem` boot
   settings Cage needs.
-* **server** — Node 22 (NodeSource) + pnpm, a resource-capped build (with swap on
-  low-RAM boards), `/etc/picogallery/config.toml`, and a hardened
-  `picogallery.service` running as the repo owner.
+* **server** — Node 22 (NodeSource) (pnpm is only required if building from source; pre-built release uses pre-packaged dependencies and doesn't require pnpm), a resource-capped build (with swap on low-RAM boards), `/etc/picogallery/config.toml`, and a hardened `picogallery.service` running as the repo owner.
 * **`pico-display-power`** + `pico-display-{on,off}.timer` when `--blank-on/--blank-off`
   are given — daily display power via `vcgencmd`, DSI backlight, or DRM DPMS.
 
@@ -170,8 +169,7 @@ Run on the device as root: `sudo ./install.sh [flags]`.
 |---|---|---|
 | `--mode` | `auto\|kiosk\|server\|all` | What to install. `auto` (default) picks by board/arch. |
 | `--server-url` | `URL` | Frame/API URL the kiosk opens (required in `kiosk` mode). |
-| `--source` | `directory\|photoprism\|webdav` | Server photo source (server modes; default `directory`). |
-| `--photos` | `PATH` | Photo directory for the `directory` source. |
+| `--source` | `photoprism\|webdav` | Server photo source (server modes; default `photoprism`). |
 | `--photoprism-url/-user/-pass` | — | PhotoPrism connection (for `--source photoprism`). |
 | `--webdav-url/-user/-pass` | — | WebDAV connection (for `--source webdav`). |
 | `--blank-on` / `--blank-off` | `HH:MM` | Nightly display-blank window (both required together). |
@@ -272,14 +270,7 @@ Any configuration option can be overridden using environment variables by follow
 
 Configure multiple photo libraries simultaneously under the `[[sources]]` table arrays. 
 
-### 1. Directory Source (`name = "directory"`)
-* `paths` (array of strings, e.g. `["/photos"]`) - Root folder directories containing images.
-* `recursive` (boolean) - If true, crawl subfolders recursively.
-* `order` (string: `shuffle` \| `alphabetical` \| `date_modified`).
-* `allowed_albums` (array of strings) - Subfolder whitelist filter.
-* `rescan_interval_secs` (number).
-
-### 2. PhotoPrism Source (`name = "photoprism"`)
+### 1. PhotoPrism Source (`name = "photoprism"`)
 * `url` (string) - HTTP address of your instance.
 * `username` & `password` (strings).
 * `album` (string) - Point to a specific PhotoPrism collection.
@@ -293,7 +284,7 @@ Configure multiple photo libraries simultaneously under the `[[sources]]` table 
 * `include_private` (boolean).
 * `include_archived` (boolean).
 
-### 3. WebDAV Source (`name = "webdav"`)
+### 2. WebDAV Source (`name = "webdav"`)
 * `url` (string) - Nextcloud, ownCloud, or generic WebDAV endpoints.
 * `username` & `password` (strings).
 * `token` (string) - Optional bearer token.
@@ -316,5 +307,5 @@ Requires Node ≥ 22.13 and pnpm. HEIC/HEIF photos are decoded via `heic-convert
 
 - [docs/architecture.md](docs/architecture.md) — how the pieces fit
 - [docs/api.md](docs/api.md) — HTTP + SSE contract
-- [docs/sources.md](docs/sources.md) — directory / PhotoPrism / WebDAV
+- [docs/sources.md](docs/sources.md) — PhotoPrism / WebDAV
 - [docs/deployment.md](docs/deployment.md) — local, Docker, Pi kiosk, env vars

@@ -28,7 +28,7 @@ SSE example:
 
 ```
 event: state
-data: {"index":1,"total":9,"paused":false,"photo":{"id":"directory:…","filename":"…",…}}
+data: {"index":1,"total":9,"paused":false,"photo":{"id":"photoprism:…","filename":"…",…}}
 ```
 
 ## Control

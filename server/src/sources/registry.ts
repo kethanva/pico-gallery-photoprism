@@ -1,6 +1,5 @@
 import type { PhotoSource } from './source.js';
 import type { SourceConfig } from '../config/index.js';
-import { DirectorySource } from './directory.js';
 import { PhotoPrismSource } from './photoprism.js';
 import { WebDavSource } from './webdav.js';
 import { logger } from '../telemetry/logger.js';
@@ -11,7 +10,6 @@ export async function buildSources(configs: SourceConfig[]): Promise<Map<string,
     if (!cfg.enabled) continue;
     let source: PhotoSource;
     switch (cfg.name) {
-      case 'directory': source = new DirectorySource(); break;
       case 'photoprism': source = new PhotoPrismSource(); break;
       case 'webdav': source = new WebDavSource(); break;
       default: {

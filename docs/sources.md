@@ -4,23 +4,11 @@ A source supplies the playlist. Configure one or more `[[sources]]` tables in
 your `config.toml`. Keys may be written `snake_case` (TOML idiom) or `camelCase`
 — the loader normalizes them. Each source is identified by `name`.
 
-Photos exposed by every source share the `directory:…` / `photoprism:…` /
-`webdav:…` id prefix so the engine can route an image request back to its source.
+Photos exposed by every source share the `photoprism:…` / `webdav:…` id prefix so
+the engine can route an image request back to its source.
 
-## directory
-
-Local folder(s). HEIC/HEIF is supported (transcoded to JPEG before resize).
-
-```toml
-[[sources]]
-name      = "directory"
-enabled   = true
-paths     = ["/photos", "/mnt/usb/album"]
-recursive = true
-order     = "alphabetical"        # shuffle | alphabetical | date_modified
-# allowed_albums       = ["Italy 2024"]   # optional subfolder allowlist
-# rescan_interval_secs = 3600
-```
+There is no local directory source: the frame pulls exclusively from a network
+backend (PhotoPrism) and never scans the device's own filesystem.
 
 ## photoprism
 

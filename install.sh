@@ -14,7 +14,13 @@
 #   Display only (server runs elsewhere):
 #     sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
 #   Everything on this Pi (Pi Zero 2 W / Pi 4+; needs 64-bit or armv7):
-#     sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures
+#     sudo ./install.sh --mode all \
+#          --photoprism-url http://192.168.68.71:2342 \
+#          --photoprism-user admin --photoprism-pass 'secret'
+#
+# Photos come exclusively from a PhotoPrism backend over the network; the Pi
+# never scans a local photo directory. The on-device Node server is a caching
+# adapter that fetches/resizes from PhotoPrism and serves the local Cog frontend.
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -41,9 +47,8 @@ readonly SERVER_PORT="8188"
 # ── Defaults (overridable by flags) ──────────────────────────────────────────
 MODE="auto"                 # auto | kiosk | server | all
 SERVER_URL=""               # kiosk target; defaults to localhost in server modes
-SOURCE_KIND="directory"     # directory | photoprism | webdav
-PHOTOS_PATH=""
-PP_URL="" PP_USER="" PP_PASS=""
+SOURCE_KIND="photoprism"    # photoprism | webdav  (no local directory source)
+PP_URL="http://192.168.68.71:2342" PP_USER="" PP_PASS=""
 WEBDAV_URL="" WEBDAV_USER="" WEBDAV_PASS=""
 BLANK_ON="" BLANK_OFF=""
 ASSUME_YES=0
@@ -125,9 +130,8 @@ Modes (--mode):
 Options:
   --mode <m>                auto|kiosk|server|all
   --server-url <url>        Frame/API URL the kiosk opens (kiosk mode)
-  --source <kind>           directory|photoprism|webdav  (server modes; default: directory)
-  --photos <path>           Photo directory for the 'directory' source
-  --photoprism-url <url>    PhotoPrism base URL
+  --source <kind>           photoprism|webdav  (server modes; default: photoprism)
+  --photoprism-url <url>    PhotoPrism base URL (default: http://192.168.68.71:2342)
   --photoprism-user <u>     PhotoPrism username
   --photoprism-pass <p>     PhotoPrism password (or app password)
   --webdav-url <url>        WebDAV base URL
@@ -143,9 +147,8 @@ Options:
 
 Examples:
   sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
-  sudo ./install.sh --mode all --source directory --photos /home/pi/Pictures -y
-  sudo ./install.sh --mode all --source photoprism \\
-       --photoprism-url http://nas:2342 --photoprism-user admin --photoprism-pass secret
+  sudo ./install.sh --mode all \\
+       --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass secret -y
 EOF
 }
 
@@ -156,7 +159,6 @@ parse_args() {
       --mode)            MODE="${2:?}"; shift 2 ;;
       --server-url)      SERVER_URL="${2:?}"; shift 2 ;;
       --source)          SOURCE_KIND="${2:?}"; shift 2 ;;
-      --photos)          PHOTOS_PATH="${2:?}"; shift 2 ;;
       --photoprism-url)  PP_URL="${2:?}"; shift 2 ;;
       --photoprism-user) PP_USER="${2:?}"; shift 2 ;;
       --photoprism-pass) PP_PASS="${2:?}"; shift 2 ;;
@@ -372,6 +374,24 @@ step_swap() {
 # Install Node (NodeSource) for arm64/armv7/x86_64; gate ARMv6 out.
 step_node() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
+
+  # If a pre-packaged release is used (node_modules already populated), we only need node
+  if [[ -d "$REPO_ROOT/node_modules" ]]; then
+    step "Node.js $NODE_MAJOR"
+    if have node && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]]; then
+      ok "Node $(node -v) already installed"
+    else
+      [[ "$NODE_OK_ARCH" -eq 1 ]] || die "No Node $NODE_MAJOR build for arch $ARCH."
+      info "Installing Node $NODE_MAJOR from NodeSource"
+      run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh"
+      run bash /tmp/nodesource_setup.sh
+      apt_install nodejs
+      have node || die "Node install failed."
+      ok "Installed Node $(node -v)"
+    fi
+    return 0
+  fi
+
   step "Node.js $NODE_MAJOR + pnpm"
   if have node && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]]; then
     ok "Node $(node -v) already installed"
@@ -404,6 +424,10 @@ step_build() {
 
   if [[ -f "$REPO_ROOT/server/dist/index.js" ]]; then
     step "Setting up PicoGallery from pre-built artifact"
+    if [[ -d "$REPO_ROOT/node_modules" ]]; then
+      ok "Pre-packaged node_modules found — skipping package installation."
+      return 0
+    fi
     info "Installing production dependencies only"
     local frozen_rc=0
     trap - ERR; set +e
@@ -456,24 +480,11 @@ step_server_config() {
 
   local source_block=""
   case "$SOURCE_KIND" in
-    directory)
-      local def="$REPO_ROOT/sample_photos"
-      [[ -n "${SUDO_USER:-}" && -d "/home/$SUDO_USER/Pictures" ]] && def="/home/$SUDO_USER/Pictures"
-      PHOTOS_PATH="${PHOTOS_PATH:-$def}"
-      [[ -d "$PHOTOS_PATH" ]] || warn "Photo path '$PHOTOS_PATH' does not exist yet — create it and add photos."
-      source_block=$(cat <<EOF
-[[sources]]
-name      = "directory"
-enabled   = true
-paths     = ["$PHOTOS_PATH"]
-recursive = true
-order     = "shuffle"
-EOF
-)
-      ;;
     photoprism)
       [[ -n "$PP_URL" ]] || die "--photoprism-url required for --source photoprism"
       valid_url "$PP_URL" || die "Invalid --photoprism-url"
+      [[ -n "$PP_USER" ]] || die "--photoprism-user required (PhotoPrism login). Pass --photoprism-user/--photoprism-pass or edit $cfg after install."
+      [[ -n "$PP_PASS" ]] || warn "No --photoprism-pass given — login will fail unless PhotoPrism is public. Set the password in $cfg."
       source_block=$(cat <<EOF
 [[sources]]
 name             = "photoprism"
@@ -499,7 +510,7 @@ password = "$WEBDAV_PASS"
 EOF
 )
       ;;
-    *) die "Invalid --source '$SOURCE_KIND' (directory|photoprism|webdav)";;
+    *) die "Invalid --source '$SOURCE_KIND' (photoprism|webdav)";;
   esac
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
