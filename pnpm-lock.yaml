@@ -87,6 +87,19 @@ importers:
       zod:
         specifier: ^3.23.0
         version: 3.25.76
+    optionalDependencies:
+      '@img/sharp-darwin-arm64':
+        specifier: ^0.33.5
+        version: 0.33.5
+      '@img/sharp-darwin-x64':
+        specifier: ^0.33.5
+        version: 0.33.5
+      '@img/sharp-linux-arm64':
+        specifier: ^0.33.5
+        version: 0.33.5
+      '@img/sharp-linux-x64':
+        specifier: ^0.33.5
+        version: 0.33.5
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
