@@ -631,6 +631,26 @@ EOF
   ok "picogallery.service enabled"
 }
 
+# Ensure input devices are tagged onto seat0 so wlroots/libinput (under Cage) can
+# open them. Idempotent: writes the rule, reloads udev, and re-triggers input add
+# events so the running system picks it up without a reboot.
+SEAT_UDEV_RULE="/etc/udev/rules.d/72-picogallery-seat.rules"
+install_seat_udev_rule() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf '%s[dry-run]%s would write %s and re-trigger input devices\n' "$C_DIM" "$C_RESET" "$SEAT_UDEV_RULE"
+    return 0
+  fi
+  cat >"$SEAT_UDEV_RULE" <<'EOF'
+# PicoGallery: assign input devices to seat0 so the Cage/wlroots kiosk can read
+# keyboards and mice. Needed on images where logind isn't tagging seats (DietPi).
+SUBSYSTEM=="input", TAG+="seat"
+EOF
+  chmod 0644 "$SEAT_UDEV_RULE"
+  run udevadm control --reload
+  run udevadm trigger --subsystem-match=input --action=add
+  ok "Seat udev rule installed (input devices tagged onto seat0)"
+}
+
 # Remove kiosk units left by earlier versions of this project. It was renamed over
 # its life (pico-google-photos → photoprism-kiosk → picogallery), and each older
 # installer/hand-setup left a differently-named kiosk unit behind:
@@ -697,6 +717,16 @@ step_kiosk() {
       getent group "$seat_sock_grp" >/dev/null 2>&1 && run usermod -aG "$seat_sock_grp" "$KIOSK_USER" || true
     fi
   fi
+
+  # Tag input devices onto seat0 so the compositor can actually read them. wlroots'
+  # libinput backend only opens keyboards/mice that udev has TAG+="seat" (assigned
+  # to seat0); systemd normally applies that tag, but on images where logind is
+  # broken/absent (common on DietPi — dbus-org.freedesktop.login1 fails to load)
+  # the seat tag is never set, so Cage comes up with a dead keyboard AND mouse even
+  # though the frame renders (DRM enumerates separately). udevadm info then shows
+  # ID_INPUT=1 but no TAGS=:seat:. Ship an explicit rule and re-trigger so input
+  # works on this boot without waiting for a reflash.
+  install_seat_udev_rule
 
   # Delete any retired kiosk unit from a previous project version FIRST — otherwise
   # two kiosks fight over tty1/DRM and the console hangs at multi-user.target.
@@ -804,6 +834,19 @@ step_verify() {
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
     systemctl is-enabled --quiet picogallery-kiosk.service && ok "kiosk service enabled" || { err "kiosk service not enabled"; failures=$((failures+1)); }
     systemctl is-active --quiet seatd.service && ok "seatd active" || { warn "seatd not active (needed for Cage)"; }
+    # Input devices must be tagged onto seat0 or the compositor comes up with a dead
+    # keyboard/mouse even though the frame renders. Check a real input device carries
+    # TAGS=:seat: — the exact failure mode seen on DietPi (broken logind).
+    local ev seat_tagged=0
+    for ev in /dev/input/event*; do
+      [[ -e "$ev" ]] || continue
+      if udevadm info "$ev" 2>/dev/null | grep -q 'TAGS=.*:seat:'; then seat_tagged=1; break; fi
+    done
+    if [[ "$seat_tagged" -eq 1 ]]; then
+      ok "input devices tagged onto seat0 (keyboard/mouse reach the kiosk)"
+    else
+      warn "no input device carries the seat0 udev tag — keyboard/mouse may be dead in the kiosk; re-run install or check udev"
+    fi
     # A second kiosk (a leftover from an older project name) is fatal — it grabs
     # tty1/DRM and hangs the console at boot. purge_legacy_kiosk should have cleared
     # these; fail the verify if any survived so it's caught here, not on the HDMI.
@@ -851,6 +894,8 @@ do_uninstall() {
   done
   run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /etc/sudoers.d/picogallery-kiosk
   run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
+  run rm -f "$SEAT_UDEV_RULE"
+  run udevadm control --reload 2>/dev/null || true
   run systemctl daemon-reload
   # Give the console back: re-enable the tty1 login the kiosk install disabled.
   run systemctl enable --now getty@tty1.service 2>/dev/null || true
