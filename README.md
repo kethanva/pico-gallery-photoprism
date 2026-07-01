@@ -107,14 +107,17 @@ Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
 Run these commands on the Pi to download and install the latest pre-compiled release in less than 10 seconds:
 
 ```bash
-mkdir -p /opt/picogallery && cd /opt/picogallery
+# 1. Create the persistent directory and navigate into it
+sudo mkdir -p /opt/picogallery
+sudo chown -R $USER:$USER /opt/picogallery
+cd /opt/picogallery
 
-# Download and unpack the latest release package dynamically
+# 2. Download and extract the latest release
 curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
 tar -xzf picogallery-release.tar.gz
 rm picogallery-release.tar.gz
 
-# Run the installer
+# 3. Run the installer
 sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
 ```
 

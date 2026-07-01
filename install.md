@@ -42,30 +42,22 @@ You can install PicoGallery V2 either using a pre-built release artifact (recomm
 
 ### Option A: Pre-built Release Artifact (Recommended)
 
-1. Create the installation directory:
-   ```bash
-   sudo mkdir -p /opt/picogallery
-   sudo chown -R $USER:$USER /opt/picogallery
-   cd /opt/picogallery
-   ```
+Run these exact commands on your Pi to install from the latest pre-built release:
 
-2. Download and extract the latest release artifact from GitHub:
-   ```bash
-   curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
-   tar -xzf picogallery-release.tar.gz
-   rm picogallery-release.tar.gz
-   ```
+```bash
+# 1. Create the persistent directory and navigate into it
+sudo mkdir -p /opt/picogallery
+sudo chown -R $USER:$USER /opt/picogallery
+cd /opt/picogallery
 
-3. If running the server locally, install Node.js v22 (the pre-built release package includes all dependencies, so `pnpm` is not required):
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-   sudo apt install -y nodejs
-   ```
+# 2. Download and extract the latest release
+curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
+tar -xzf picogallery-release.tar.gz
+rm picogallery-release.tar.gz
 
-4. Run the installer (make sure to specify your PhotoPrism backend url with port `:2342`):
-   ```bash
-   sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
-   ```
+# 3. Run the installer
+sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
+```
 
 ---
 
