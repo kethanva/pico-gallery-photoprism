@@ -38,15 +38,6 @@ port = 8188
 # When set, POST /api/v1/control requires this token (Authorization: Bearer …
 # or X-Pico-Token). Open the remote once with ?token=… to persist it locally.
 # auth_token  = "change-me-on-exposed-networks"
-# cors_origins = ["http://localhost:5173"]
-
-# ─── Device (Raspberry Pi kiosk, optional) ───────────────────────────────────
-# Drives the physical panel off/on with the [display.schedule] window.
-# No-ops on non-Linux hosts.
-# [device]
-# hdmi_power = true
-# display_on_cmd  = "vcgencmd display_power 1"
-# display_off_cmd = "vcgencmd display_power 0"
 
 # ─── Sources ─────────────────────────────────────────────────────────────────
 # Photos come from a PhotoPrism backend over the network. There is no local
@@ -77,8 +68,6 @@ password = "insecure"          # or use app_password below
 include_private  = false
 include_archived = false
 order    = "newest"
-per_page = 100
-max_thumb      = "fit_1920"
 skip_tls_verify = false
 
 # [[sources]]

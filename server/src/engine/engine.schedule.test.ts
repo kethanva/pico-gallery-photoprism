@@ -1,9 +1,23 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, afterAll } from 'vitest';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import type { PhotoMeta, AuthStatus, SseEvent } from '@pico/shared';
 import { SlideshowEngine } from './index.js';
 import { bus } from './bus.js';
 import { RootConfigSchema } from '../config/index.js';
 import type { PhotoSource, GetOriginalResult } from '../sources/source.js';
+
+// Each engine gets its own throwaway cache dir. The engine persists a resume
+// cursor there and reloads it on start(); a shared dir would leak a cursor from
+// one test into the next (and into the developer's real ~/.cache), making the
+// starting index non-deterministic.
+const cacheDirs: string[] = [];
+function freshCacheDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'pico-eng-'));
+  cacheDirs.push(dir);
+  return dir;
+}
 
 function photo(id: string): PhotoMeta {
   return { id, sourceName: 'directory', filename: `${id}.jpg`, width: 0, height: 0, favorite: false };
@@ -24,12 +38,16 @@ function buildEngine(slideSecs: number) {
   // chronological order keeps the playlist stable as [a,b,c] for assertions.
   const cfg = RootConfigSchema.parse({
     display: { slideDurationSecs: slideSecs, order: 'chronological', onThisDayBoost: false, schedule: { on: '08:00', off: '22:00' } },
+    cache: { dir: freshCacheDir() },
   });
   const sources = new Map<string, PhotoSource>([['directory', new FakeSource()]]);
   return new SlideshowEngine(sources, cfg);
 }
 
 afterEach(() => vi.useRealTimers());
+afterAll(() => {
+  for (const dir of cacheDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe('SlideshowEngine display schedule', () => {
   it('starts with the display off when outside the on-window and does not advance', async () => {

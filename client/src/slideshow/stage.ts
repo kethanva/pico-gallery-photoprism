@@ -42,12 +42,15 @@ export class SlideshowStage {
     const leaving = this.layers[this.activeIdx]!;
 
     entering.innerHTML = '';
-    // Letterbox blur fill: a blurred, cover-scaled copy of the same (cached) image
-    // behind the contained photo, so empty bars become an ambient blur not black.
+    // Letterbox blur fill: an ambient blur behind the contained photo, so empty
+    // bars read as atmosphere not black. Pulled from a 64px thumbnail, not the
+    // full-size `src`: a heavy blur of a tiny upscaled image is visually identical
+    // but spares the Pi Zero 2's GPU a second full-resolution decode + texture
+    // upload on every slide.
     if (cfg.letterboxBlur && !cfg.fillScreen) {
       const bg = document.createElement('div');
       bg.className = 'slide-bg';
-      bg.style.backgroundImage = `url("${src}")`;
+      bg.style.backgroundImage = `url("${imageUrl(photo.id, 64, 64, 'cover')}")`;
       entering.appendChild(bg);
     }
     entering.appendChild(img);

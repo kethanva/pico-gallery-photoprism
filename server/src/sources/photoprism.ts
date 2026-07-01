@@ -23,13 +23,18 @@ interface PrismSession {
   downloadToken: string; // used in thumbnail URL path: /api/v1/t/{hash}/{downloadToken}/{size}
 }
 
-function snapThumbSize(size: number): number {
-  // Standard PhotoPrism fit sizes: https://docs.photoprism.app/developer-guide/api/resources/thumbnails/
-  const sizes = [320, 720, 1280, 1920, 2048, 3840];
-  for (const s of sizes) {
+// PhotoPrism only serves its *registered* fit_ sizes; an unregistered name (e.g.
+// fit_320 or fit_1000) returns an error, not a scaled image. 720 is the smallest
+// fit size PhotoPrism generates, so clamp up to it — anything below (e.g. the 64px
+// letterbox-blur backdrop) still resolves to a real thumbnail we then downscale.
+// https://docs.photoprism.app/developer-guide/api/thumbnails/
+const PRISM_FIT_SIZES = [720, 1280, 1600, 1920, 2048, 2560, 3840, 4096, 5120, 7680];
+
+export function snapThumbSize(size: number): number {
+  for (const s of PRISM_FIT_SIZES) {
     if (size <= s) return s;
   }
-  return 3840;
+  return PRISM_FIT_SIZES[PRISM_FIT_SIZES.length - 1]!;
 }
 
 export class PhotoPrismSource implements PhotoSource {
@@ -79,12 +84,6 @@ export class PhotoPrismSource implements PhotoSource {
     const stream = Readable.from(bytes);
     const contentType = resp.headers.get('content-type') ?? 'image/jpeg';
     return { stream, contentType, contentHash };
-  }
-
-  async setFavorite(meta: PhotoMeta, favorite: boolean): Promise<void> {
-    const localId = meta.id.slice(this.name.length + 1);
-    const url = `${this.cfg.url}/api/v1/photos/${localId}/like`;
-    await this.doFetch(url, { method: favorite ? 'POST' : 'DELETE' });
   }
 
   async search(q: string, limit: number, offset: number): Promise<PhotoMeta[]> {

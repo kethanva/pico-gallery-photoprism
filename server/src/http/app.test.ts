@@ -32,9 +32,10 @@ describe('HTTP app', () => {
   describe('with an auth token configured', () => {
     const cfg = () => RootConfigSchema.parse({ http: { authToken: 'secret' } });
 
-    it('rejects a protected route without the token', async () => {
+    it('rejects a protected route without the token (from a non-local client)', async () => {
       const app = await buildApp(cfg());
-      const res = await app.inject({ method: 'GET', url: '/api/v1/slideshow/state' });
+      // A remote IP so the localhost kiosk bypass doesn't apply.
+      const res = await app.inject({ method: 'GET', url: '/api/v1/slideshow/state', remoteAddress: '198.51.100.10' });
       expect(res.statusCode).toBe(401);
       expect(res.json()).toMatchObject({ error: { code: 'UNAUTHORIZED' } });
       await app.close();
@@ -46,9 +47,43 @@ describe('HTTP app', () => {
         method: 'GET',
         url: '/api/v1/slideshow/state',
         headers: { authorization: 'Bearer secret' },
+        remoteAddress: '198.51.100.10',
       });
       // Engine isn't started here, so this is a 503 — the point is it is NOT 401.
       expect(res.statusCode).not.toBe(401);
+      await app.close();
+    });
+
+    it('accepts the token via ?token= query (EventSource/img fallback)', async () => {
+      const app = await buildApp(cfg());
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/slideshow/state?token=secret',
+        remoteAddress: '198.51.100.10',
+      });
+      expect(res.statusCode).not.toBe(401);
+      await app.close();
+    });
+
+    it('bypasses the token for the localhost kiosk', async () => {
+      const app = await buildApp(cfg());
+      // Fastify inject defaults the socket peer to 127.0.0.1 → same-origin kiosk.
+      const res = await app.inject({ method: 'GET', url: '/api/v1/slideshow/state' });
+      expect(res.statusCode).not.toBe(401);
+      await app.close();
+    });
+
+    it('does not let a spoofed X-Forwarded-For bypass the token', async () => {
+      const app = await buildApp(cfg());
+      // Remote socket peer, but a forged XFF claiming localhost. trustProxy makes
+      // req.ip trust the header; the bypass must ignore it and still require a token.
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/v1/slideshow/state',
+        remoteAddress: '198.51.100.10',
+        headers: { 'x-forwarded-for': '127.0.0.1' },
+      });
+      expect(res.statusCode).toBe(401);
       await app.close();
     });
 

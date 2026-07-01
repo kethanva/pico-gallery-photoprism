@@ -1,12 +1,11 @@
 import { api } from '../api/client.js';
-import type { SlideshowState } from '@pico/shared';
 
 /**
  * Local physical keyboard control for the kiosk frame (a keyboard/mouse
  * plugged straight into the Pi, as opposed to the network `/remote` page).
- * Left/Right = prev/next, Space = pause/resume, F = favorite the current photo.
+ * Left/Right = prev/next, Space = pause/resume. Read-only: no photo mutation.
  */
-export function bindFrameKeyboard(getState: () => SlideshowState | null): void {
+export function bindFrameKeyboard(): void {
   window.addEventListener('keydown', (e) => {
     // Don't hijack browser/devtools shortcuts held with a modifier.
     if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -24,12 +23,6 @@ export function bindFrameKeyboard(getState: () => SlideshowState | null): void {
         e.preventDefault();
         void api.control({ action: 'toggle_pause' });
         break;
-      case 'f':
-      case 'F': {
-        const id = getState()?.photo?.id;
-        if (id) void api.control({ action: 'favorite', id });
-        break;
-      }
       default:
         break;
     }

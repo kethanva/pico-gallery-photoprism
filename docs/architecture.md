@@ -78,8 +78,9 @@ telemetry/   pino logger
   when needed, resizes with sharp, and caches the result on disk keyed by a
   content hash + dimensions + format. Cache hits return immutable bytes with an
   `ETag`; `If-None-Match` yields `304`.
-- **Sources** all implement `PhotoSource` (`list`, `getOriginal`, `authStatus`,
-  `setFavorite`, …), so adding a backend never touches the engine or HTTP layer.
+- **Sources** all implement `PhotoSource` (`listPhotos`, `getOriginal`,
+  `authStatus`, …) — read-only; adding a backend never touches the engine or HTTP
+  layer.
 
 `server/src/index.ts` boots the HTTP server immediately (so `/health` and the
 Vite proxy work right away), then loads sources and starts the engine in the

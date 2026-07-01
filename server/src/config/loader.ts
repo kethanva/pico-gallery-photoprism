@@ -12,9 +12,13 @@ function applyEnvOverrides(raw: Record<string, unknown>): void {
     if (parts.length < 2) continue;
     const section = parts[0];
     const field = parts.slice(1).join('_').replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-    const obj = raw[section] as Record<string, unknown> | undefined;
-    if (obj && typeof obj === 'object') {
-      obj[field] = val === 'true' ? true : val === 'false' ? false : isNaN(Number(val)) ? val : Number(val);
+    // Create the section if the file omitted it, so an override like
+    // PICO_HTTP_PORT still applies to a config that has no [http] table.
+    if (raw[section] === undefined) raw[section] = {};
+    const obj = raw[section];
+    if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+      (obj as Record<string, unknown>)[field] =
+        val === 'true' ? true : val === 'false' ? false : isNaN(Number(val)) ? val : Number(val);
     }
   }
 }
@@ -23,7 +27,7 @@ function applyEnvOverrides(raw: Record<string, unknown>): void {
  * Recursively rewrite object keys from TOML's idiomatic `snake_case` to the
  * `camelCase` the Zod schema expects. Values (album names, raw queries, etc.)
  * are left untouched; only keys are transformed. Arrays are walked element-wise
- * so `[[sources]]` tables and nested tables like `[device.wifi]` are covered.
+ * so `[[sources]]` tables and nested tables are covered.
  */
 function camelizeKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(camelizeKeys);
@@ -57,8 +61,8 @@ export async function loadConfig(): Promise<RootConfig> {
   applyEnvOverrides(raw);
 
   // TOML is snake_case by convention; the schema is camelCase. Normalize every
-  // section (display, http, cache, each [[sources]], [device.wifi], …) so config
-  // keys aren't silently dropped by the schema.
+  // section (display, http, cache, each [[sources]], …) so config keys aren't
+  // silently dropped by the schema.
   raw = camelizeKeys(raw) as Record<string, unknown>;
 
   const result = RootConfigSchema.safeParse(raw);

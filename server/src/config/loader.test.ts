@@ -35,6 +35,13 @@ describe('loadConfig', () => {
     expect(cfg.http.port).toBe(9999);
   });
 
+  it('applies PICO_* overrides even when the file omits that section', async () => {
+    process.env['PICO_CONFIG'] = await writeConfig(''); // no [http] table
+    process.env['PICO_HTTP_PORT'] = '9999';
+    const cfg = await loadConfig();
+    expect(cfg.http.port).toBe(9999);
+  });
+
   it('normalizes snake_case source keys to the camelCase schema', async () => {
     process.env['PICO_CONFIG'] = await writeConfig(
       [
@@ -43,7 +50,6 @@ describe('loadConfig', () => {
         'url = "http://pp.local:2342"',
         'username = "admin"',
         'include_private = true',
-        'per_page = 50',
         'skip_tls_verify = true',
       ].join('\n')
     );
@@ -52,7 +58,6 @@ describe('loadConfig', () => {
     expect(src?.name).toBe('photoprism');
     if (src?.name === 'photoprism') {
       expect(src.includePrivate).toBe(true);
-      expect(src.perPage).toBe(50);
       expect(src.skipTlsVerify).toBe(true);
     }
   });

@@ -4,7 +4,7 @@ import type { PhotoSource } from '../sources/source.js';
 import { Playlist } from './playlist.js';
 import { bus } from './bus.js';
 import { isDisplayOn } from './schedule.js';
-import { loadPersistedPhotoId, savePersistedPhotoId } from './state-store.js';
+import { loadPersistedPhotoId, savePersistedPhotoId, flushPersistedPhotoId } from './state-store.js';
 import { logger } from '../telemetry/logger.js';
 
 export class SlideshowEngine {
@@ -55,6 +55,9 @@ export class SlideshowEngine {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
+    // Persist the exact current cursor now — routine saves are throttled, so the
+    // latest one may still be pending. Synchronous, so it survives process exit.
+    flushPersistedPhotoId();
   }
 
   /**
@@ -140,17 +143,6 @@ export class SlideshowEngine {
     this.persistCursor();
     this.broadcast();
     return true;
-  }
-
-  async toggleFavorite(id: string): Promise<void> {
-    const photo = this.playlist.findById(id);
-    if (!photo) return;
-    photo.favorite = !photo.favorite;
-    const source = this.sources.get(photo.sourceName);
-    if (source?.setFavorite) {
-      await source.setFavorite(photo, photo.favorite).catch((e: unknown) => logger.error(e, 'setFavorite failed'));
-    }
-    this.broadcast();
   }
 
   getPlaylist(): Playlist {

@@ -31,8 +31,6 @@ const PhotoPrismSourceSchema = z.object({
   includePrivate: z.boolean().default(false),
   includeArchived: z.boolean().default(false),
   order: z.string().default('newest'),
-  perPage: z.number().int().positive().default(100),
-  maxThumb: z.string().default('fit_1920'),
   skipTlsVerify: z.boolean().default(false),
   requestTimeoutSecs: z.number().positive().default(30),
 });
@@ -66,18 +64,7 @@ export const RootConfigSchema = z.object({
     host: z.string().default('0.0.0.0'),
     port: z.number().int().positive().default(8188),
     authToken: z.string().optional(),
-    corsOrigins: z.array(z.string()).optional(),
   }).default({}),
   sources: z.array(SourceConfigSchema).default([]),
-  device: z.object({
-    hdmiPower: z.boolean().default(false),
-    displayOnCmd: z.string().default('vcgencmd display_power 1'),
-    displayOffCmd: z.string().default('vcgencmd display_power 0'),
-    wifi: z.object({
-      ssid: z.string(),
-      password: z.string(),
-      country: z.string().optional(),
-    }).optional(),
-  }).optional(),
 });
 export type RootConfig = z.infer<typeof RootConfigSchema>;

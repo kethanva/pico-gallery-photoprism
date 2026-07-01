@@ -62,8 +62,11 @@ export function orderPhotos(photos: PhotoMeta[], order: PhotoOrder, boostOnThisD
   }
 
   if (boostOnThisDay) {
-    const onThisDay = result.filter(isOnThisDay);
-    const rest = result.filter((p) => !isOnThisDay(p));
+    // Single pass keeps input order within each group and builds one Date per
+    // photo instead of two (this runs over the whole library on every refresh).
+    const onThisDay: PhotoMeta[] = [];
+    const rest: PhotoMeta[] = [];
+    for (const p of result) (isOnThisDay(p) ? onThisDay : rest).push(p);
     if (onThisDay.length > 0) {
       const step = Math.max(1, Math.floor(rest.length / onThisDay.length));
       const final: PhotoMeta[] = [];

@@ -65,8 +65,12 @@ export class DiskImageCache {
   }
 
   async get(key: string): Promise<Buffer | null> {
+    const file = `${key}.img`;
+    // The in-memory map is authoritative, so a miss returns without a doomed
+    // open() syscall on the SD card — and misses are the common first-view case.
+    if (!this.entries.has(file)) return null;
     try {
-      return await readFile(join(this.dir, `${key}.img`));
+      return await readFile(join(this.dir, file));
     } catch {
       return null;
     }

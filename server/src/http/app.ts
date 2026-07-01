@@ -57,8 +57,12 @@ export async function buildApp(cfg: RootConfig) {
       const path = req.url.split('?')[0];
       if (publicPaths.has(path)) return;
 
-      // Local kiosk running on localhost bypasses token auth
-      if (req.ip === '127.0.0.1' || req.ip === '::1') return;
+      // Same-origin kiosk bypasses the token. Decide from the real TCP peer, NOT
+      // req.ip: trustProxy is enabled, so req.ip trusts X-Forwarded-For — a remote
+      // client could send `X-Forwarded-For: 127.0.0.1` and bypass auth. The socket
+      // peer address can't be forged by a header.
+      const peer = req.socket.remoteAddress ?? '';
+      if (peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1') return;
 
       // Support Bearer token header or query string token (fallback for EventSource/images)
       const authHeader = req.headers.authorization;

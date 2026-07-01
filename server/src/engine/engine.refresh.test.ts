@@ -1,8 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import type { PhotoMeta, AuthStatus } from '@pico/shared';
 import { SlideshowEngine } from './index.js';
 import { RootConfigSchema } from '../config/index.js';
 import type { PhotoSource, GetOriginalResult } from '../sources/source.js';
+
+// Isolate the persisted-cursor file per engine so a resume cursor from one test
+// can't leak into the next (or into the real ~/.cache). See engine.schedule.test.ts.
+const cacheDirs: string[] = [];
+function freshCacheDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'pico-eng-'));
+  cacheDirs.push(dir);
+  return dir;
+}
+afterAll(() => {
+  for (const dir of cacheDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 function photo(id: string): PhotoMeta {
   return { id, sourceName: 'directory', filename: `${id}.jpg`, width: 0, height: 0, favorite: false };
@@ -23,7 +38,10 @@ class MutableSource implements PhotoSource {
 
 function buildEngine(src: PhotoSource) {
   // chronological + no schedule → playlist is stably [a,b,c…] and always "on".
-  const cfg = RootConfigSchema.parse({ display: { order: 'chronological', onThisDayBoost: false } });
+  const cfg = RootConfigSchema.parse({
+    display: { order: 'chronological', onThisDayBoost: false },
+    cache: { dir: freshCacheDir() },
+  });
   return new SlideshowEngine(new Map([['directory', src]]), cfg);
 }
 

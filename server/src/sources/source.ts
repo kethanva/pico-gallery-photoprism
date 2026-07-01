@@ -15,7 +15,6 @@ export interface PhotoSource {
   authenticate(): Promise<AuthStatus>;
   listPhotos(limit: number, offset: number): Promise<PhotoMeta[]>;
   getOriginal(meta: PhotoMeta, w: number, h: number): Promise<GetOriginalResult>;
-  setFavorite?(meta: PhotoMeta, favorite: boolean): Promise<void>;
   search?(q: string, limit: number, offset: number): Promise<PhotoMeta[]>;
   dispose(): Promise<void>;
 }

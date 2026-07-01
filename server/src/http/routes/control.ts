@@ -12,9 +12,6 @@ export const controlRoute: FastifyPluginAsync = async (app) => {
       case 'toggle_pause': engine.togglePause(); break;
       case 'pause': engine.pause(); break;
       case 'resume': engine.resume(); break;
-      case 'favorite':
-        if (action.id) await engine.toggleFavorite(action.id);
-        break;
       case 'goto':
         if (action.id && !engine.goto(action.id)) {
           return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Photo not found' } });

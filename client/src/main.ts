@@ -81,9 +81,16 @@ async function mountFrame(root: HTMLElement): Promise<void> {
     const img = new Image();
     img.decoding = 'async';
     img.src = url;
+    // Warm the tiny blur backdrop too, so it's a cache hit at swap time and
+    // appears with the photo instead of popping in a frame later.
+    if (cfg.letterboxBlur && !cfg.fillScreen) {
+      const bg = new Image();
+      bg.decoding = 'async';
+      bg.src = imageUrl(n.id, 64, 64, 'cover');
+    }
   };
 
-  bindFrameKeyboard(() => lastState);
+  bindFrameKeyboard();
 
   const es = new SlideshowEventSource();
   es.onConnect(() => badge.hide());

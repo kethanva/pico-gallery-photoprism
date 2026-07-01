@@ -6,11 +6,27 @@ import type { PhotoSource } from '../sources/source.js';
 import { DiskImageCache } from './cache.js';
 import { checkGuard, checkPixels, ImageGuardError } from './guard.js';
 import { isHeic, heicToJpeg } from './heic.js';
+import { Limiter } from '../util/limiter.js';
 import { logger } from '../telemetry/logger.js';
 
 export { ImageGuardError };
 
 const LOW_MEM_BYTES = 1.5 * 1024 * 1024 * 1024;
+// Resolved once at load: a 512 MB board (Pi Zero 2 W) shares RAM with the WebKit
+// kiosk, so image work is capped harder there than on a dev box.
+const LOW_MEM = os.totalmem() < LOW_MEM_BYTES;
+
+// libvips is single-threaded per op on low-mem hosts, but a burst of HTTP image
+// requests (current photo + blur backdrop + a cold-start prefetch) could still
+// start several full-resolution decodes at once and spike memory. Serialise the
+// heavy work: 2 in flight on the Pi, one per core elsewhere.
+const resizeLimiter = new Limiter(LOW_MEM ? 2 : Math.max(2, os.cpus().length));
+
+// WebP encode effort trades CPU for a smaller file. The default (4) is slow on a
+// Pi-class CPU; drop to 2 there — ~half the encode time for a few percent more
+// bytes. Only pays on a cache miss (results are cached), so it's pure first-view
+// latency. AVIF stays low-effort since its encoder is far costlier regardless.
+const WEBP_EFFORT = LOW_MEM ? 2 : 4;
 
 /**
  * Tune libvips for the host. On a 512 MB board (Pi Zero 2 W) the resize worker
@@ -19,10 +35,9 @@ const LOW_MEM_BYTES = 1.5 * 1024 * 1024 * 1024;
  * spikes memory and can OOM the frame. Call once at startup.
  */
 export function tuneSharpForHost(): void {
-  const lowMem = os.totalmem() < LOW_MEM_BYTES;
-  sharp.concurrency(lowMem ? 1 : 0); // 0 = libvips default (#cores)
-  sharp.cache(lowMem ? { memory: 48, files: 0, items: 64 } : true);
-  logger.info({ lowMem, concurrency: sharp.concurrency() }, 'sharp tuned for host');
+  sharp.concurrency(LOW_MEM ? 1 : 0); // 0 = libvips default (#cores)
+  sharp.cache(LOW_MEM ? { memory: 48, files: 0, items: 64 } : true);
+  logger.info({ lowMem: LOW_MEM, concurrency: sharp.concurrency() }, 'sharp tuned for host');
 }
 
 export class ImageService {
@@ -76,8 +91,23 @@ export class ImageService {
     return { data: output, contentType: mimeFor(resolvedFmt), cacheKey: key, hit: false };
   }
 
-  /** Buffer a source stream, guard it, HEIC-transcode if needed, then resize to fmt. */
-  private async resize(
+  /**
+   * Buffer a source stream, guard it, HEIC-transcode if needed, then resize to
+   * fmt. Gated by the shared limiter so concurrent requests can't pile up
+   * several full-resolution decodes and OOM a low-memory host.
+   */
+  private resize(
+    stream: Readable,
+    w: number,
+    h: number,
+    fit: 'cover' | 'contain',
+    fmt: 'webp' | 'jpeg' | 'avif',
+    meta: PhotoMeta
+  ): Promise<Buffer> {
+    return resizeLimiter.run(() => this.doResize(stream, w, h, fit, fmt, meta));
+  }
+
+  private async doResize(
     stream: Readable,
     w: number,
     h: number,
@@ -101,10 +131,13 @@ export class ImageService {
     if (metadata.width && metadata.height) checkPixels(metadata.width, metadata.height, this.maxMegapixels);
 
     const fitMode = fit === 'cover' ? ('cover' as const) : ('inside' as const);
-    const output = await pipeline
-      .resize(w, h, { fit: fitMode, withoutEnlargement: true })
-      .toFormat(fmt, { quality: 85 })
-      .toBuffer();
+    const resized = pipeline.resize(w, h, { fit: fitMode, withoutEnlargement: true });
+    // Per-encoder options: effort is tuned for the host (see WEBP_EFFORT); AVIF
+    // stays low-effort because its encoder is far costlier than WebP/JPEG.
+    const output =
+      fmt === 'webp' ? await resized.webp({ quality: 85, effort: WEBP_EFFORT }).toBuffer()
+      : fmt === 'avif' ? await resized.avif({ quality: 85, effort: 2 }).toBuffer()
+      : await resized.jpeg({ quality: 85 }).toBuffer();
     logger.debug({ id: meta.id, w, h, fit, fmt, bytes: output.length }, 'Image resized');
     return output;
   }

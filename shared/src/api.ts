@@ -18,8 +18,10 @@ export type SlideshowState = z.infer<typeof SlideshowStateSchema>;
 export { DisplayConfigSchema };
 export type { DisplayConfig } from './config.js';
 
+// Read-only viewer: actions are all local slideshow navigation. Nothing here
+// mutates the PhotoPrism backend (`goto` just moves the cursor by photo id).
 export const ControlActionSchema = z.object({
-  action: z.enum(['next', 'prev', 'toggle_pause', 'pause', 'resume', 'favorite', 'goto']),
+  action: z.enum(['next', 'prev', 'toggle_pause', 'pause', 'resume', 'goto']),
   id: z.string().optional(),
 });
 export type ControlAction = z.infer<typeof ControlActionSchema>;

@@ -24,9 +24,7 @@ username         = "admin"
 password         = "please-change"   # or app_password = "…"
 include_private  = false
 include_archived = false
-per_page         = 100
 order            = "newest"
-max_thumb        = "fit_1920"        # smallest thumb ≥ display size
 skip_tls_verify  = false
 
 # Optional filters (any combination):

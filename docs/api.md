@@ -35,10 +35,12 @@ data: {"index":1,"total":9,"paused":false,"photo":{"id":"photoprism:…","filena
 
 | Method | Path        | Body                                                       |
 |--------|-------------|------------------------------------------------------------|
-| POST   | `/control`  | `{ "action": "next" \| "prev" \| "pause" \| "resume" \| "toggle_pause" \| "favorite" \| "goto", "id"?: string }` |
+| POST   | `/control`  | `{ "action": "next" \| "prev" \| "pause" \| "resume" \| "toggle_pause" \| "goto", "id"?: string }` |
 
 Acks with `{ "ok": true }` and broadcasts the new state to all SSE clients via a
-`state` event. `goto` with an unknown `id` → `404`. `favorite`/`goto` require `id`.
+`state` event. Actions are local slideshow navigation only (read-only viewer; the
+PhotoPrism backend is never modified). `goto` with an unknown `id` → `404`; `goto`
+requires `id`.
 
 ## Photos
 

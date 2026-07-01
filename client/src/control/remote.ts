@@ -12,24 +12,17 @@ export function mountRemote(root: HTMLElement): void {
         <button class="remote__btn" data-action="prev" aria-label="Previous">⏮</button>
         <button class="remote__btn" data-action="toggle_pause" aria-label="Pause/Resume">⏸</button>
         <button class="remote__btn" data-action="next" aria-label="Next">⏭</button>
-        <button class="remote__btn" data-action="favorite" aria-label="Favorite">♡</button>
       </div>
     </div>
   `;
 
   const statusEl = root.querySelector<HTMLElement>('#status')!;
-  const favBtn = root.querySelector<HTMLButtonElement>('[data-action="favorite"]')!;
-  let currentPhotoId: string | null = null;
-  let paused = false;
 
   const updateStatus = (state: SlideshowState) => {
-    currentPhotoId = state.photo?.id ?? null;
-    paused = state.paused;
     const photo = state.photo;
     const parts = [photo?.album, photo?.takenAt?.slice(0, 10), photo?.title].filter(Boolean);
     statusEl.textContent = parts.join(' · ') || `${state.index + 1} / ${state.total}`;
-    favBtn.textContent = state.photo?.favorite ? '♥' : '♡';
-    root.querySelector<HTMLButtonElement>('[data-action="toggle_pause"]')!.textContent = paused ? '▶' : '⏸';
+    root.querySelector<HTMLButtonElement>('[data-action="toggle_pause"]')!.textContent = state.paused ? '▶' : '⏸';
   };
 
   const es = new SlideshowEventSource();
@@ -41,11 +34,7 @@ export function mountRemote(root: HTMLElement): void {
   root.addEventListener('click', async (e) => {
     const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-action]');
     if (!btn) return;
-    const action = btn.dataset['action'] as string;
-    if (action === 'favorite' && currentPhotoId) {
-      await api.control({ action: 'favorite', id: currentPhotoId });
-    } else {
-      await api.control({ action: action as 'next' | 'prev' | 'toggle_pause' });
-    }
+    const action = btn.dataset['action'] as 'next' | 'prev' | 'toggle_pause';
+    await api.control({ action });
   });
 }

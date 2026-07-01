@@ -100,7 +100,7 @@ Wayland kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via
 `seatd` and forces its single client (Cog) fullscreen.
 
 > [!NOTE]
-> **Full PhotoPrism UI on HDMI Out:** The installer is configured to launch the complete **PhotoPrism Vue SPA frontend** on the Pi Zero 2 HDMI output (port `8188`), proxying your backend requests over the network. If you want to use the dedicated slideshow digital photo frame instead, check the commented configuration lines in `/etc/systemd/system/picogallery.service` to revert back to `server/dist/index.js`.
+> **Slideshow Client by Default:** The installer is configured to launch the dedicated slideshow client on the HDMI output (port `8188`), connecting to your PhotoPrism backend over the network. For details on server and UI optimizations built for the Pi Zero 2 W, see [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
 
 ### Quick Install (Pre-built Release)
 
@@ -150,7 +150,7 @@ What it sets up:
   (`/usr/local/bin/picogallery-kiosk`, which waits for `/api/v1/health` before
   opening Cog), a systemd unit, a tight sudoers entry, and the KMS/`gpu_mem` boot
   settings Cage needs.
-* **server** — Node 22 (NodeSource) (pre-built release packages all dependencies and compiled static assets, so `pnpm` is not required). Runs the `photoprism-host` proxy server on port `8188` to reverse-proxy your PhotoPrism backend and serve the Vue SPA. The original slideshow server is commented out in `/etc/systemd/system/picogallery.service` for reference.
+* **server** — Node 22 (NodeSource) (pre-built release packages all dependencies and compiled static assets, so `pnpm` is not required). Runs the slideshow server on port `8188` to connect to your backend and serve the slideshow client.
 * **`pico-display-power`** + `pico-display-{on,off}.timer` when `--blank-on/--blank-off`
   are given — daily display power via `vcgencmd`, DSI backlight, or DRM DPMS.
 
@@ -259,17 +259,6 @@ Hardware control schedules (toggled via systemd/cron hooks).
 | `host` | `string` | `"0.0.0.0"` | IP binding address. |
 | `port` | `number` | `8188` | Local HTTP server port. |
 | `auth_token` | `string` | `none` | Guard server `/control` and media paths with a `Bearer` token. |
-| `cors_origins`| `array` | `[]` | Allowed cross-origins whitelist. |
-
-### `[device]`
-
-Physical panel commands to toggle display power when scheduled.
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `hdmi_power` | `boolean` | `false` | If true, try to toggle display using system tools. |
-| `display_on_cmd` | `string` | `none` | Custom command to run when display turns on. |
-| `display_off_cmd`| `string` | `none` | Custom command to run when display turns off. |
 
 ---
 

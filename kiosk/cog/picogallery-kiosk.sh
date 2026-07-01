@@ -53,10 +53,14 @@ wait_for_server() {
 
 wait_for_server
 
-# WPE/Cog tuning for an always-on photo frame. Run as a Wayland client (fdo
-# platform) under Cage, on a black background. (No --web-process-count: that is
-# not a Cog option; a single web process is Cog's default anyway.)
-export COG_PLATFORM_NAME="${COG_PLATFORM_NAME:-fdo}"
+# WPE/Cog tuning for an always-on photo frame. Under a Wayland compositor (Cage)
+# Cog must use the 'wl' platform so the compositor's wl_seat (keyboard/pointer) is
+# wired into the web view — the old 'fdo' platform is deprecated (Cog warns
+# "Platform module name 'fdo' is deprecated, please use 'wl' instead") and does not
+# route input from the compositor into the page, so arrow-key/space slideshow
+# control and clicks silently do nothing. WPE_BACKEND=fdo still selects the
+# wpebackend-fdo libwpe renderer, which is correct/independent of the Cog platform.
+export COG_PLATFORM_NAME="${COG_PLATFORM_NAME:-wl}"
 export WPE_BACKEND="${WPE_BACKEND:-fdo}"
 # Keep wlroots from tripping on VideoCore hardware cursors.
 export WLR_NO_HARDWARE_CURSORS="${WLR_NO_HARDWARE_CURSORS:-1}"

@@ -9,6 +9,13 @@ html, body {
   height: 100dvh;
   font-family: system-ui, sans-serif;
   color: var(--color-text);
+  /* Kiosk hardening: no rubber-band scroll, no accidental text selection, no
+     tap flash, no double-tap zoom on a touch panel. */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 #app {
@@ -25,11 +32,12 @@ html, body {
   overflow: hidden;
 }
 
-/* Slide layers */
+/* Slide layers. Paint containment isolates each layer's raster so the compositor
+   doesn't re-check the rest of the tree when one repaints. */
 .slide-layer {
   position: absolute;
   inset: 0;
-  will-change: opacity, transform;
+  contain: layout paint;
 }
 
 .slide-layer img {
@@ -41,18 +49,25 @@ html, body {
   display: block;
 }
 
-/* Letterbox blur fill: blurred cover-scaled copy behind the contained photo. */
+/* Letterbox blur fill: blurred cover-scaled copy behind the contained photo.
+   Source is a 64px thumb (see stage.ts), so a modest radius already reads as a
+   full ambient blur — a smaller radius means a cheaper one-time raster per slide
+   on the Pi's VideoCore GPU. */
 .slide-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   background-size: cover;
   background-position: center;
-  filter: blur(32px) brightness(0.55);
+  filter: blur(18px) brightness(0.55);
   transform: scale(1.12); /* hide the soft blurred edges */
 }
 
-/* Transitions */
+/* Transitions. will-change only while a layer is actually animating: a permanent
+   hint would pin two full-screen compositor surfaces (~16 MB VRAM) even when idle,
+   which is wasteful on a 512 MB board. */
+.slide-layer.entering,
+.slide-layer.leaving { will-change: opacity, transform; }
 .slide-layer.entering { z-index: 2; }
 .slide-layer.leaving  { z-index: 1; }
 
@@ -80,6 +95,7 @@ html, body {
 
 .slide-layer.ken-burns img {
   animation: ken-burns 30s ease-in-out both;
+  will-change: transform;
 }
 
 /* Reduced motion overrides */
@@ -98,8 +114,11 @@ html, body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
-  background: oklch(5% 0 0 / 0.72);
-  backdrop-filter: blur(12px);
+  /* Opaque translucent instead of backdrop-filter: a live backdrop blur re-samples
+     the photo behind the pill every frame it's shown (once per slide) and is
+     slow/ill-supported on the Pi's VideoCore GPU. */
+  background: oklch(5% 0 0 / 0.82);
+  border: 1px solid oklch(100% 0 0 / 0.08);
   border-radius: var(--radius-pill);
   padding: var(--space-2) var(--space-4);
   color: var(--color-text);
