@@ -41,7 +41,10 @@ RuntimeDirectoryMode=0700
 Environment=XDG_RUNTIME_DIR=/run/picogallery-kiosk
 Environment=PICO_KIOSK_ENV=/etc/picogallery/kiosk.env
 # seatd-managed seat access for the wlroots backend Cage uses.
-Environment=WLR_BACKENDS=drm
+# WLR_BACKENDS must include libinput alongside drm — "drm" alone renders video
+# fine but silently disables all keyboard/mouse input (no libinput backend
+# started), leaving the frame up with a dead keyboard/mouse.
+Environment=WLR_BACKENDS=drm,libinput
 Environment=WLR_LIBSEAT_BACKEND=seatd
 
 ExecStart=/usr/local/bin/picogallery-kiosk
