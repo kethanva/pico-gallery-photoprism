@@ -435,8 +435,8 @@ step_build() {
     fi
     if [[ "$DRY_RUN" -ne 1 ]]; then
       mkdir -p "$REPO_ROOT/frontend/dist"
-      cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html"
-      cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json"
+      [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
+      [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
     fi
     if [[ -d "$REPO_ROOT/node_modules" ]]; then
       ok "Pre-packaged node_modules found — skipping package installation."
@@ -485,8 +485,8 @@ step_build() {
 
   if [[ "$DRY_RUN" -ne 1 ]]; then
     mkdir -p "$REPO_ROOT/frontend/dist"
-    cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html"
-    cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json"
+    [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
+    [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
   fi
   
   [[ "$DRY_RUN" -eq 1 ]] || [[ -f "$REPO_ROOT/server/dist/index.js" ]] || die "Build did not produce server/dist/index.js"
