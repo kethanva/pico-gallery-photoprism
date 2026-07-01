@@ -262,6 +262,10 @@ preflight() {
   [[ "$(uname -s)" == "Linux" ]] || die "This installer is for Linux (Raspberry Pi). On macOS use ./run.sh kiosk to preview the frame."
   [[ $EUID -eq 0 ]] || die "Run with sudo (installs packages, users, and systemd units)."
 
+  if [[ "$REPO_ROOT" == /tmp* ]] || [[ "$REPO_ROOT" == /var/tmp* ]]; then
+    die "Cannot install from $REPO_ROOT. The systemd service uses PrivateTmp=true for security and will fail. Please extract the release to /opt/picogallery and run it from there."
+  fi
+
   mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
   : >>"$LOG_FILE" 2>/dev/null || true
   info "Logging to $LOG_FILE"
