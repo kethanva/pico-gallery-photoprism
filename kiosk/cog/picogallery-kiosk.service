@@ -27,6 +27,10 @@ Group=picokiosk
 SupplementaryGroups=video render input seat
 PAMName=login
 TTYPath=/dev/tty1
+StandardInput=tty
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
 
 # The picokiosk system user has no logind session, so /run/user/<uid> is never
 # created. Have systemd make a private runtime dir (0700, owned by the user) each
