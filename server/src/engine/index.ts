@@ -4,6 +4,7 @@ import type { PhotoSource } from '../sources/source.js';
 import { Playlist } from './playlist.js';
 import { bus } from './bus.js';
 import { isDisplayOn } from './schedule.js';
+import { loadPersistedPhotoId, savePersistedPhotoId } from './state-store.js';
 import { logger } from '../telemetry/logger.js';
 
 export class SlideshowEngine {
@@ -28,7 +29,8 @@ export class SlideshowEngine {
   ) {}
 
   async start(): Promise<void> {
-    this.playlist = await Playlist.build(this.sources, this.cfg.display);
+    const resumePhotoId = await loadPersistedPhotoId(this.cfg.cache.dir);
+    this.playlist = await Playlist.build(this.sources, this.cfg.display, resumePhotoId);
     this.displayOn = isDisplayOn(this.cfg.display.schedule);
     this.scheduleTimer();
     // Re-evaluate the on/off window over time so the display follows the schedule
@@ -103,12 +105,14 @@ export class SlideshowEngine {
   next(): void {
     this.playlist.next();
     this.resetTimer();
+    this.persistCursor();
     this.broadcast();
   }
 
   prev(): void {
     this.playlist.prev();
     this.resetTimer();
+    this.persistCursor();
     this.broadcast();
   }
 
@@ -133,6 +137,7 @@ export class SlideshowEngine {
     const photo = this.playlist.goto(id);
     if (!photo) return false;
     this.resetTimer();
+    this.persistCursor();
     this.broadcast();
     return true;
   }
@@ -160,6 +165,13 @@ export class SlideshowEngine {
     bus.publish({ type: 'state', data: this.getState() });
   }
 
+  /** Best-effort, non-blocking: lets a restart resume on the same photo instead
+   *  of replaying the cycle from the start. */
+  private persistCursor(): void {
+    const photo = this.playlist.current();
+    if (photo) savePersistedPhotoId(this.cfg.cache.dir, photo.id);
+  }
+
   private scheduleTimer(): void {
     if (this.paused || this.timer) return;
     const ms = (this.cfg.display.slideDurationSecs ?? 10) * 1000;
@@ -168,6 +180,7 @@ export class SlideshowEngine {
       // display off — no point cycling images nobody is looking at.
       if (!this.paused && this.displayOn) {
         this.playlist.next();
+        this.persistCursor();
         this.broadcast();
       }
     }, ms);

@@ -8,7 +8,7 @@ export class Playlist {
   private photos: PhotoMeta[] = [];
   private index = 0;
 
-  static async build(sources: Map<string, PhotoSource>, cfg: DisplayConfig): Promise<Playlist> {
+  static async build(sources: Map<string, PhotoSource>, cfg: DisplayConfig, resumePhotoId?: string): Promise<Playlist> {
     const pl = new Playlist();
     const allPhotos: PhotoMeta[] = [];
     for (const [name, source] of sources) {
@@ -22,6 +22,9 @@ export class Playlist {
     }
     pl.photos = orderPhotos(allPhotos, cfg.order, cfg.onThisDayBoost);
     logger.info({ total: pl.photos.length }, 'Playlist built');
+    // Resume where a previous process left off instead of always restarting at
+    // index 0 — otherwise every restart replays the start of the cycle.
+    if (resumePhotoId) pl.goto(resumePhotoId);
     return pl;
   }
 
