@@ -25,12 +25,10 @@ OnFailure=getty@tty1.service
 User=picokiosk
 Group=picokiosk
 SupplementaryGroups=video render input seat
-PAMName=login
-TTYPath=/dev/tty1
-StandardInput=tty
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=yes
+# DietPi often has a broken or missing systemd-logind (dbus-org.freedesktop.login1).
+# Rely entirely on seatd for device management and explicitly tell wlroots which
+# VT it is on so seatd can correctly route hotplugged devices (mice/keyboards).
+Environment=XDG_VTNR=1
 
 # The picokiosk system user has no logind session, so /run/user/<uid> is never
 # created. Have systemd make a private runtime dir (0700, owned by the user) each
@@ -45,6 +43,7 @@ Environment=PICO_KIOSK_ENV=/etc/picogallery/kiosk.env
 # fine but silently disables all keyboard/mouse input (no libinput backend
 # started), leaving the frame up with a dead keyboard/mouse.
 Environment=WLR_BACKENDS=drm,libinput
+Environment=WLR_LIBSEAT_BACKEND=seatd
 
 ExecStart=/usr/local/bin/picogallery-kiosk
 Restart=always
