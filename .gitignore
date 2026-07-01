@@ -11,3 +11,4 @@ dist/
 *.avif
 /server/cache/
 /docker/.data/
+deploy-server/

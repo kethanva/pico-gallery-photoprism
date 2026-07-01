@@ -40,11 +40,10 @@ jobs:
           mkdir -p picogallery-release/shared
           mkdir -p picogallery-release/frontend
           
-          # Build production-only, cross-platform dependencies
-          pnpm prune --prod
+          # Build production-only, cross-platform dependencies using pnpm deploy
+          pnpm deploy --filter @pico/server --prod picogallery-release/server
           
-          # Copy essential directories
-          cp -r server/dist picogallery-release/server/
+          # Copy frontend and client dists
           cp -r client/dist picogallery-release/client/
           if [ -d "shared/dist" ]; then cp -r shared/dist picogallery-release/shared/; fi
           cp -r frontend/dist picogallery-release/frontend/
@@ -52,12 +51,8 @@ jobs:
           cp frontend/config.json picogallery-release/frontend/dist/
           cp -r kiosk picogallery-release/
           
-          # Copy node_modules (production-only, cross-platform)
-          cp -a node_modules picogallery-release/
-          
           # Copy essential package configs
-          cp package.json pnpm-workspace.yaml pnpm-lock.yaml picogallery-release/
-          cp server/package.json picogallery-release/server/
+          cp package.json picogallery-release/
           cp client/package.json picogallery-release/client/
           if [ -f "shared/package.json" ]; then cp shared/package.json picogallery-release/shared/; fi
           

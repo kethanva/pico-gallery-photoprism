@@ -381,7 +381,7 @@ step_node() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
 
   # If a pre-packaged release is used (node_modules already populated), we only need node
-  if [[ -d "$REPO_ROOT/node_modules" ]]; then
+  if [[ -d "$REPO_ROOT/server/node_modules" ]]; then
     step "Node.js $NODE_MAJOR"
     if have node && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]]; then
       ok "Node $(node -v) already installed"
@@ -438,7 +438,7 @@ step_build() {
       [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
       [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
     fi
-    if [[ -d "$REPO_ROOT/node_modules" ]]; then
+    if [[ -d "$REPO_ROOT/server/node_modules" ]]; then
       ok "Pre-packaged node_modules found — skipping package installation."
       return 0
     fi
