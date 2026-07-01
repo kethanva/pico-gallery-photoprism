@@ -779,6 +779,13 @@ EOF
 
   step_blank_schedule
 
+  # Clear the kiosk browser's cache and local storage (removes stale Service Workers and
+  # cached PhotoPrism SPA files that conflict with the new slideshow client).
+  if [[ "$DRY_RUN" -eq 0 && -d "/home/$KIOSK_USER" ]]; then
+    info "Clearing kiosk browser cache to remove stale files..."
+    run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" 2>/dev/null || true
+  fi
+
   run systemctl daemon-reload
   run systemctl enable picogallery-kiosk.service
   ok "picogallery-kiosk.service enabled (frame: $SERVER_URL)"
