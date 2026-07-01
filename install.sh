@@ -442,11 +442,23 @@ step_build() {
       ok "Pre-packaged node_modules found — skipping package installation."
       if [[ "$(uname -m)" == "aarch64" ]]; then
         step "Ensuring native bindings (sharp) for aarch64"
-        local sharp_ver
-        sharp_ver=$(grep '"sharp":' "$REPO_ROOT/server/package.json" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+        local sharp_ver libvips_ver
+        # Extract version for sharp
+        sharp_ver=$(node -p "require('$REPO_ROOT/server/node_modules/sharp/package.json').optionalDependencies['@img/sharp-linux-arm64']" 2>/dev/null)
         [[ -z "$sharp_ver" ]] && sharp_ver="0.33.5"
+        
+        # Extract version for sharp-libvips
+        libvips_ver=$(node -p "require('$REPO_ROOT/server/node_modules/sharp/package.json').optionalDependencies['@img/sharp-libvips-linux-arm64']" 2>/dev/null)
+        [[ -z "$libvips_ver" ]] && libvips_ver="1.0.4"
+
+        # 1. Download sharp-linux-arm64
         mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64"
         ( cd "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64" && npm pack @img/sharp-linux-arm64@$sharp_ver >/dev/null 2>&1 && tar -xzf *.tgz --strip-components=1 && rm *.tgz )
+
+        # 2. Download sharp-libvips-linux-arm64
+        mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64"
+        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64" && npm pack @img/sharp-libvips-linux-arm64@$libvips_ver >/dev/null 2>&1 && tar -xzf *.tgz --strip-components=1 && rm *.tgz )
+        
         ok "Native bindings repaired."
       fi
       return 0
