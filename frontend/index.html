@@ -27,8 +27,9 @@
 
       var serverUrl = "";
       var windowTitle = "Photo Frame";
+      var appConfig = {};
       if (configReq.status === 200) {
-        var appConfig = JSON.parse(configReq.responseText);
+        appConfig = JSON.parse(configReq.responseText);
         serverUrl = (appConfig.serverUrl || "").replace(/\/+$/, "");
         windowTitle = appConfig.windowTitle || windowTitle;
       }
@@ -51,7 +52,8 @@
             theme: "default",
             zoom: true
           }
-        }
+        },
+        kioskConfig: appConfig.kioskConfig
       };
 
       // Synchronously load assets.json to get hashed filenames

@@ -1,6 +1,6 @@
 # PicoGallery V2
 
-A browser-first digital photo frame. A small **Fastify** server streams and
+A browser-first digital photo frame. A small, lightweight **Fastify** server streams and
 resizes photos from a source (local folder, PhotoPrism, or WebDAV) and a static
 **SPA** renders a fullscreen, server-driven slideshow with crossfades, an OSD,
 night mode, and a phone remote. Designed to run a frame on anything that can open

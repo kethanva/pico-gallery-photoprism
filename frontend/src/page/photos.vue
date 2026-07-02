@@ -705,6 +705,12 @@ export default {
           this.complete = response.count < response.limit;
           this.scrollDisabled = this.complete;
 
+          if ((this.$route.query.kiosk === "true" || this.$route.query.slideshow === "true") && this.results.length > 0) {
+            this.$nextTick(() => {
+              this.$lightbox.openModels(Thumb.fromPhotos(this.results), 0, null, true);
+            });
+          }
+
           if (this.complete) {
             if (!this.results.length) {
               this.$notify.warn(this.$gettext("No pictures found"));
