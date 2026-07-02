@@ -17,6 +17,7 @@
     @keydown.space.exact="onKeyDown"
     @keydown.left.exact="onKeyDown"
     @keydown.right.exact="onKeyDown"
+    @keydown.f.exact="onKeyDown"
     @keydown.esc.exact.stop="onEscapeKey"
     @keydown.enter.exact="onEnterKey"
     @keydown.tab="onTabKey"
@@ -225,6 +226,18 @@ let _lastEscapeEvent = null;
 let _lastRightClickTime = 0;
 // document-level contextmenu capture listener; attached on dialog open, removed on close.
 let _contextMenuListener = null;
+// document-level auxclick (middle mouse) listener for double-middle-click fullscreen toggle.
+let _auxClickListener = null;
+let _lastMiddleClickTime = 0;
+
+/** Toggle browser native fullscreen on the root element. */
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  } else {
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  }
+}
 
 export default {
   name: "PLightbox",
@@ -458,6 +471,22 @@ export default {
         };
         document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
       }
+      // Attach a document-level auxclick listener for double middle-click fullscreen toggle.
+      if (!_auxClickListener) {
+        _lastMiddleClickTime = 0;
+        _auxClickListener = (ev) => {
+          if (ev.button !== 1) return; // only middle button
+          ev.preventDefault();
+          const now = Date.now();
+          if (now - _lastMiddleClickTime < 600) {
+            _lastMiddleClickTime = 0;
+            toggleFullscreen();
+          } else {
+            _lastMiddleClickTime = now;
+          }
+        };
+        document.addEventListener("auxclick", _auxClickListener, { capture: true });
+      }
     },
     // Triggered when the dialog has closed.
     afterLeave() {
@@ -466,6 +495,12 @@ export default {
         document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
         _contextMenuListener = null;
         _lastRightClickTime = 0;
+      }
+      // Remove the document-level auxclick listener.
+      if (_auxClickListener) {
+        document.removeEventListener("auxclick", _auxClickListener, { capture: true });
+        _auxClickListener = null;
+        _lastMiddleClickTime = 0;
       }
       // Publish leave event.
       this.visible = false;
@@ -2891,6 +2926,11 @@ export default {
           } else {
             this.toggleControls();
           }
+          break;
+        case "KeyF":
+          ev.preventDefault();
+          ev.stopPropagation();
+          toggleFullscreen();
           break;
       }
     },

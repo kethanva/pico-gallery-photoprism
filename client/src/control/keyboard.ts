@@ -22,11 +22,20 @@ export interface FrameKeyboardOptions {
   photoprismUrl?: string;
 }
 
+/** Toggle browser native fullscreen on the root document element. */
+function toggleFullscreen(): void {
+  if (document.fullscreenElement) {
+    document.exitFullscreen().catch(() => {});
+  } else {
+    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  }
+}
+
 /**
  * Local physical keyboard control for the kiosk frame (a keyboard/mouse plugged
  * straight into the Pi, as opposed to the network `/remote` page).
  * Left/Right = prev/next, Space = pause/resume, Esc = leave slideshow → PhotoPrism
- * UI. Read-only: no photo mutation.
+ * UI, F = toggle browser fullscreen. Read-only: no photo mutation.
  */
 export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
   window.addEventListener('keydown', (e) => {
@@ -45,6 +54,11 @@ export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
       case ' ':
         e.preventDefault();
         void api.control({ action: 'toggle_pause' });
+        break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        toggleFullscreen();
         break;
       case 'Escape':
         // Leave the slideshow and hand the frame to the PhotoPrism UI. Navigating
@@ -68,4 +82,19 @@ export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
     }
     lastRightClick = now;
   });
+
+  // Toggle fullscreen on double middle-click
+  let lastMiddleClick = 0;
+  window.addEventListener('auxclick', (e) => {
+    if (e.button !== 1) return; // only middle mouse button
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastMiddleClick < 600) {
+      lastMiddleClick = 0;
+      toggleFullscreen();
+    } else {
+      lastMiddleClick = now;
+    }
+  });
 }
+
