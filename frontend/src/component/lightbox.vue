@@ -2651,6 +2651,7 @@ export default {
     // Enters fullscreen mode.
     requestFullscreen() {
       this.virtualFullscreen = true;
+      this.hideControls();
       return $fullscreen.request().then(() => {
         this.resize(true);
       }).catch((err) => {
@@ -2661,6 +2662,7 @@ export default {
     // Exits fullscreen mode.
     exitFullscreen() {
       this.virtualFullscreen = false;
+      this.showControls();
       return $fullscreen.exit().then(() => {
         this.resize(true);
       }).catch((err) => {
@@ -3215,6 +3217,7 @@ export default {
 
       // Flag slideshow as active.
       this.slideshow.active = true;
+      this.hideControls();
 
       const { video } = this.getContent();
 
