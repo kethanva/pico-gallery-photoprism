@@ -21,21 +21,29 @@ class Fullscreen {
     }
   }
 
-  // Exits fullscreen mode if enabled and returns a Promise.
-  exit() {
-    if (this.isEnabled()) {
-      // see https://developer.mozilla.org/en-US/docs/Web/API/Document/exitFullscreen
-      return document.exitFullscreen();
+  // Requests to enter fullscreen mode if not already enabled and returns a Promise.
+  request() {
+    if (!this.isEnabled()) {
+      // see https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
+      if (typeof document.documentElement.requestFullscreen === "function") {
+        return document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      } else {
+        return Promise.reject(new Error("Fullscreen API not supported"));
+      }
     }
 
     return Promise.resolve();
   }
 
-  // Requests to enter fullscreen mode if not already enabled and returns a Promise.
-  request() {
-    if (!this.isEnabled()) {
-      // see https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
-      return document.documentElement.requestFullscreen({ navigationUI: "hide" });
+  // Exits fullscreen mode if enabled and returns a Promise.
+  exit() {
+    if (this.isEnabled()) {
+      // see https://developer.mozilla.org/en-US/docs/Web/API/Document/exitFullscreen
+      if (typeof document.exitFullscreen === "function") {
+        return document.exitFullscreen();
+      } else {
+        return Promise.reject(new Error("Fullscreen API not supported"));
+      }
     }
 
     return Promise.resolve();

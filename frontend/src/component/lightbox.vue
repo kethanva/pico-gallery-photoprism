@@ -249,6 +249,7 @@ export default {
     return {
       debug,
       trace,
+      virtualFullscreen: false, // Fallback for browsers (like WPE WebKit) lacking native Fullscreen API support
       busy: false,
       closing: false,
       visible: false,
@@ -270,7 +271,7 @@ export default {
       canDownload: this.$config.allow("photos", "download") && features.download,
       canArchive: this.$config.allow("photos", "delete") && features.archive,
       canManageAlbums: this.$config.allow("albums", "manage"),
-      canFullscreen: $fullscreen.isSupported() && (!this.$isMobile || this.$config.featExperimental()), // see https://developer.mozilla.org/en-US/docs/Web/API/Document/fullscreenEnabled
+      canFullscreen: true, // Always allow the UI to toggle its internal fullscreen layout, regardless of DOM API support.
       wasFullscreen: $fullscreen.isEnabled(),
       isZoomable: true,
       mobileBreakpoint: 600, // Minimum viewport width for large screens.
@@ -582,6 +583,10 @@ export default {
         mainClass: "p-lightbox__pswp",
         tapAction: (point, ev) => this.onContentClick(point, ev),
         imageClickAction: (point, ev) => this.onContentClick(point, ev),
+        doubleTapAction: (point, ev) => {
+          this.toggleFullscreen();
+          return false;
+        },
         bgClickAction: (point, ev) => this.onBgClick(ev),
         padding: viewportPadding,
         paddingFn: (viewport, data) => this.getPadding(viewport, data),
@@ -2642,30 +2647,35 @@ export default {
     },
     // Toggles fullscreen mode.
     toggleFullscreen() {
-      if ($fullscreen.isEnabled()) {
+      if (this.isFullscreen()) {
         this.exitFullscreen();
       } else {
-        this.requestFullscreen();
+        this.requestFullscreen().catch(() => {});
       }
     },
     // Returns true if fullscreen mode is enabled.
     isFullscreen() {
       // see https://developer.mozilla.org/en-US/docs/Web/API/Document/fullscreenElement
-      return $fullscreen.isEnabled();
+      return this.virtualFullscreen || $fullscreen.isEnabled();
     },
-    // Exits fullscreen mode if enabled.
-    exitFullscreen() {
-      $fullscreen
-        .exit()
-        .then(() => {
-          this.resize(true);
-        })
-        .catch((err) => console.error(err));
-    },
-    // Switches to fullscreen mode if not already enabled.
+    // Enters fullscreen mode.
     requestFullscreen() {
+      this.virtualFullscreen = true;
       return $fullscreen.request().then(() => {
         this.resize(true);
+      }).catch((err) => {
+        this.resize(true);
+        throw err;
+      });
+    },
+    // Exits fullscreen mode.
+    exitFullscreen() {
+      this.virtualFullscreen = false;
+      return $fullscreen.exit().then(() => {
+        this.resize(true);
+      }).catch((err) => {
+        this.resize(true);
+        throw err;
       });
     },
     // Toggles the favorite flag of the current picture.
@@ -2895,7 +2905,7 @@ export default {
           if (this.canFullscreen) {
             this.toggleFullscreen();
           }
-          break;
+          return true;
         case "KeyH":
           this.toggleCaption();
           return true;
@@ -3252,8 +3262,13 @@ export default {
       // Get PhotoSwipe instance.
       const pswp = this.pswp();
 
-      if (!pswp || typeof pswp.next !== "function" || !pswp.currSlide?.content) {
+      if (!pswp) {
         this.pauseSlideshow();
+        return;
+      }
+      
+      if (typeof pswp.next !== "function" || !pswp.currSlide?.content) {
+        // Just wait until next interval if still loading/initializing
         return;
       }
 
