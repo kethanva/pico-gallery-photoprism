@@ -34,10 +34,19 @@ function toggleFullscreen(): void {
 /**
  * Local physical keyboard control for the kiosk frame (a keyboard/mouse plugged
  * straight into the Pi, as opposed to the network `/remote` page).
- * Left/Right = prev/next, Space = pause/resume, Esc = leave slideshow → PhotoPrism
- * UI, F = toggle browser fullscreen. Read-only: no photo mutation.
+ * Left/Right = prev/next, Space = pause/resume. F, Esc, or double right-click =
+ * hand the frame to the PhotoPrism UI (the same gestures there hand it back, so
+ * they act as a surface toggle). Double middle-click = browser fullscreen.
+ * Read-only: no photo mutation.
  */
 export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
+  // Toggle to the other surface. Navigating away unloads this page, so the
+  // slideshow stops rendering here; the server engine stays authoritative and
+  // simply resumes when the frame returns (via F/double-right-click over there).
+  const gotoPhotoprism = (): void => {
+    window.location.assign(resolvePhotoprismUrl(opts, window.location));
+  };
+
   window.addEventListener('keydown', (e) => {
     // Don't hijack browser/devtools shortcuts held with a modifier.
     if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -57,28 +66,22 @@ export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
         break;
       case 'f':
       case 'F':
-        e.preventDefault();
-        toggleFullscreen();
-        break;
       case 'Escape':
-        // Leave the slideshow and hand the frame to the PhotoPrism UI. Navigating
-        // away unloads this page, so the slideshow stops rendering here; the server
-        // engine stays authoritative and simply resumes if the frame returns.
         e.preventDefault();
-        window.location.assign(resolvePhotoprismUrl(opts, window.location));
+        gotoPhotoprism();
         break;
       default:
         break;
     }
   });
 
-  // Escape slideshow to PhotoPrism UI on double right-click
+  // Toggle to the PhotoPrism UI on double right-click (mouse mirror of F/Esc).
   let lastRightClick = 0;
   window.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const now = Date.now();
     if (now - lastRightClick < 500) {
-      window.location.assign(resolvePhotoprismUrl(opts, window.location));
+      gotoPhotoprism();
     }
     lastRightClick = now;
   });

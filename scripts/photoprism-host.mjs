@@ -68,16 +68,35 @@ const READONLY_FEATURES_OFF = [
   'review',
 ];
 
-// A floating link injected into the SPA shell so the viewer can return to the
-// frame. Esc goes slideshow→PhotoPrism; this is the reverse. Plain <a> with no
-// inline JS → /__slideshow → 302 to the slideshow, so it survives any future CSP.
+// Injected into the SPA shell so the viewer can return to the frame: a floating
+// link plus the reverse half of the surface toggle — F or double right-click
+// jumps back to the slideshow, mirroring the same gestures in the frame (which
+// jump here). The keyboard handler ignores typing targets so the PhotoPrism
+// search box keeps its "f", and both handlers run in the bubble phase so the
+// lightbox's own capture/stop-propagation handlers win while it is open.
+// Everything routes through /__slideshow → 302, same as the link.
 const SLIDESHOW_LINK =
-  '<a href="/__slideshow" title="Back to the slideshow" ' +
+  '<a href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
   'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
   'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
   "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
   'background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);' +
-  'border-radius:9999px;text-decoration:none;">&#9654; Slideshow</a>';
+  'border-radius:9999px;text-decoration:none;">&#9654; Slideshow</a>' +
+  '<script>(function(){' +
+  'function go(){window.location.assign("/__slideshow");}' +
+  'function typing(t){return t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable);}' +
+  'document.addEventListener("keydown",function(e){' +
+  'if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;' +
+  'if((e.key==="f"||e.key==="F")&&!typing(e.target)){e.preventDefault();go();}' +
+  '});' +
+  'var last=0;' +
+  'document.addEventListener("contextmenu",function(e){' +
+  'if(e.defaultPrevented)return;' +
+  'e.preventDefault();' +
+  'var now=Date.now();' +
+  'if(now-last<600){last=0;go();}else{last=now;}' +
+  '});' +
+  '})();</script>';
 
 // ── Resolve backend URL ──────────────────────────────────────────────────────
 function readDistConfig() {
