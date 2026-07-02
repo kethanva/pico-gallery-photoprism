@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -13,30 +13,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
+      - name: Determine version
+        id: version
+        run: node scripts/get-next-version.js
+          
       - name: Install pnpm
+        if: steps.version.outputs.skip != 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 11
           
       - name: Setup Node.js
+        if: steps.version.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
           
       - name: Install dependencies
+        if: steps.version.outputs.skip != 'true'
         run: pnpm install --frozen-lockfile
         
       - name: Build projects
+        if: steps.version.outputs.skip != 'true'
         run: |
           pnpm build
           cd frontend && npm ci && npm run build
         
       - name: Create Release Archive
+        if: steps.version.outputs.skip != 'true'
         run: |
           # Inject release version details into install.sh
-          sed -i 's/SCRIPT_VERSION="2.0.0"/SCRIPT_VERSION="'"${GITHUB_REF_NAME#v}"'"/g' install.sh
+          sed -i 's/SCRIPT_VERSION="2.0.0"/SCRIPT_VERSION="'"${{ steps.version.outputs.version }}"'"/g' install.sh
 
           mkdir -p picogallery-release/server
           mkdir -p picogallery-release/client
@@ -67,7 +78,10 @@ jobs:
           tar -czf picogallery-release.tar.gz -C picogallery-release .
           
       - name: Upload Release
-        uses: softprops/action-gh-release@v1
+        if: steps.version.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           files: picogallery-release.tar.gz
           generate_release_notes: true
+
