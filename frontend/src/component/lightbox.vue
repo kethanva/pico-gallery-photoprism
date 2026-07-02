@@ -223,12 +223,10 @@ const shouldHideCaption = () => {
 // collapses the press's duplicate dispatch (see onEscapeKey) into one unwind.
 // Module-scoped rather than instance state — PLightbox is mounted once per session.
 let _lastEscapeEvent = null;
-let _lastRightClickTime = 0;
 // document-level contextmenu capture listener; attached on dialog open, removed on close.
 let _contextMenuListener = null;
-// document-level auxclick (middle mouse) listener for double-middle-click fullscreen toggle.
+// document-level auxclick (middle mouse) listener for single-middle-click fullscreen toggle.
 let _auxClickListener = null;
-let _lastMiddleClickTime = 0;
 
 /** Toggle browser native fullscreen on the root element. */
 function toggleFullscreen() {
@@ -320,7 +318,7 @@ export default {
       slideshow: {
         active: false,
         interval: false,
-        wait: 5000,
+        wait: (window.__CONFIG__?.kioskConfig?.slideDuration * 1000) || 5000,
         waitAfterVideo: 2500,
         next: -1,
       },
@@ -401,6 +399,12 @@ export default {
       } else {
         this.showThumbs(data.models, data.index, data);
       }
+
+      if (data.autoplay) {
+        this.$nextTick(() => {
+          this.playSlideshow();
+        });
+      }
     },
     // Pauses the lightbox slideshow and any videos that are playing.
     pauseLightbox() {
@@ -453,37 +457,23 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
-      // Attach a document-level contextmenu listener (capture phase) so double
+      // Attach a document-level contextmenu listener (capture phase) so single
       // right-click works even though Vuetify teleports the dialog overlay outside
       // the component's DOM tree (where @contextmenu.capture on v-dialog won't fire).
       if (!_contextMenuListener) {
-        _lastRightClickTime = 0;
         _contextMenuListener = (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          const now = Date.now();
-          if (now - _lastRightClickTime < 600) {
-            _lastRightClickTime = 0;
-            this.close();
-          } else {
-            _lastRightClickTime = now;
-          }
+          this.close();
         };
         document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
       }
-      // Attach a document-level auxclick listener for double middle-click fullscreen toggle.
+      // Attach a document-level auxclick listener for single middle-click fullscreen toggle.
       if (!_auxClickListener) {
-        _lastMiddleClickTime = 0;
         _auxClickListener = (ev) => {
           if (ev.button !== 1) return; // only middle button
           ev.preventDefault();
-          const now = Date.now();
-          if (now - _lastMiddleClickTime < 600) {
-            _lastMiddleClickTime = 0;
-            toggleFullscreen();
-          } else {
-            _lastMiddleClickTime = now;
-          }
+          toggleFullscreen();
         };
         document.addEventListener("auxclick", _auxClickListener, { capture: true });
       }
@@ -494,13 +484,11 @@ export default {
       if (_contextMenuListener) {
         document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
         _contextMenuListener = null;
-        _lastRightClickTime = 0;
       }
       // Remove the document-level auxclick listener.
       if (_auxClickListener) {
         document.removeEventListener("auxclick", _auxClickListener, { capture: true });
         _auxClickListener = null;
-        _lastMiddleClickTime = 0;
       }
       // Publish leave event.
       this.visible = false;
@@ -2529,7 +2517,7 @@ export default {
       // Handle the click and touch events on custom content.
       if (
         ev.target instanceof HTMLMediaElement ||
-        (ev.target instanceof HTMLElement && (ev.target.classList.contains("pswp__image") || ev.target.classList.contains("pswp__play")))
+        (ev.target instanceof HTMLElement && ev.target.classList.contains("pswp__play"))
       ) {
         // On touch devices, trigger the default event on the sides and when content is zoomed.
         if (this.hasTouch) {
@@ -3211,8 +3199,14 @@ export default {
         this.slideshow.next = this.index - 1;
         pswp.prev();
       } else {
-        // Pause slideshow if this is the end.
-        this.pauseSlideshow();
+        // Loop back to the beginning if we reached the end of the results.
+        if (!this.$isRtl) {
+          this.slideshow.next = 0;
+          pswp.goTo(0);
+        } else {
+          this.slideshow.next = this.models.length - 1;
+          pswp.goTo(this.models.length - 1);
+        }
       }
     },
     // Pauses the slideshow, if currently active.

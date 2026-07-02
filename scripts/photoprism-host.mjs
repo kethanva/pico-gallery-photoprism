@@ -28,8 +28,6 @@ const DIST = join(ROOT, 'frontend', 'dist');
 const CONFIG_FILE = join(DIST, 'config.json');
 
 const PORT = Number(process.env.PICO_PP_PORT || 8190);
-// The frame (slideshow) the "Slideshow" link jumps back to: same host, this port.
-const SLIDESHOW_PORT = Number(process.env.PICO_SLIDESHOW_PORT || 8188);
 
 // ── Read-only enforcement ────────────────────────────────────────────────────
 // The appliance is a *display*. The proxy signs every request with an admin
@@ -76,7 +74,7 @@ const READONLY_FEATURES_OFF = [
 // lightbox's own capture/stop-propagation handlers win while it is open.
 // Everything routes through /__slideshow → 302, same as the link.
 const SLIDESHOW_LINK =
-  '<a href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
+  '<a href="/__slideshow" title="Back to the slideshow (F or right-click)" ' +
   'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
   'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
   "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
@@ -89,12 +87,10 @@ const SLIDESHOW_LINK =
   'if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;' +
   'if((e.key==="f"||e.key==="F")&&!typing(e.target)){e.preventDefault();go();}' +
   '});' +
-  'var last=0;' +
   'document.addEventListener("contextmenu",function(e){' +
   'if(e.defaultPrevented)return;' +
   'e.preventDefault();' +
-  'var now=Date.now();' +
-  'if(now-last<600){last=0;go();}else{last=now;}' +
+  'go();' +
   '});' +
   '})();</script>';
 
@@ -129,6 +125,7 @@ const rejectUnauthorized = distConfig.ignoreCertificateErrors !== true;
 
 let ppUser = '';
 let ppPass = '';
+let displayConfig = {};
 try {
   const configPath = process.env.PICO_CONFIG || '/etc/picogallery/config.toml';
   const toml = readFileSync(configPath, 'utf8');
@@ -136,6 +133,11 @@ try {
   const passMatch = toml.match(/password\s*=\s*"([^"]+)"/);
   if (userMatch) ppUser = userMatch[1];
   if (passMatch) ppPass = passMatch[1];
+
+  const durationMatch = toml.match(/slide_duration_secs\s*=\s*([0-9]+)/);
+  if (durationMatch) {
+    displayConfig.slideDuration = parseInt(durationMatch[1]);
+  }
 } catch {
   // Ignore missing config
 }
@@ -228,6 +230,9 @@ const MIME = {
 const servedConfig = JSON.stringify({
   ...distConfig,
   serverUrl: '',
+  kioskConfig: {
+    slideDuration: displayConfig.slideDuration || 10,
+  }
 });
 
 // ── Proxy /api/v1/* → backend ────────────────────────────────────────────────
@@ -394,8 +399,7 @@ const server = http.createServer((req, res) => {
   // Back-to-the-frame hop for the injected link. Redirect to the slideshow on the
   // same host (derived from the request Host so it works on localhost and the LAN).
   if ((req.url || '').split('?')[0] === '/__slideshow') {
-    const host = (req.headers.host || `localhost:${PORT}`).split(':')[0];
-    res.writeHead(302, { location: `http://${host}:${SLIDESHOW_PORT}/` });
+    res.writeHead(302, { location: `/library/photos?kiosk=true` });
     res.end();
     return;
   }
