@@ -35,6 +35,9 @@ jobs:
         
       - name: Create Release Archive
         run: |
+          # Inject release version details into install.sh
+          sed -i 's/SCRIPT_VERSION="2.0.0"/SCRIPT_VERSION="'"${GITHUB_REF_NAME#v}"'"/g' install.sh
+
           mkdir -p picogallery-release/server
           mkdir -p picogallery-release/client
           mkdir -p picogallery-release/shared

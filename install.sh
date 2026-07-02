@@ -34,9 +34,15 @@
 set -Eeuo pipefail
 
 # ── Constants ────────────────────────────────────────────────────────────────
-readonly SCRIPT_VERSION="2.0.0"
 readonly SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly REPO_ROOT="$SCRIPT_PATH"
+
+SCRIPT_VERSION="2.0.0"
+if [[ -d "$SCRIPT_PATH/.git" ]] && command -v git >/dev/null 2>&1; then
+  RAW_VERSION="$(git -C "$SCRIPT_PATH" describe --tags --always 2>/dev/null || echo "2.0.0")"
+  SCRIPT_VERSION="${RAW_VERSION#v}"
+fi
+readonly SCRIPT_VERSION
 readonly KIOSK_ASSETS="$REPO_ROOT/kiosk/cog"
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
