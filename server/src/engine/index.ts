@@ -36,10 +36,23 @@ export class SlideshowEngine {
   async start(): Promise<void> {
     const persisted = await loadPersistedState(this.cfg.cache.dir);
     this.cycle = persisted.cycle ?? 0;
-    this.playlist = await Playlist.build(this.sources, this.cfg.display, {
-      resumePhotoId: persisted.photoId,
-      seedSalt: String(this.cycle),
-    });
+
+    // Build initial playlist; retry on empty result (e.g. backend timeout at boot).
+    const MAX_ATTEMPTS = 4;
+    const RETRY_DELAY_MS = 30_000;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      this.playlist = await Playlist.build(this.sources, this.cfg.display, {
+        resumePhotoId: persisted.photoId,
+        seedSalt: String(this.cycle),
+      });
+      if (this.playlist.length > 0 || attempt >= MAX_ATTEMPTS) break;
+      logger.warn(
+        { attempt, maxAttempts: MAX_ATTEMPTS, retryInMs: RETRY_DELAY_MS },
+        'Playlist built with 0 photos (source timeout?) — will retry'
+      );
+      await new Promise((res) => setTimeout(res, RETRY_DELAY_MS));
+    }
+
     // Restore the seen-set, dropping ids of photos that have since disappeared.
     const ids = this.playlist.idSet();
     this.seen = new Set((persisted.seenIds ?? []).filter((id) => ids.has(id)));

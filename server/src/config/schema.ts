@@ -32,7 +32,7 @@ const PhotoPrismSourceSchema = z.object({
   includeArchived: z.boolean().default(false),
   order: z.string().default('newest'),
   skipTlsVerify: z.boolean().default(false),
-  requestTimeoutSecs: z.number().positive().default(30),
+  requestTimeoutSecs: z.number().positive().default(120),
 });
 
 const WebDavSourceSchema = z.object({

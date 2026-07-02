@@ -5,9 +5,10 @@ import { orderPhotos } from './ordering.js';
 import { logger } from '../telemetry/logger.js';
 
 // Page size per source request. PhotoPrism caps a single search response, so one
-// big request silently truncates the library (an 11k-photo library returned only
-// the first 10k); paging in bounded chunks gets everything with bounded memory.
-export const PLAYLIST_PAGE_SIZE = 2500;
+// big request silently truncates the library; paging in bounded chunks gets everything
+// with bounded memory. Kept at 500 so each page completes within a few seconds even
+// over a slow LAN link — the 30s/120s timeout is per request, not per page.
+export const PLAYLIST_PAGE_SIZE = 500;
 // Safety ceiling per source: 50k PhotoMeta ≈ 15 MB — the most a 512 MB Pi should
 // be asked to hold. Beyond this the frame still works, just on the newest slice.
 const MAX_PHOTOS_PER_SOURCE = 50_000;

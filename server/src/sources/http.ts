@@ -25,7 +25,7 @@ export function sourceFetch(
   init: SourceFetchInit = {},
   opts: SourceFetchOpts = {}
 ): Promise<SourceResponse> {
-  const { skipTlsVerify = false, timeoutSecs = 30 } = opts;
+  const { skipTlsVerify = false, timeoutSecs = 120 } = opts;
   return undiciFetch(url, {
     ...init,
     signal: AbortSignal.timeout(timeoutSecs * 1000),
