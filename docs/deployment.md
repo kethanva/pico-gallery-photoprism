@@ -54,31 +54,30 @@ The canonical display surface is **Cog (WPE WebKit)** under the **Cage** Wayland
 kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via `seatd`
 and forces its single client (Cog) fullscreen.
 
-### Two surfaces: slideshow (default) + PhotoPrism UI
+### One surface: the PhotoPrism UI with native slideshow
 
-The appliance runs **two** systemd units and Cog boots into the slideshow:
+The appliance runs **one** service unit:
+`picogallery-photoprism.service` → [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs)
+serves the PhotoPrism Vue UI (`frontend/dist`) on **`:8190`** and reverse-proxies
+its API/WebSocket to the real backend.
 
-| Unit | Serves | Port | Role |
-| ---- | ------ | ---- | ---- |
-| `picogallery.service` | `@pico/server` → slideshow client (`client/dist`) | `:8188` | **Default** — Cog opens this, so the frame **auto-plays the slideshow at boot**. |
-| `picogallery-photoprism.service` | [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs) → PhotoPrism Vue UI (`frontend/dist`) + API proxy | `:8190` | The manage/browse surface the frame hands off to. |
+- **Boot → slideshow.** `FRAME_URL=http://…:8190/library/photos?kiosk=true`, so
+  the SPA auto-opens its native lightbox slideshow in (virtual) fullscreen as
+  soon as photos load. Slide duration comes from `slide_duration_secs` in the
+  config (served to the SPA as `kioskConfig.slideDuration`).
+- **Inside the slideshow (lightbox):** `F` or single middle-click toggles
+  fullscreen (a *virtual* CSS fullscreen backs it where WPE lacks the native
+  API); right-click closes the slideshow to the photo grid; arrows navigate.
+- **On the grid:** `F` or right-click (both injected by the host, plus the
+  floating **"▶ Slideshow"** link) jump back into the autoplaying slideshow via
+  `/__slideshow` → `302` → `/library/photos?kiosk=true`. `F` is ignored while
+  typing in PhotoPrism inputs.
 
-- **Boot → slideshow.** `FRAME_URL=http://…:8188`, so Cog shows the slideshow with
-  no interaction.
-- **`F`, `Esc`, or double right-click = surface toggle.** In the slideshow they
-  hand the frame to the PhotoPrism host (`photoprismUrl` from the display config,
-  else the same host on `:8190`); in the PhotoPrism UI the same gestures (or the
-  floating "▶ Slideshow" link) jump back to the slideshow. Leaving the page stops
-  the slideshow rendering; the server engine stays authoritative and resumes when
-  the frame returns. `F` is ignored while typing in PhotoPrism inputs.
-  Other frame inputs: `←`/`→` prev/next, `Space` pause, double middle-click
-  browser fullscreen. While the PhotoPrism lightbox is open its own handlers win:
-  double right-click closes it, `F`/double middle-click toggle fullscreen.
-- **Back → slideshow.** The PhotoPrism host injects a floating **"▶ Slideshow"**
-  link (→ `/__slideshow` → `302` to `:8188`) so you can return without a reboot.
-
-The second unit is only installed for a `photoprism` source (a `webdav` source has
-no PhotoPrism UI). Override the Esc target with `photoprism_url` under `[display]`.
+The unit is only installed for a `photoprism` source (a `webdav` source has no
+PhotoPrism UI). **`frontend/dist` freshness matters**: all of the above is
+compiled into the SPA bundles. The installer tracks a source-tree stamp inside
+`dist`; when stale it rebuilds (hosts with ≥1.5 GB RAM) or downloads the
+prebuilt dist from the latest GitHub release (Pi Zero-class boards).
 
 - **Display-only (read-only) by default.** The PhotoPrism host signs requests with
   an admin session, so it enforces read-only itself: non-`GET/HEAD/OPTIONS` API

@@ -40,7 +40,11 @@ command -v cog  >/dev/null 2>&1 || { echo "cog not installed (apt install cog)" 
 # after the timeout (a reachable server later just loads normally).
 wait_for_server() {
   [ "${WAIT_TIMEOUT}" -gt 0 ] 2>/dev/null || return 0
-  local url="${FRAME_URL%/}/api/v1/health" waited=0 interval=3
+  # FRAME_URL may carry a path/query (e.g. /library/photos?kiosk=true for the
+  # autoplaying slideshow); the health endpoint lives at the origin.
+  local origin url waited=0 interval=3
+  origin="$(printf '%s' "$FRAME_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
+  url="${origin}/api/v1/health"
   echo "[kiosk] waiting for ${url} (timeout ${WAIT_TIMEOUT}s)"
   while [ "${waited}" -lt "${WAIT_TIMEOUT}" ]; do
     if curl -fsS --max-time 5 -o /dev/null "${url}" 2>/dev/null; then

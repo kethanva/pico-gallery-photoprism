@@ -19,10 +19,10 @@
 #          --photoprism-user admin --photoprism-pass 'secret'
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
-# never scans a local photo directory. Two on-device surfaces:
-#   :8188 — @pico slideshow server (Cog boots here; auto-plays at boot)
+# never scans a local photo directory. One on-device surface:
 #   :8190 — photoprism-host.mjs: the full PhotoPrism Vue UI (read-only), proxied
-#           to the backend. Esc in the frame jumps to it; "▶ Slideshow" jumps back.
+#           to the backend. Cog boots it at /library/photos?kiosk=true, which
+#           auto-opens the native slideshow in (virtual) fullscreen.
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -401,34 +401,86 @@ step_node() {
   fi
 }
 
-# Build (or rebuild) the vendored PhotoPrism SPA. Previously this only ran when
-# frontend/dist was missing entirely, so UI fixes in frontend/src never reached a
-# device that already had a dist — the PhotoPrism surface silently stayed stale
-# after every git pull. Detect staleness (any source file newer than the built
-# shell) and rebuild; on low-RAM boards (Pi Zero 2) the webpack build would
-# swap/OOM, so warn with instructions instead of attempting it.
+# ── Frontend dist freshness ──────────────────────────────────────────────────
+# ALL kiosk behavior (slideshow autoplay, F/fullscreen, right-click) is compiled
+# into frontend/dist bundles. A stale dist is the silent killer: the frame renders
+# but every new feature is missing. Staleness is tracked with a git tree-hash
+# stamp inside dist (mtime tricks don't survive the index.html copy in
+# step_build). When stale, rebuild locally if the board has the RAM for webpack;
+# otherwise download the prebuilt dist that CI publishes with every release.
+FRONTEND_STAMP="frontend/dist/.pico-src-tree"
+
+frontend_src_tree() {
+  git -C "$REPO_ROOT" rev-parse "HEAD:frontend/src" 2>/dev/null || echo "unknown"
+}
+
+frontend_write_stamp() {
+  [[ "$DRY_RUN" -eq 1 ]] && return 0
+  frontend_src_tree > "$REPO_ROOT/$FRONTEND_STAMP" 2>/dev/null || true
+}
+
+frontend_dist_is_stale() {
+  local dist="$REPO_ROOT/frontend/dist"
+  [[ -d "$dist" && -n "$(ls -A "$dist" 2>/dev/null)" ]] || return 0   # missing/empty = stale
+  local want have
+  want="$(frontend_src_tree)"
+  [[ "$want" == "unknown" ]] && return 1  # not a git checkout — can't judge, assume fresh
+  have="$(cat "$REPO_ROOT/$FRONTEND_STAMP" 2>/dev/null || echo none)"
+  [[ "$want" != "$have" ]]
+}
+
+build_frontend_dist() {
+  ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+  frontend_write_stamp
+}
+
+# Fetch the prebuilt dist from the latest GitHub release (CI builds it on every
+# push to main). This is how a 512 MB board gets fresh UI bundles without running
+# webpack. Best-effort: any failure falls through to a loud warning.
+download_frontend_dist() {
+  local remote repo url tmp
+  remote="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  repo="$(printf '%s' "$remote" | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
+  [[ -n "$repo" && "$repo" != "$remote" || "$remote" == https://github.com/* ]] || return 1
+  url="https://github.com/$repo/releases/latest/download/picogallery-release.tar.gz"
+  tmp="$(mktemp -d)" || return 1
+  info "Downloading prebuilt PhotoPrism UI from the latest release…"
+  if ! curl -fsSL --max-time 300 -o "$tmp/rel.tgz" "$url"; then rm -rf "$tmp"; return 1; fi
+  if ! tar -xzf "$tmp/rel.tgz" -C "$tmp" ./frontend/dist 2>/dev/null && \
+     ! tar -xzf "$tmp/rel.tgz" -C "$tmp" frontend/dist 2>/dev/null; then
+    rm -rf "$tmp"; return 1
+  fi
+  [[ -f "$tmp/frontend/dist/index.html" || -d "$tmp/frontend/dist/static" ]] || { rm -rf "$tmp"; return 1; }
+  rm -rf "$REPO_ROOT/frontend/dist"
+  mv "$tmp/frontend/dist" "$REPO_ROOT/frontend/dist"
+  rm -rf "$tmp"
+  frontend_write_stamp
+  ok "Prebuilt PhotoPrism UI installed from release"
+}
+
 ensure_frontend_dist() {
-  local dist="$REPO_ROOT/frontend/dist" stamp="$REPO_ROOT/frontend/dist/index.html"
-  if [[ ! -d "$dist" ]]; then
-    info "Building PhotoPrism frontend Vue SPA (missing in workspace)"
-    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+  if ! frontend_dist_is_stale; then
+    ok "frontend/dist is current (matches frontend/src tree $(frontend_src_tree | cut -c1-12))"
     return 0
   fi
-  local stale=0
-  if [[ ! -f "$stamp" ]]; then
-    stale=1
-  elif find "$REPO_ROOT/frontend/src" -type f -newer "$stamp" -print -quit 2>/dev/null | grep -q .; then
-    stale=1
-  fi
-  [[ "$stale" -eq 1 ]] || return 0
   if (( RAM_MB >= 1500 )); then
-    info "frontend/src changed since frontend/dist was built — rebuilding PhotoPrism UI"
-    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
-  else
-    warn "frontend/dist is STALE (frontend/src changed since it was built) — the PhotoPrism UI misses recent fixes."
-    warn "This board has too little RAM for the webpack build. On a capable host:"
-    warn "  cd frontend && npm ci && npm run build   # then copy/pull dist to the device and re-run install"
+    info "frontend/dist stale or missing — building PhotoPrism UI (webpack)"
+    build_frontend_dist
+    return 0
   fi
+  # Low-RAM board: webpack would swap/OOM. Pull CI's prebuilt bundles instead.
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf '%s[dry-run]%s would download prebuilt frontend/dist from the latest release\n' "$C_DIM" "$C_RESET"
+    return 0
+  fi
+  if download_frontend_dist; then return 0; fi
+  if [[ -d "$REPO_ROOT/frontend/dist" ]]; then
+    warn "frontend/dist is STALE and the release download failed — kiosk features (autoplay, F/fullscreen, right-click) may be missing."
+  else
+    warn "frontend/dist is MISSING and the release download failed — the UI host cannot start."
+  fi
+  warn "Build on a capable host and copy it over:"
+  warn "  cd frontend && npm ci && npm run build && rsync -a dist/ <pi>:$REPO_ROOT/frontend/dist/"
 }
 
 # Install workspace deps + build shared→server→client (resource-capped for small Pis).
@@ -578,10 +630,10 @@ step_server_unit() {
   return 0
 }
 
-# Second surface: the full PhotoPrism Vue UI. The frame (slideshow, :8188) hands
-# off to this when the viewer presses Esc. photoprism-host.mjs serves the vendored
-# SPA (frontend/dist) on :8190 and reverse-proxies its API/WebSocket to the real
-# backend. Only meaningful for a photoprism source (webdav has no PhotoPrism UI).
+# The appliance surface: photoprism-host.mjs serves the vendored PhotoPrism SPA
+# (frontend/dist) on :8190 and reverse-proxies its API/WebSocket to the real
+# backend. Cog boots straight into it (kiosk mode = native slideshow autoplay).
+# Only meaningful for a photoprism source (webdav has no PhotoPrism UI).
 step_photoprism_unit() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   [[ "$SOURCE_KIND" == "photoprism" ]] || return 0
