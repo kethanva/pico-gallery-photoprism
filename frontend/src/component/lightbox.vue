@@ -225,17 +225,7 @@ const shouldHideCaption = () => {
 let _lastEscapeEvent = null;
 // document-level contextmenu capture listener; attached on dialog open, removed on close.
 let _contextMenuListener = null;
-// document-level auxclick (middle mouse) listener for single-middle-click fullscreen toggle.
-let _auxClickListener = null;
 
-/** Toggle browser native fullscreen on the root element. */
-function toggleFullscreen() {
-  if (document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
-  } else {
-    document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
-  }
-}
 
 export default {
   name: "PLightbox",
@@ -2995,11 +2985,6 @@ export default {
           } else {
             this.toggleControls();
           }
-          break;
-        case "KeyF":
-          ev.preventDefault();
-          ev.stopPropagation();
-          toggleFullscreen();
           break;
       }
     },

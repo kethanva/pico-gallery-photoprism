@@ -705,7 +705,7 @@ export default {
           this.complete = response.count < response.limit;
           this.scrollDisabled = this.complete;
 
-          if ((this.$route.query.kiosk === "true" || this.$route.query.slideshow === "true") && this.results.length > 0) {
+          if ((this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
             this.$nextTick(() => {
               this.$lightbox.openModels(Thumb.fromPhotos(this.results), 0, null, true);
             });
