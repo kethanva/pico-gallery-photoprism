@@ -57,4 +57,15 @@ export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
         break;
     }
   });
+
+  // Escape slideshow to PhotoPrism UI on double right-click
+  let lastRightClick = 0;
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const now = Date.now();
+    if (now - lastRightClick < 500) {
+      window.location.assign(resolvePhotoprismUrl(opts, window.location));
+    }
+    lastRightClick = now;
+  });
 }

@@ -23,6 +23,7 @@
     @click.capture="captureDialogClick"
     @pointerdown.capture="captureDialogPointerDown"
     @wheel.capture="captureDialogWheel"
+    @contextmenu.capture.prevent="captureDialogContextMenu"
   >
     <div class="p-lightbox__underlay no-transition"></div>
     <div ref="container" class="p-lightbox__container no-transition">
@@ -221,6 +222,7 @@ const shouldHideCaption = () => {
 // collapses the press's duplicate dispatch (see onEscapeKey) into one unwind.
 // Module-scoped rather than instance state — PLightbox is mounted once per session.
 let _lastEscapeEvent = null;
+let _lastRightClickTime = 0;
 
 export default {
   name: "PLightbox",
@@ -2430,6 +2432,17 @@ export default {
         ev.stopPropagation();
         ev.preventDefault();
       }
+    },
+    // Capture contextmenu (right-click) events on the dialog component.
+    captureDialogContextMenu(ev) {
+      if (!ev) {
+        return;
+      }
+      const now = Date.now();
+      if (now - _lastRightClickTime < 500) {
+        this.close();
+      }
+      _lastRightClickTime = now;
     },
     // captureDialogPointerDown pauses a running slideshow on any pointer interaction with the
     // slide content and toggles video playback for media slides. It runs in the capture phase
