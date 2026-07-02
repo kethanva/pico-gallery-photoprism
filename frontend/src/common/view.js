@@ -450,9 +450,9 @@ export class View {
 
   // onKeyDown forwards global shortcuts (Escape, Ctrl/⌘ combos) to the active component when supported.
   onKeyDown(ev) {
-    if (!this.current || !ev || !(ev instanceof KeyboardEvent) || !ev.code) {
+    if (!this.current || !ev || !(ev instanceof KeyboardEvent) || (!ev.code && !ev.key)) {
       return;
-    } else if (!ev.ctrlKey && !ev.metaKey && ev.code !== "Escape") {
+    } else if (!ev.ctrlKey && !ev.metaKey && ev.code !== "Escape" && ev.key !== "Escape" && ev.key !== "Esc") {
       return;
     } else if (typeof this.current?.onShortCut !== "function") {
       return;
