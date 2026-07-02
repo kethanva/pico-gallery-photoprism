@@ -54,16 +54,34 @@ The canonical display surface is **Cog (WPE WebKit)** under the **Cage** Wayland
 kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via `seatd`
 and forces its single client (Cog) fullscreen.
 
-### What the frame shows on :8188
+### Two surfaces: slideshow (default) + PhotoPrism UI
 
-The default (`photoprism`) source makes the appliance a **PhotoPrism frame**: the
-`picogallery.service` unit runs [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs),
-which serves the full **PhotoPrism Vue UI** (`frontend/dist`) on `:8188` and
-reverse-proxies its API/WebSocket to the real PhotoPrism backend. Cog opens that,
-so you get the normal PhotoPrism browse experience; its **native slideshow** is the
-display mode and **`Esc` exits** it back to the library (a Cog kiosk delivers `Esc`
-to the page, so it works). A `webdav` source has no PhotoPrism UI, so the unit
-falls back to the built-in `@pico/server` slideshow client instead.
+The appliance runs **two** systemd units and Cog boots into the slideshow:
+
+| Unit | Serves | Port | Role |
+| ---- | ------ | ---- | ---- |
+| `picogallery.service` | `@pico/server` → slideshow client (`client/dist`) | `:8188` | **Default** — Cog opens this, so the frame **auto-plays the slideshow at boot**. |
+| `picogallery-photoprism.service` | [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs) → PhotoPrism Vue UI (`frontend/dist`) + API proxy | `:8190` | The manage/browse surface the frame hands off to. |
+
+- **Boot → slideshow.** `FRAME_URL=http://…:8188`, so Cog shows the slideshow with
+  no interaction.
+- **`Esc` → PhotoPrism UI.** The frame's keyboard handler navigates to the
+  PhotoPrism host (`photoprismUrl` from the display config, else the same host on
+  `:8190`). Leaving the page stops the slideshow rendering; the server engine stays
+  authoritative and resumes if the frame returns.
+- **Back → slideshow.** The PhotoPrism host injects a floating **"▶ Slideshow"**
+  link (→ `/__slideshow` → `302` to `:8188`) so you can return without a reboot.
+
+The second unit is only installed for a `photoprism` source (a `webdav` source has
+no PhotoPrism UI). Override the Esc target with `photoprism_url` under `[display]`.
+
+- **Display-only (read-only) by default.** The PhotoPrism host signs requests with
+  an admin session, so it enforces read-only itself: non-`GET/HEAD/OPTIONS` API
+  requests are rejected with `403`, and the served config hides every mutating UI
+  surface (upload, edit, delete, archive, share, download, library, settings) via
+  `readonly`, a browse-only ACL, and feature flags. Photos can only be *viewed*
+  from the frame. Set `PICO_PP_READONLY=0` in the unit only for a trusted manage
+  box.
 
 ```bash
 sudo ./install.sh http://<server-host>:8188

@@ -35,5 +35,10 @@ export const DisplayConfigSchema = z.object({
   maxMegapixels: z.number().positive().default(64),
   night: NightConfigSchema.optional(),
   schedule: ScheduleConfigSchema.optional(),
+  // URL of the PhotoPrism UI host the frame jumps to when the viewer presses Esc
+  // (config key `photoprism_url`). When unset the client derives it from its own
+  // hostname on the PhotoPrism-host port (8190) — correct for the standard
+  // two-service appliance where both run on the same box.
+  photoprismUrl: z.string().optional(),
 });
 export type DisplayConfig = z.infer<typeof DisplayConfigSchema>;

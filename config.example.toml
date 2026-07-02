@@ -16,6 +16,12 @@ on_this_day_boost   = true
 max_image_mb        = 50
 max_megapixels      = 24
 
+# Where the frame goes when the viewer presses Esc (leave the slideshow → PhotoPrism
+# UI). Leave unset on the standard appliance: the frame derives it from its own
+# hostname on the PhotoPrism-host port (8190). Set this only if the PhotoPrism UI
+# host runs on a different host/port.
+# photoprism_url    = "http://192.168.1.50:8190"
+
 # Optional night mode (HH:MM, overnight windows supported)
 # [display.night]
 # start       = "21:00"

@@ -90,7 +90,7 @@ async function mountFrame(root: HTMLElement): Promise<void> {
     }
   };
 
-  bindFrameKeyboard();
+  bindFrameKeyboard({ photoprismUrl: cfg.photoprismUrl });
 
   const es = new SlideshowEventSource();
   es.onConnect(() => badge.hide());

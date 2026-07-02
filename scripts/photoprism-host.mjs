@@ -28,6 +28,56 @@ const DIST = join(ROOT, 'frontend', 'dist');
 const CONFIG_FILE = join(DIST, 'config.json');
 
 const PORT = Number(process.env.PICO_PP_PORT || 8190);
+// The frame (slideshow) the "Slideshow" link jumps back to: same host, this port.
+const SLIDESHOW_PORT = Number(process.env.PICO_SLIDESHOW_PORT || 8188);
+
+// ── Read-only enforcement ────────────────────────────────────────────────────
+// The appliance is a *display*. The proxy signs every request with an admin
+// session token, so without this gate anyone who can reach :8190 could delete or
+// edit photos. Default ON; set PICO_PP_READONLY=0 only for a trusted manage box.
+const READ_ONLY = process.env.PICO_PP_READONLY !== '0';
+
+// Hard boundary: only side-effect-free HTTP methods may cross the proxy.
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// UI-side mirror of the same policy: the SPA hides controls the ACL denies, so
+// grant browse/view perms only. Resources absent here (files, services, users,
+// config, settings, …) are denied entirely — Config.allow() defaults to false.
+const READONLY_ACL = {
+  photos: { search: true, view: true, access_all: true, access_library: true },
+  albums: { search: true, view: true },
+  labels: { search: true, view: true },
+  places: { search: true, view: true },
+  people: { search: true, view: true },
+};
+
+// Feature flags backing $config.feature(...) checks; kill every mutating or
+// admin surface so the SPA doesn't render dead buttons that 403 at the proxy.
+const READONLY_FEATURES_OFF = [
+  'upload',
+  'import',
+  'edit',
+  'delete',
+  'archive',
+  'share',
+  'download',
+  'library',
+  'services',
+  'account',
+  'settings',
+  'review',
+];
+
+// A floating link injected into the SPA shell so the viewer can return to the
+// frame. Esc goes slideshow→PhotoPrism; this is the reverse. Plain <a> with no
+// inline JS → /__slideshow → 302 to the slideshow, so it survives any future CSP.
+const SLIDESHOW_LINK =
+  '<a href="/__slideshow" title="Back to the slideshow" ' +
+  'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
+  'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
+  "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
+  'background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);' +
+  'border-radius:9999px;text-decoration:none;">&#9654; Slideshow</a>';
 
 // ── Resolve backend URL ──────────────────────────────────────────────────────
 function readDistConfig() {
@@ -163,13 +213,22 @@ const servedConfig = JSON.stringify({
 
 // ── Proxy /api/v1/* → backend ────────────────────────────────────────────────
 async function proxyRequest(req, res) {
+  if (READ_ONLY && !SAFE_METHODS.has(req.method)) {
+    console.warn(`[proxy] blocked ${req.method} ${req.url} (read-only frame)`);
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'this frame is display-only: modifications are disabled' }));
+    return;
+  }
   const target = new URL(req.url, backend);
   const headers = { ...req.headers, host: backend.host };
   delete headers['accept-encoding']; // avoid double-compression surprises
 
   const sessionId = await getSessionId();
   if (sessionId) {
-    headers['X-Session-ID'] = sessionId;
+    // Lowercase key: req.headers is already lowercased by Node, so this OVERWRITES
+    // any token the (public-mode) SPA sent instead of emitting a duplicate header
+    // line — Go's Header.Get would otherwise read the empty first value.
+    headers['x-auth-token'] = sessionId;
   }
 
   const upstream = backendAgent.request(
@@ -190,6 +249,16 @@ async function proxyRequest(req, res) {
             const config = JSON.parse(body);
             config.public = true;
             config.login = false;
+            if (READ_ONLY) {
+              // Mirror the method gate in the UI: readonly hides library
+              // import/upload, the ACL hides edit/delete/share controls, and the
+              // feature flags remove the remaining admin surfaces.
+              config.readonly = true;
+              config.acl = READONLY_ACL;
+              if (config.settings?.features) {
+                for (const f of READONLY_FEATURES_OFF) config.settings.features[f] = false;
+              }
+            }
             const modifiedBody = JSON.stringify(config);
             const modifiedHeaders = { ...up.headers };
             modifiedHeaders['content-length'] = Buffer.byteLength(modifiedBody);
@@ -218,6 +287,23 @@ async function proxyRequest(req, res) {
   });
   upstream.setTimeout(15000, () => upstream.destroy(new Error('ETIMEDOUT')));
   req.pipe(upstream);
+}
+
+// Memoized SPA shell with the "Slideshow" link injected, invalidated by mtime so
+// a rebuilt frontend/dist is picked up without restarting the service.
+let shellCache = { mtimeMs: 0, html: '' };
+function shellWithLink(filePath) {
+  const mtimeMs = statSync(filePath).mtimeMs;
+  if (shellCache.mtimeMs !== mtimeMs) {
+    const html = readFileSync(filePath, 'utf8');
+    shellCache = {
+      mtimeMs,
+      html: html.includes('</body>')
+        ? html.replace('</body>', `${SLIDESHOW_LINK}\n</body>`)
+        : html + SLIDESHOW_LINK,
+    };
+  }
+  return shellCache.html;
 }
 
 // ── Static file serving with SPA history fallback ────────────────────────────
@@ -262,6 +348,15 @@ function serveStatic(req, res) {
     }
   }
 
+  // Serving the SPA shell (direct or via history fallback): inject the floating
+  // "Slideshow" link so the viewer can hop back to the frame. Rewritten once per
+  // dist build (keyed on mtime) and served from memory — cheap on a Pi Zero 2.
+  if (filePath === join(DIST, 'index.html')) {
+    res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
+    res.end(shellWithLink(filePath));
+    return;
+  }
+
   const type = MIME[extname(filePath)] || 'application/octet-stream';
   const cache = filePath.includes(`${join('static', 'build')}`)
     ? 'public, max-age=31536000, immutable'
@@ -275,6 +370,14 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/v1/health' || req.url === '/api/v1/ready') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
+  // Back-to-the-frame hop for the injected link. Redirect to the slideshow on the
+  // same host (derived from the request Host so it works on localhost and the LAN).
+  if ((req.url || '').split('?')[0] === '/__slideshow') {
+    const host = (req.headers.host || `localhost:${PORT}`).split(':')[0];
+    res.writeHead(302, { location: `http://${host}:${SLIDESHOW_PORT}/` });
+    res.end();
     return;
   }
   if ((req.url || '').startsWith('/api/')) {
@@ -295,7 +398,10 @@ server.on('upgrade', async (req, socket, head) => {
   
   const sessionId = await getSessionId();
   if (sessionId) {
-    headers['X-Session-ID'] = sessionId;
+    // Lowercase key: req.headers is already lowercased by Node, so this OVERWRITES
+    // any token the (public-mode) SPA sent instead of emitting a duplicate header
+    // line — Go's Header.Get would otherwise read the empty first value.
+    headers['x-auth-token'] = sessionId;
   }
 
   const upstream = backendAgent.request(target, {

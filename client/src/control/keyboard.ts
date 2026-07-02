@@ -1,11 +1,34 @@
 import { api } from '../api/client.js';
 
+/** PhotoPrism-host port on the standard two-service appliance (see install.sh). */
+const PHOTOPRISM_UI_PORT = 8190;
+
 /**
- * Local physical keyboard control for the kiosk frame (a keyboard/mouse
- * plugged straight into the Pi, as opposed to the network `/remote` page).
- * Left/Right = prev/next, Space = pause/resume. Read-only: no photo mutation.
+ * Resolve where Esc sends the frame: the configured PhotoPrism UI URL, or — when
+ * unset — the same host on the PhotoPrism-host port. Pure (no DOM) so it is easy
+ * to reason about and unit-test.
  */
-export function bindFrameKeyboard(): void {
+export function resolvePhotoprismUrl(
+  cfg: { photoprismUrl?: string },
+  loc: { protocol: string; hostname: string },
+): string {
+  const configured = cfg.photoprismUrl?.trim();
+  if (configured) return configured;
+  return `${loc.protocol}//${loc.hostname}:${PHOTOPRISM_UI_PORT}/`;
+}
+
+export interface FrameKeyboardOptions {
+  /** PhotoPrism UI URL to open when Esc is pressed (from DisplayConfig). */
+  photoprismUrl?: string;
+}
+
+/**
+ * Local physical keyboard control for the kiosk frame (a keyboard/mouse plugged
+ * straight into the Pi, as opposed to the network `/remote` page).
+ * Left/Right = prev/next, Space = pause/resume, Esc = leave slideshow → PhotoPrism
+ * UI. Read-only: no photo mutation.
+ */
+export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
   window.addEventListener('keydown', (e) => {
     // Don't hijack browser/devtools shortcuts held with a modifier.
     if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -22,6 +45,13 @@ export function bindFrameKeyboard(): void {
       case ' ':
         e.preventDefault();
         void api.control({ action: 'toggle_pause' });
+        break;
+      case 'Escape':
+        // Leave the slideshow and hand the frame to the PhotoPrism UI. Navigating
+        // away unloads this page, so the slideshow stops rendering here; the server
+        // engine stays authoritative and simply resumes if the frame returns.
+        e.preventDefault();
+        window.location.assign(resolvePhotoprismUrl(opts, window.location));
         break;
       default:
         break;

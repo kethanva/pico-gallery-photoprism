@@ -19,9 +19,10 @@
 #          --photoprism-user admin --photoprism-pass 'secret'
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
-# never scans a local photo directory. The on-device Node server is a reverse proxy
-# host that serves the complete PhotoPrism Vue SPA frontend locally and proxies
-# API/WebSocket connections to the backend. Cog opens this frontend on port 8188.
+# never scans a local photo directory. Two on-device surfaces:
+#   :8188 — @pico slideshow server (Cog boots here; auto-plays at boot)
+#   :8190 — photoprism-host.mjs: the full PhotoPrism Vue UI (read-only), proxied
+#           to the backend. Esc in the frame jumps to it; "▶ Slideshow" jumps back.
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -616,17 +617,10 @@ step_server_unit() {
   local runtime_env=""
   if (( RAM_MB < 900 )); then runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=256"; fi
 
-  # Boot surface (what Cog opens on :8188). Default photoprism source: serve the
-  # full PhotoPrism Vue UI via photoprism-host.mjs and reverse-proxy its API to the
-  # real backend — the appliance is a PhotoPrism frame, and its native slideshow
-  # (Esc to exit) is the display mode. A webdav source has no PhotoPrism UI to show,
-  # so fall back to the built-in slideshow server.
-  local exec_start
-  if [[ "$SOURCE_KIND" == "photoprism" ]]; then
-    exec_start="$node_bin $REPO_ROOT/scripts/photoprism-host.mjs $PP_URL"
-  else
-    exec_start="$node_bin $REPO_ROOT/server/dist/index.js"
-  fi
+  # picogallery.service is the boot/default surface: the @pico slideshow server on
+  # :8188. Cog opens :8188, so the frame auto-plays the slideshow at boot. Pressing
+  # Esc in the frame hands off to the PhotoPrism UI, which runs as a second unit
+  # (picogallery-photoprism.service on :8190, installed below for a photoprism source).
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write /etc/systemd/system/picogallery.service\n' "$C_DIM" "$C_RESET"
   else
@@ -642,10 +636,8 @@ Group=$RUN_GROUP
 Environment=NODE_ENV=production
 Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
 $runtime_env
-# photoprism-host.mjs (the default surface) listens here; FRAME_URL/Cog open :8188.
-Environment=PICO_PP_PORT=8188
 WorkingDirectory=$REPO_ROOT
-ExecStart=$exec_start
+ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
 Restart=always
 RestartSec=3
 # Hardening (server only reads the repo + writes the cache)
@@ -662,6 +654,57 @@ EOF
   run systemctl enable picogallery.service
   run systemctl restart picogallery.service
   ok "picogallery.service enabled"
+}
+
+# Second surface: the full PhotoPrism Vue UI. The frame (slideshow, :8188) hands
+# off to this when the viewer presses Esc. photoprism-host.mjs serves the vendored
+# SPA (frontend/dist) on :8190 and reverse-proxies its API/WebSocket to the real
+# backend. Only meaningful for a photoprism source (webdav has no PhotoPrism UI).
+step_photoprism_unit() {
+  [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
+  [[ "$SOURCE_KIND" == "photoprism" ]] || return 0
+  step "PhotoPrism UI host systemd unit"
+  local node_bin; node_bin="$(command -v node || echo /usr/bin/node)"
+  # Plain static server + streaming proxy — needs very little heap. On a 512 MB
+  # board (Pi Zero 2 W) cap it so it can never squeeze the WebKit kiosk.
+  local pp_runtime_env=""
+  if (( RAM_MB < 900 )); then pp_runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=96"; fi
+  [[ -d "$REPO_ROOT/frontend/dist" ]] || \
+    warn "frontend/dist missing — the PhotoPrism UI host will not start until it is built (cd frontend && npm ci && npm run build)"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf '%s[dry-run]%s would write /etc/systemd/system/picogallery-photoprism.service\n' "$C_DIM" "$C_RESET"
+  else
+    cat >/etc/systemd/system/picogallery-photoprism.service <<EOF
+[Unit]
+Description=PicoGallery PhotoPrism UI host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$RUN_USER
+Group=$RUN_GROUP
+Environment=NODE_ENV=production
+Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
+Environment=PICO_PP_PORT=8190
+Environment=PICO_PP_BACKEND=$PP_URL
+$pp_runtime_env
+WorkingDirectory=$REPO_ROOT
+ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs
+Restart=always
+RestartSec=3
+# Hardening (read-only: serves the vendored SPA + proxies to the backend).
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  fi
+  run systemctl daemon-reload
+  run systemctl enable picogallery-photoprism.service
+  run systemctl restart picogallery-photoprism.service
+  ok "picogallery-photoprism.service enabled (PhotoPrism UI on :8190 — Esc from the frame)"
 }
 
 # Ensure input devices are tagged onto seat0 so wlroots/libinput (under Cage) can
@@ -699,7 +742,7 @@ EOF
 # multi-user.target (exactly the boot-hang seen on the device). Purge every unit in
 # this project's `pico-*` / `photoprism-*` namespaces except the ones we currently own.
 purge_legacy_kiosk() {
-  local owned=" picogallery.service picogallery-kiosk.service pico-display-on.service pico-display-off.service pico-display-on.timer pico-display-off.timer "
+  local owned=" picogallery.service picogallery-photoprism.service picogallery-kiosk.service pico-display-on.service pico-display-off.service pico-display-on.timer pico-display-off.timer "
   local removed=0 path base
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
@@ -873,6 +916,15 @@ step_verify() {
       sleep 1
     done
     [[ "$up" -eq 1 ]] && ok "server answered /health" || { err "server did not answer /health in 30s — journalctl -u picogallery"; failures=$((failures+1)); }
+
+    # The PhotoPrism UI host (Esc target) is secondary — warn, don't fail the install.
+    if [[ "$SOURCE_KIND" == "photoprism" ]]; then
+      if curl -fsS --max-time 3 "http://localhost:8190/api/v1/health" >/dev/null 2>&1; then
+        ok "PhotoPrism UI host answered /health on :8190"
+      else
+        warn "PhotoPrism UI host (:8190) not answering yet — Esc→PhotoPrism needs it; journalctl -u picogallery-photoprism (is frontend/dist built?)"
+      fi
+    fi
   fi
 
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
@@ -1007,6 +1059,7 @@ main() {
   step_server_config
   step_server_user
   step_server_unit
+  step_photoprism_unit
   step_kiosk
   step_verify
   summary

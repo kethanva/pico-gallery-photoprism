@@ -29,6 +29,17 @@ describe('HTTP app', () => {
     await app.close();
   });
 
+  // The frame reads photoprismUrl from the display config to know where Esc goes.
+  it('serves display.photoprismUrl to the frame when configured', async () => {
+    const app = await buildApp(
+      RootConfigSchema.parse({ display: { photoprismUrl: 'http://frame.local:8190/' } })
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/config' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ photoprismUrl: 'http://frame.local:8190/' });
+    await app.close();
+  });
+
   describe('with an auth token configured', () => {
     const cfg = () => RootConfigSchema.parse({ http: { authToken: 'secret' } });
 
