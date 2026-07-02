@@ -606,6 +606,13 @@ step_server_user() {
   [[ -z "$RUN_USER" || "$RUN_USER" == "UNKNOWN" ]] && RUN_USER="${SUDO_USER:-root}"
   RUN_GROUP="$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")"
   info "Server will run as '$RUN_USER:$RUN_GROUP' (owner of $REPO_ROOT)"
+  
+  # Ensure the entire repo root is owned by the run-user so the service can read it
+  if [[ "$DRY_RUN" -ne 1 ]] && [[ "$RUN_USER" != "root" ]]; then
+    info "Ensuring all files in $REPO_ROOT are owned by $RUN_USER:$RUN_GROUP"
+    chown -R "$RUN_USER:$RUN_GROUP" "$REPO_ROOT"
+  fi
+
   run install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 0750 "$CACHE_DIR"
   # Let the run-user read its config (secrets stay non-world-readable).
   if [[ -f "$CONFIG_DIR/config.toml" ]]; then
