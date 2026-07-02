@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* global require */
+
 /**
  * determine-version.js
  * Analyzes git history to find the latest tag reachable from the current commit
@@ -14,7 +16,7 @@ const fs = require('fs');
 function run(cmd) {
   try {
     return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch (err) {
+  } catch {
     return '';
   }
 }
