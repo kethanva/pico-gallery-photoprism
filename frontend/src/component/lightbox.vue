@@ -223,6 +223,8 @@ const shouldHideCaption = () => {
 // Module-scoped rather than instance state — PLightbox is mounted once per session.
 let _lastEscapeEvent = null;
 let _lastRightClickTime = 0;
+// document-level contextmenu capture listener; attached on dialog open, removed on close.
+let _contextMenuListener = null;
 
 export default {
   name: "PLightbox",
@@ -438,10 +440,34 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
+      // Attach a document-level contextmenu listener (capture phase) so double
+      // right-click works even though Vuetify teleports the dialog overlay outside
+      // the component's DOM tree (where @contextmenu.capture on v-dialog won't fire).
+      if (!_contextMenuListener) {
+        _lastRightClickTime = 0;
+        _contextMenuListener = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          const now = Date.now();
+          if (now - _lastRightClickTime < 600) {
+            _lastRightClickTime = 0;
+            this.close();
+          } else {
+            _lastRightClickTime = now;
+          }
+        };
+        document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
+      }
     },
     // Triggered when the dialog has closed.
     afterLeave() {
-      // Publish enter event.
+      // Remove the document-level contextmenu listener.
+      if (_contextMenuListener) {
+        document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
+        _contextMenuListener = null;
+        _lastRightClickTime = 0;
+      }
+      // Publish leave event.
       this.visible = false;
       this.busy = false;
       this.closing = false;
@@ -2434,15 +2460,14 @@ export default {
       }
     },
     // Capture contextmenu (right-click) events on the dialog component.
+    // Double-click detection is handled by the document-level listener in afterEnter();
+    // this handler only suppresses the browser context menu as an additional fallback.
     captureDialogContextMenu(ev) {
       if (!ev) {
         return;
       }
-      const now = Date.now();
-      if (now - _lastRightClickTime < 500) {
-        this.close();
-      }
-      _lastRightClickTime = now;
+      ev.preventDefault();
+      ev.stopPropagation();
     },
     // captureDialogPointerDown pauses a running slideshow on any pointer interaction with the
     // slide content and toggles video playback for media slides. It runs in the capture phase
