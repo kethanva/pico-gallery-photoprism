@@ -75,29 +75,34 @@ export function bindFrameKeyboard(opts: FrameKeyboardOptions = {}): void {
     }
   });
 
-  // Toggle to the PhotoPrism UI on double right-click (mouse mirror of F/Esc).
-  let lastRightClick = 0;
-  window.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    const now = Date.now();
-    if (now - lastRightClick < 500) {
-      gotoPhotoprism();
+  // Handle left click: left 30% = prev, right 30% = next, center = pause/resume
+  window.addEventListener('click', (e) => {
+    if (e.button !== 0) return; // only left click
+    const x = e.clientX;
+    const width = window.innerWidth;
+    if (x <= width * 0.3) {
+      e.preventDefault();
+      void api.control({ action: 'prev' });
+    } else if (x >= width * 0.7) {
+      e.preventDefault();
+      void api.control({ action: 'next' });
+    } else {
+      e.preventDefault();
+      void api.control({ action: 'toggle_pause' });
     }
-    lastRightClick = now;
   });
 
-  // Toggle fullscreen on double middle-click
-  let lastMiddleClick = 0;
+  // Toggle to the PhotoPrism UI on right-click (mouse mirror of F/Esc).
+  window.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    gotoPhotoprism();
+  });
+
+  // Toggle fullscreen on middle-click
   window.addEventListener('auxclick', (e) => {
     if (e.button !== 1) return; // only middle mouse button
     e.preventDefault();
-    const now = Date.now();
-    if (now - lastMiddleClick < 600) {
-      lastMiddleClick = 0;
-      toggleFullscreen();
-    } else {
-      lastMiddleClick = now;
-    }
+    toggleFullscreen();
   });
 }
 
