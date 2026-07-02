@@ -1075,10 +1075,17 @@ EOF
 EOF
   if [[ "${REBOOT_REQUIRED:-0}" -eq 1 ]]; then
     echo
-    warn "A reboot is required (KMS/GPU boot settings changed). Reboot now with: sudo reboot"
-  elif [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
+    warn "A reboot is required (KMS/GPU boot settings changed)."
+    if confirm "Reboot now to apply changes?"; then
+      run reboot
+    fi
+  else
     echo
-    info "Start the frame now: sudo systemctl start picogallery-kiosk   (or reboot)"
+    if confirm "Installation complete. Would you like to reboot now to start the Kiosk?"; then
+      run reboot
+    else
+      info "You can start the frame manually: sudo systemctl start picogallery-kiosk"
+    fi
   fi
   printf '%s────────────────────────────────────────────────────────%s\n' "$C_OK" "$C_RESET"
 }
