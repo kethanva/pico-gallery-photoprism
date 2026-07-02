@@ -727,8 +727,64 @@ ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"
 EOF
   chmod 0644 "$SEAT_UDEV_RULE"
   run udevadm control --reload
+  # Re-play "add" for input AND usb so both new rules apply to devices that are
+  # already plugged in (the usb trigger applies the autosuspend-off rule; without
+  # it an already-connected mouse can still be powered down mid-session).
   run udevadm trigger --subsystem-match=input --action=add
-  ok "Seat udev rule installed (input devices tagged onto seat0)"
+  run udevadm trigger --subsystem-match=usb --action=add
+  run udevadm settle --timeout=10 2>/dev/null || true
+  ok "Seat udev rule installed (input devices tagged onto seat0, USB autosuspend off)"
+}
+
+# Pi Zero–family USB detection guard. The Zero 2 W has ONE usable USB port (micro-B
+# OTG). Leftovers from USB-gadget experiments (dtoverlay=dwc2 in peripheral mode,
+# g_ether/g_serial in cmdline.txt or /etc/modules) switch that port to *device* mode
+# — the kernel then never enumerates a plugged keyboard/mouse, so input is dead at
+# the hardware level no matter what udev/seatd do. Detect and repair to host mode.
+step_usb_host_mode() {
+  [[ "$MODE_WANTS_KIOSK" -eq 1 && "$IS_PI" -eq 1 ]] || return 0
+  step "USB host-mode guard (keyboard/mouse enumeration)"
+  local cfg fixed=0
+  for cfg in /boot/firmware/config.txt /boot/config.txt; do
+    [[ -f "$cfg" ]] || continue
+    # dtoverlay=dwc2 without an explicit dr_mode forces the port out of host mode
+    # (its default is peripheral/otg on most kernels). Pin it to host.
+    if grep -Eq '^\s*dtoverlay=dwc2\s*$|^\s*dtoverlay=dwc2,dr_mode=(peripheral|otg)' "$cfg"; then
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        printf '%s[dry-run]%s would pin dtoverlay=dwc2 to dr_mode=host in %s\n' "$C_DIM" "$C_RESET" "$cfg"
+      else
+        cp -a "$cfg" "${cfg}.picogallery.bak"
+        sed -Ei 's/^(\s*)dtoverlay=dwc2(,dr_mode=(peripheral|otg))?\s*$/\1dtoverlay=dwc2,dr_mode=host/' "$cfg"
+        warn "USB OTG was in gadget/peripheral mode in $cfg — pinned to dr_mode=host (backup: ${cfg}.picogallery.bak). Reboot required for USB input."
+      fi
+      fixed=1
+    fi
+    # cmdline.txt gadget module autoload (classic g_ether setup) re-binds the port
+    # to device mode at boot even with dr_mode=host.
+    local cmdline="${cfg%config.txt}cmdline.txt"
+    if [[ -f "$cmdline" ]] && grep -Eq 'modules-load=[^ ]*g_(ether|serial|mass_storage|midi)' "$cmdline"; then
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        printf '%s[dry-run]%s would strip gadget modules-load from %s\n' "$C_DIM" "$C_RESET" "$cmdline"
+      else
+        cp -a "$cmdline" "${cmdline}.picogallery.bak"
+        sed -Ei 's/ ?modules-load=[^ ]*g_(ether|serial|mass_storage|midi)[^ ]*//' "$cmdline"
+        warn "USB gadget modules-load removed from $cmdline (backup: ${cmdline}.picogallery.bak). Reboot required for USB input."
+      fi
+      fixed=1
+    fi
+  done
+  # /etc/modules gadget autoload: same effect, different mechanism.
+  if [[ -f /etc/modules ]] && grep -Eq '^\s*(g_ether|g_serial|g_mass_storage|g_midi|dwc2)\s*$' /etc/modules; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      printf '%s[dry-run]%s would comment gadget modules in /etc/modules\n' "$C_DIM" "$C_RESET"
+    else
+      cp -a /etc/modules /etc/modules.picogallery.bak
+      sed -Ei 's/^\s*(g_ether|g_serial|g_mass_storage|g_midi|dwc2)\s*$/# \1 (disabled by picogallery — gadget mode kills USB host input)/' /etc/modules
+      warn "USB gadget modules disabled in /etc/modules (backup: /etc/modules.picogallery.bak). Reboot required for USB input."
+    fi
+    fixed=1
+  fi
+  [[ "$fixed" -eq 0 ]] && ok "USB port is in host mode (no gadget-mode config found)"
 }
 
 # Remove kiosk units left by earlier versions of this project. It was renamed over
@@ -806,6 +862,7 @@ step_kiosk() {
   # though the frame renders (DRM enumerates separately). udevadm info then shows
   # ID_INPUT=1 but no TAGS=:seat:. Ship an explicit rule and re-trigger so input
   # works on this boot without waiting for a reflash.
+  step_usb_host_mode
   install_seat_udev_rule
 
   # Delete any retired kiosk unit from a previous project version FIRST — otherwise
@@ -930,18 +987,40 @@ step_verify() {
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
     systemctl is-enabled --quiet picogallery-kiosk.service && ok "kiosk service enabled" || { err "kiosk service not enabled"; failures=$((failures+1)); }
     systemctl is-active --quiet seatd.service && ok "seatd active" || { warn "seatd not active (needed for Cage)"; }
-    # Input devices must be tagged onto seat0 or the compositor comes up with a dead
-    # keyboard/mouse even though the frame renders. Check a real input device carries
-    # TAGS=:seat: — the exact failure mode seen on DietPi (broken logind).
-    local ev seat_tagged=0
-    for ev in /dev/input/event*; do
-      [[ -e "$ev" ]] || continue
-      if udevadm info "$ev" 2>/dev/null | grep -q 'TAGS=.*:seat:'; then seat_tagged=1; break; fi
-    done
-    if [[ "$seat_tagged" -eq 1 ]]; then
-      ok "input devices tagged onto seat0 (keyboard/mouse reach the kiosk)"
+    # Input pipeline, checked layer by layer so a dead keyboard/mouse points at the
+    # exact failing stage instead of a generic warning:
+    #   kernel (does /dev/input see a kbd/mouse at all?) → udev (seat0 tag) → compositor.
+    local kbd_count=0 mouse_count=0
+    if [[ -r /proc/bus/input/devices ]]; then
+      kbd_count="$(grep -c 'Handlers=.*kbd' /proc/bus/input/devices 2>/dev/null || true)"
+      mouse_count="$(grep -c 'Handlers=.*mouse' /proc/bus/input/devices 2>/dev/null || true)"
+    fi
+    if [[ "$kbd_count" -eq 0 && "$mouse_count" -eq 0 ]]; then
+      warn "kernel sees NO keyboard or mouse — hardware/USB-level problem, not udev/seat:"
+      warn "  • unplugged, dead hub, or under-powered USB OTG adapter"
+      warn "  • USB port in gadget mode (see the USB host-mode guard above; reboot after a fix)"
+      warn "  • check: cat /proc/bus/input/devices  |  lsusb"
     else
-      warn "no input device carries the seat0 udev tag — keyboard/mouse may be dead in the kiosk; re-run install or check udev"
+      ok "kernel sees input devices (keyboards: $kbd_count, mice: $mouse_count)"
+      local ev seat_tagged=0
+      for ev in /dev/input/event*; do
+        [[ -e "$ev" ]] || continue
+        if udevadm info "$ev" 2>/dev/null | grep -q 'TAGS=.*:seat:'; then seat_tagged=1; break; fi
+      done
+      if [[ "$seat_tagged" -eq 1 ]]; then
+        ok "input devices tagged onto seat0 (keyboard/mouse reach the kiosk)"
+      else
+        warn "devices exist but none carries the seat0 udev tag — compositor input dead; re-run install or: udevadm trigger --subsystem-match=input --action=add"
+      fi
+      # Compositor layer: if the kiosk is up, its journal says whether libinput
+      # actually opened the devices (the definitive end-to-end signal).
+      if systemctl is-active --quiet picogallery-kiosk.service; then
+        if journalctl -u picogallery-kiosk -b --no-pager 2>/dev/null | grep -qiE 'libinput.*(no input devices|cannot open)'; then
+          warn "compositor reports no input devices — restart the kiosk: systemctl restart picogallery-kiosk"
+        else
+          ok "kiosk running with no libinput errors in this boot's journal"
+        fi
+      fi
     fi
     # A second kiosk (a leftover from an older project name) is fatal — it grabs
     # tty1/DRM and hangs the console at boot. purge_legacy_kiosk should have cleared

@@ -102,7 +102,7 @@ What it sets up:
 2. **Launcher** `/usr/local/bin/picogallery-kiosk` (from `kiosk/cog/`): waits for
    the server's **`/api/v1/health`** (up to `WAIT_TIMEOUT`s, then launches anyway)
    so the frame never opens on a "network error" page, then runs
-   `cage -- cog --platform=fdo <FRAME_URL>`.
+   `cage -- cog --platform=wl <FRAME_URL>`.
 3. **`picogallery-kiosk.service`** — system unit, runs as `picokiosk` on `tty1`
    via `seatd`, `Restart=always` for 24/7 reliability.
 4. **`/etc/sudoers.d/picogallery-kiosk`** — tight passwordless allowlist
@@ -118,6 +118,33 @@ Change the frame URL or wait timeout by editing `/etc/picogallery/kiosk.env` and
 Source for the launcher / unit / sudoers / display-power lives in
 [`kiosk/cog/`](../kiosk/cog/). The old Qt/QtWebEngine kiosk under `kiosk/src/` is
 deprecated — see [`kiosk/DEPRECATED.md`](../kiosk/DEPRECATED.md).
+
+### Keyboard / mouse detection
+
+Input reaches the page through four layers, each of which the installer now sets
+up and `install.sh` verifies layer by layer:
+
+1. **Kernel/USB** — the Pi Zero 2 W has a single micro-B OTG port; leftover
+   USB-gadget config (`dtoverlay=dwc2` in peripheral mode, `g_ether` in
+   `cmdline.txt` or `/etc/modules`) switches it to *device* mode and the kernel
+   never enumerates a keyboard/mouse at all. The installer's **USB host-mode
+   guard** detects this, pins `dtoverlay=dwc2,dr_mode=host`, strips gadget
+   module autoloads (with `.picogallery.bak` backups), and tells you to reboot.
+   A udev rule also disables USB autosuspend so a mouse can't be powered off
+   mid-session.
+2. **udev seat tag** — wlroots/libinput only opens devices tagged onto `seat0`;
+   the installer ships `72-picogallery-seat.rules` and re-triggers input+usb.
+3. **Compositor startup race** — the kiosk unit now runs
+   `udevadm trigger … + settle` as `ExecStartPre=`, so every kiosk (re)start
+   re-applies the seat tag and waits for udev before Cage enumerates. Cold-boot
+   ordering can no longer produce a frame with dead input, and hotplugged
+   devices are picked up live via the persistent seat rule.
+4. **Cog** — `--platform=wl` wires the compositor's `wl_seat` into the page
+   (arrow keys, Space, Esc, clicks).
+
+If input is dead, run `sudo ./install.sh` again and read the "Verifying" output:
+it distinguishes *kernel sees nothing* (hardware/OTG/power) from *devices
+untagged* (udev) from *compositor errors* (kiosk journal).
 
 ### Mimicking the kiosk off-device
 

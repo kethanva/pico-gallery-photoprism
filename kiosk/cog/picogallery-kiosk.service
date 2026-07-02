@@ -1,8 +1,8 @@
 [Unit]
 Description=PicoGallery kiosk (Cog/WPE WebKit under Cage)
 Documentation=https://github.com/your-org/picogallery
-After=network-online.target seatd.service getty@tty1.service
-Wants=network-online.target seatd.service
+After=network-online.target seatd.service getty@tty1.service systemd-udevd.service
+Wants=network-online.target seatd.service systemd-udevd.service
 # Cage needs tty1 + the DRM master; the distro's console (DietPi/getty) owns them.
 # Conflicts stops getty@tty1 whenever the kiosk starts so the two never fight over
 # the VT (a fight that otherwise grabs the physical keyboard in a restart loop).
@@ -51,6 +51,14 @@ Environment=WLR_BACKENDS=drm,libinput
 Environment=LIBSEAT_BACKEND=seatd
 Environment=XCURSOR_THEME=Adwaita
 
+# Input-detection determinism: replay "add" events for input devices and wait for
+# udev to settle BEFORE the compositor enumerates. Closes the cold-boot race where
+# Cage starts while udev is still processing (or before the seat-tag rule applied),
+# so wlroots/libinput would open zero keyboards/mice until a manual restart. The
+# "+" prefix runs these as root (the service itself stays unprivileged); the "-"
+# prefix means a failure never blocks the kiosk from starting.
+ExecStartPre=+-/usr/bin/udevadm trigger --subsystem-match=input --action=add
+ExecStartPre=+-/usr/bin/udevadm settle --timeout=10
 ExecStart=/usr/local/bin/picogallery-kiosk
 Restart=always
 RestartSec=3
