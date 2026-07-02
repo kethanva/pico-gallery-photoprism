@@ -225,6 +225,9 @@ const shouldHideCaption = () => {
 let _lastEscapeEvent = null;
 // document-level contextmenu capture listener; attached on dialog open, removed on close.
 let _contextMenuListener = null;
+// document-level auxclick (middle mouse) listener for single-middle-click fullscreen toggle.
+let _auxClickListener = null;
+
 
 
 export default {
@@ -479,7 +482,7 @@ export default {
         _auxClickListener = (ev) => {
           if (ev.button !== 1) return; // only middle button
           ev.preventDefault();
-          toggleFullscreen();
+          this.toggleFullscreen();
         };
         document.addEventListener("auxclick", _auxClickListener, { capture: true });
       }
@@ -1370,6 +1373,12 @@ export default {
         // Keep direction for left-to-right languages.
         this.models = models.slice();
         this.index = index;
+      }
+
+      // If the slideshow was already requested to start before renderLightbox (e.g. autoplay),
+      // synchronize the expected next slide to prevent onChange from pausing it immediately.
+      if (this.slideshow.active) {
+        this.slideshow.next = this.index;
       }
 
       // Get PhotoSwipe lightbox config options, see https://photoswipe.com/options/.
@@ -3217,6 +3226,7 @@ export default {
 
       // Flag slideshow as active.
       this.slideshow.active = true;
+      this.slideshow.next = this.index;
       this.hideControls();
 
       const { video } = this.getContent();
