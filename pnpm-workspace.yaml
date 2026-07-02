@@ -1,7 +1,1 @@
-packages:
-  - shared
-  - server
-  - client
-allowBuilds:
-  esbuild: true
-  sharp: true
+packages: []

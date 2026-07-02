@@ -50,7 +50,7 @@ readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
 readonly SERVER_USER="picogallery"
 readonly NODE_MAJOR="22"
-readonly SERVER_PORT="8188"
+readonly SERVER_PORT="8190"
 
 # ── Defaults (overridable by flags) ──────────────────────────────────────────
 MODE="auto"                 # auto | kiosk | server | all
@@ -387,24 +387,7 @@ step_swap() {
 step_node() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
 
-  # If a pre-packaged release is used (node_modules already populated), we only need node
-  if [[ -d "$REPO_ROOT/server/node_modules" ]]; then
-    step "Node.js $NODE_MAJOR"
-    if have node && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]]; then
-      ok "Node $(node -v) already installed"
-    else
-      [[ "$NODE_OK_ARCH" -eq 1 ]] || die "No Node $NODE_MAJOR build for arch $ARCH."
-      info "Installing Node $NODE_MAJOR from NodeSource"
-      run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh"
-      run bash /tmp/nodesource_setup.sh
-      apt_install nodejs
-      have node || die "Node install failed."
-      ok "Installed Node $(node -v)"
-    fi
-    return 0
-  fi
-
-  step "Node.js $NODE_MAJOR + pnpm"
+  step "Node.js $NODE_MAJOR"
   if have node && [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]]; then
     ok "Node $(node -v) already installed"
   else
@@ -416,14 +399,6 @@ step_node() {
     have node || die "Node install failed."
     ok "Installed Node $(node -v)"
   fi
-  # pnpm via corepack (ships with Node) — no global npm needed.
-  if ! have pnpm; then
-    info "Activating pnpm via corepack"
-    run corepack enable || true
-    run corepack prepare pnpm@9.15.9 --activate || run npm install -g pnpm@9 --no-fund --no-audit
-  fi
-  have pnpm || die "pnpm unavailable after corepack/npm."
-  ok "pnpm $(pnpm --version 2>/dev/null)"
 }
 
 # Build (or rebuild) the vendored PhotoPrism SPA. Previously this only ran when
@@ -460,79 +435,6 @@ ensure_frontend_dist() {
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
 
-  local heap=1024
-  if (( RAM_MB < 900 )); then heap=460; fi
-  local nopts="--max-old-space-size=$heap"
-
-  if [[ -f "$REPO_ROOT/server/dist/index.js" ]]; then
-    step "Setting up PicoGallery from pre-built artifact"
-    ensure_frontend_dist
-    if [[ "$DRY_RUN" -ne 1 ]]; then
-      mkdir -p "$REPO_ROOT/frontend/dist"
-      [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
-      [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
-    fi
-    if [[ -d "$REPO_ROOT/server/node_modules" ]]; then
-      ok "Pre-packaged node_modules found — skipping package installation."
-      if [[ "$(uname -m)" == "aarch64" ]]; then
-        step "Ensuring native bindings (sharp) for aarch64"
-        local sharp_ver libvips_ver
-        # Extract version for sharp
-        sharp_ver=$(node -p "require('$REPO_ROOT/server/node_modules/sharp/package.json').optionalDependencies['@img/sharp-linux-arm64']" 2>/dev/null)
-        [[ -z "$sharp_ver" ]] && sharp_ver="0.33.5"
-        
-        # Extract version for sharp-libvips
-        libvips_ver=$(node -p "require('$REPO_ROOT/server/node_modules/sharp/package.json').optionalDependencies['@img/sharp-libvips-linux-arm64']" 2>/dev/null)
-        [[ -z "$libvips_ver" ]] && libvips_ver="1.0.4"
-
-        # 1. Download sharp-linux-arm64
-        mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64"
-        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-linux-arm64" && rm -f *.tgz && npm pack @img/sharp-linux-arm64@$sharp_ver >/dev/null && tar -xzf *.tgz --strip-components=1 && rm -f *.tgz )
-
-        # 2. Download sharp-libvips-linux-arm64
-        mkdir -p "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64"
-        ( cd "$REPO_ROOT/server/node_modules/@img/sharp-libvips-linux-arm64" && rm -f *.tgz && npm pack @img/sharp-libvips-linux-arm64@$libvips_ver >/dev/null && tar -xzf *.tgz --strip-components=1 && rm -f *.tgz )
-        
-        ok "Native bindings repaired."
-      fi
-      return 0
-    fi
-    info "Installing production dependencies only"
-    local frozen_rc=0
-    trap - ERR; set +e
-    ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --prod --frozen-lockfile )
-    frozen_rc=$?
-    set -e; trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
-    if (( frozen_rc != 0 )); then
-      warn "Frozen install failed — retrying without --frozen-lockfile"
-      ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --prod --no-frozen-lockfile )
-    fi
-    ok "Dependencies installed"
-    return 0
-  fi
-
-  step "Building PicoGallery (the slow part on a Pi — minutes on a Zero 2 W)"
-  # Cap the V8 heap so a 512 MB board builds against swap instead of OOM-killing.
-  info "Installing workspace dependencies (Node heap capped at ${heap} MB)"
-  # Prefer the committed lockfile for reproducibility; fall back to a normal
-  # install if it ever drifts, so a fresh checkout still provisions cleanly.
-  # Clear the ERR trap around the probe (set -E would otherwise fire it inside
-  # the subshell and print a spurious "Aborted" before we recover).
-  local frozen_rc=0
-  trap - ERR; set +e
-  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --frozen-lockfile )
-  frozen_rc=$?
-  set -e; trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
-  if (( frozen_rc != 0 )); then
-    warn "Frozen install failed (lockfile drift?) — retrying without --frozen-lockfile"
-    ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm install --no-frozen-lockfile )
-  fi
-
-  # Build serially: parallel tsc + vite OOMs a 512 MB Pi. pnpm keeps topological
-  # order with concurrency 1, so shared builds before server and client.
-  info "Building shared → server → client (serial, low-memory)"
-  ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm -r --workspace-concurrency=1 run build )
-  
   ensure_frontend_dist
 
   if [[ "$DRY_RUN" -ne 1 ]]; then
@@ -541,7 +443,6 @@ step_build() {
     [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
   fi
   
-  [[ "$DRY_RUN" -eq 1 ]] || [[ -f "$REPO_ROOT/server/dist/index.js" ]] || die "Build did not produce server/dist/index.js"
   [[ "$DRY_RUN" -eq 1 ]] || [[ -d "$REPO_ROOT/frontend/dist" ]] || die "Build did not produce frontend/dist"
   ok "Build complete"
 }
@@ -646,51 +547,8 @@ step_server_user() {
 }
 
 step_server_unit() {
-  [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
-  step "Server systemd unit"
-  local node_bin; node_bin="$(command -v node || echo /usr/bin/node)"
-  # On a 512 MB board the server shares RAM with the WebKit kiosk; bound the V8
-  # heap so a long-running playlist/cache can't balloon and OOM the frame.
-  local runtime_env=""
-  if (( RAM_MB < 900 )); then runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=256"; fi
-
-  # picogallery.service is the boot/default surface: the @pico slideshow server on
-  # :8188. Cog opens :8188, so the frame auto-plays the slideshow at boot. Pressing
-  # Esc in the frame hands off to the PhotoPrism UI, which runs as a second unit
-  # (picogallery-photoprism.service on :8190, installed below for a photoprism source).
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf '%s[dry-run]%s would write /etc/systemd/system/picogallery.service\n' "$C_DIM" "$C_RESET"
-  else
-    cat >/etc/systemd/system/picogallery.service <<EOF
-[Unit]
-Description=PicoGallery server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-User=$RUN_USER
-Group=$RUN_GROUP
-Environment=NODE_ENV=production
-Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
-$runtime_env
-WorkingDirectory=$REPO_ROOT
-ExecStart=$node_bin $REPO_ROOT/server/dist/index.js
-Restart=always
-RestartSec=3
-# Hardening (server only reads the repo + writes the cache)
-NoNewPrivileges=true
-ProtectSystem=strict
-PrivateTmp=true
-ReadWritePaths=$CACHE_DIR
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  fi
-  run systemctl daemon-reload
-  run systemctl enable picogallery.service
-  run systemctl restart picogallery.service
-  ok "picogallery.service enabled"
+  # Deprecated: slideshow server is consolidated into the photoprism proxy service.
+  return 0
 }
 
 # Second surface: the full PhotoPrism Vue UI. The frame (slideshow, :8188) hands
@@ -924,9 +782,13 @@ step_kiosk() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write %s/kiosk.env\n' "$C_DIM" "$C_RESET" "$CONFIG_DIR"
   else
+    local target_url="$SERVER_URL"
+    if [[ "$target_url" != *"/library/photos"* && "$target_url" != *"/library/albums"* ]]; then
+      target_url="${target_url%/}/library/photos?kiosk=true"
+    fi
     cat >"$CONFIG_DIR/kiosk.env" <<EOF
 # PicoGallery kiosk runtime config. Edit and: systemctl restart picogallery-kiosk
-FRAME_URL=$SERVER_URL
+FRAME_URL=$target_url
 WAIT_TIMEOUT=120
 EOF
     chmod 0644 "$CONFIG_DIR/kiosk.env"
@@ -943,8 +805,8 @@ EOF
     install -d -m 0755 /etc/systemd/system/picogallery-kiosk.service.d
     cat >/etc/systemd/system/picogallery-kiosk.service.d/10-after-server.conf <<EOF
 [Unit]
-After=picogallery.service
-Wants=picogallery.service
+After=picogallery-photoprism.service
+Wants=picogallery-photoprism.service
 EOF
   fi
 
@@ -998,27 +860,18 @@ step_verify() {
   local failures=0
 
   if [[ "$MODE_WANTS_SERVER" -eq 1 ]]; then
-    if systemctl is-active --quiet picogallery.service; then
-      ok "server service active"
+    if systemctl is-active --quiet picogallery-photoprism.service; then
+      ok "PhotoPrism UI host service active"
     else
-      err "picogallery.service is not active — journalctl -u picogallery"; failures=$((failures+1))
+      err "picogallery-photoprism.service is not active — journalctl -u picogallery-photoprism"; failures=$((failures+1))
     fi
-    info "Waiting for /api/v1/health…"
+    info "Waiting for PhotoPrism UI host to start on :8190…"
     local up=0
     for _ in $(seq 1 30); do
-      if curl -fsS --max-time 3 "http://localhost:$SERVER_PORT/api/v1/health" >/dev/null 2>&1; then up=1; break; fi
+      if curl -fsS --max-time 3 "http://localhost:8190/api/v1/health" >/dev/null 2>&1; then up=1; break; fi
       sleep 1
     done
-    [[ "$up" -eq 1 ]] && ok "server answered /health" || { err "server did not answer /health in 30s — journalctl -u picogallery"; failures=$((failures+1)); }
-
-    # The PhotoPrism UI host (Esc target) is secondary — warn, don't fail the install.
-    if [[ "$SOURCE_KIND" == "photoprism" ]]; then
-      if curl -fsS --max-time 3 "http://localhost:8190/api/v1/health" >/dev/null 2>&1; then
-        ok "PhotoPrism UI host answered /health on :8190"
-      else
-        warn "PhotoPrism UI host (:8190) not answering yet — Esc→PhotoPrism needs it; journalctl -u picogallery-photoprism (is frontend/dist built?)"
-      fi
-    fi
+    [[ "$up" -eq 1 ]] && ok "PhotoPrism UI host answered /health" || { err "PhotoPrism UI host did not answer /health in 30s — journalctl -u picogallery-photoprism"; failures=$((failures+1)); }
   fi
 
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
@@ -1130,8 +983,8 @@ summary() {
   echo
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] && cat <<EOF
   Server:   http://localhost:$SERVER_PORT  (source: $SOURCE_KIND)
-            status: systemctl status picogallery
-            logs:   journalctl -u picogallery -f
+            status: systemctl status picogallery-photoprism
+            logs:   journalctl -u picogallery-photoprism -f
             config: $CONFIG_DIR/config.toml
 EOF
   [[ "$MODE_WANTS_KIOSK" -eq 1 ]] && cat <<EOF

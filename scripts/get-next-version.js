@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+/* global require */
+
 /**
  * determine-version.js
  * Analyzes git history to find the latest tag reachable from the current commit
@@ -14,7 +16,7 @@ const fs = require('fs');
 function run(cmd) {
   try {
     return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch (err) {
+  } catch {
     return '';
   }
 }
@@ -27,17 +29,10 @@ function setOutput(key, value) {
 }
 
 function main() {
-  // 1. Get the latest tag
-  let latestTag = run('git describe --tags --abbrev=0');
+  // 1. Get the latest tag by semver sorting all tags in the repository
+  const allTags = run('git tag --list --sort=-v:refname').split('\n').map(t => t.trim()).filter(Boolean);
+  let latestTag = allTags.length > 0 ? allTags[0] : '';
   
-  if (!latestTag) {
-    // If not reachable, check list of all tags sorted by semver
-    const allTags = run('git tag --list --sort=-v:refname').split('\n').map(t => t.trim()).filter(Boolean);
-    if (allTags.length > 0) {
-      latestTag = allTags[0];
-    }
-  }
-
   // If we still don't have a tag, fallback to a safe baseline
   if (!latestTag) {
     console.log('No tags found in repository history. Using fallback.');
