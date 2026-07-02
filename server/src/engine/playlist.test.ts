@@ -47,7 +47,7 @@ const display = RootConfigSchema.parse({ display: { order: 'chronological', onTh
 
 describe('Playlist.build pagination', () => {
   it('fetches beyond a single page so the whole library is used', async () => {
-    const total = PLAYLIST_PAGE_SIZE * 2 + 500; // needs 3 pages
+    const total = PLAYLIST_PAGE_SIZE * 2 + Math.floor(PLAYLIST_PAGE_SIZE / 2); // 2 full pages + a partial third
     const src = new PagedSource(total);
     const pl = await Playlist.build(new Map([['paged', src]]), display);
     expect(pl.length).toBe(total);

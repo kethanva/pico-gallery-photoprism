@@ -426,6 +426,36 @@ step_node() {
   ok "pnpm $(pnpm --version 2>/dev/null)"
 }
 
+# Build (or rebuild) the vendored PhotoPrism SPA. Previously this only ran when
+# frontend/dist was missing entirely, so UI fixes in frontend/src never reached a
+# device that already had a dist — the PhotoPrism surface silently stayed stale
+# after every git pull. Detect staleness (any source file newer than the built
+# shell) and rebuild; on low-RAM boards (Pi Zero 2) the webpack build would
+# swap/OOM, so warn with instructions instead of attempting it.
+ensure_frontend_dist() {
+  local dist="$REPO_ROOT/frontend/dist" stamp="$REPO_ROOT/frontend/dist/index.html"
+  if [[ ! -d "$dist" ]]; then
+    info "Building PhotoPrism frontend Vue SPA (missing in workspace)"
+    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+    return 0
+  fi
+  local stale=0
+  if [[ ! -f "$stamp" ]]; then
+    stale=1
+  elif find "$REPO_ROOT/frontend/src" -type f -newer "$stamp" -print -quit 2>/dev/null | grep -q .; then
+    stale=1
+  fi
+  [[ "$stale" -eq 1 ]] || return 0
+  if (( RAM_MB >= 1500 )); then
+    info "frontend/src changed since frontend/dist was built — rebuilding PhotoPrism UI"
+    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
+  else
+    warn "frontend/dist is STALE (frontend/src changed since it was built) — the PhotoPrism UI misses recent fixes."
+    warn "This board has too little RAM for the webpack build. On a capable host:"
+    warn "  cd frontend && npm ci && npm run build   # then copy/pull dist to the device and re-run install"
+  fi
+}
+
 # Install workspace deps + build shared→server→client (resource-capped for small Pis).
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
@@ -436,10 +466,7 @@ step_build() {
 
   if [[ -f "$REPO_ROOT/server/dist/index.js" ]]; then
     step "Setting up PicoGallery from pre-built artifact"
-    if [[ ! -d "$REPO_ROOT/frontend/dist" ]]; then
-      info "Building PhotoPrism frontend Vue SPA (missing in workspace)"
-      ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
-    fi
+    ensure_frontend_dist
     if [[ "$DRY_RUN" -ne 1 ]]; then
       mkdir -p "$REPO_ROOT/frontend/dist"
       [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
@@ -506,10 +533,7 @@ step_build() {
   info "Building shared → server → client (serial, low-memory)"
   ( cd "$REPO_ROOT" && run env NODE_OPTIONS="$nopts" pnpm -r --workspace-concurrency=1 run build )
   
-  if [[ ! -d "$REPO_ROOT/frontend/dist" ]]; then
-    info "Building PhotoPrism frontend Vue SPA"
-    ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
-  fi
+  ensure_frontend_dist
 
   if [[ "$DRY_RUN" -ne 1 ]]; then
     mkdir -p "$REPO_ROOT/frontend/dist"

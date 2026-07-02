@@ -65,10 +65,13 @@ The appliance runs **two** systemd units and Cog boots into the slideshow:
 
 - **Boot → slideshow.** `FRAME_URL=http://…:8188`, so Cog shows the slideshow with
   no interaction.
-- **`Esc` → PhotoPrism UI.** The frame's keyboard handler navigates to the
-  PhotoPrism host (`photoprismUrl` from the display config, else the same host on
-  `:8190`). Leaving the page stops the slideshow rendering; the server engine stays
-  authoritative and resumes if the frame returns.
+- **`Esc` (or double right-click) → PhotoPrism UI.** The frame's keyboard handler
+  navigates to the PhotoPrism host (`photoprismUrl` from the display config, else
+  the same host on `:8190`). Leaving the page stops the slideshow rendering; the
+  server engine stays authoritative and resumes if the frame returns.
+  Other frame inputs: `←`/`→` prev/next, `Space` pause, `F` (or double
+  middle-click) browser fullscreen. In the PhotoPrism lightbox, double
+  right-click closes it and `F`/double middle-click toggles fullscreen.
 - **Back → slideshow.** The PhotoPrism host injects a floating **"▶ Slideshow"**
   link (→ `/__slideshow` → `302` to `:8188`) so you can return without a reboot.
 
