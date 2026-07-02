@@ -213,6 +213,7 @@ detect_platform() {
   elif [[ -f /boot/config.txt ]];          then BOOT_CFG="/boot/config.txt"
   else BOOT_CFG=""; fi
 
+  info "Installer: PicoGallery v$SCRIPT_VERSION"
   info "Board:  ${MODEL:-unknown}  (arch $ARCH, ${RAM_MB} MB RAM, ${DISK_FREE_MB} MB free on /)"
   info "OS:     ${OS_ID:-unknown} ${OS_CODENAME:-} ; Node-capable arch: $([[ $NODE_OK_ARCH -eq 1 ]] && echo yes || echo NO)"
 }
