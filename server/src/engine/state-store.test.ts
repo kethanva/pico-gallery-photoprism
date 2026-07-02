@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { savePersistedPhotoId, flushPersistedPhotoId, loadPersistedPhotoId } from './state-store.js';
+import { savePersistedState, flushPersistedState, loadPersistedState } from './state-store.js';
 
 const dirs: string[] = [];
 function freshDir(): string {
@@ -11,52 +11,80 @@ function freshDir(): string {
   return d;
 }
 const stateFile = (dir: string): string => join(dir, 'slideshow-state.json');
-const readId = (dir: string): string => JSON.parse(readFileSync(stateFile(dir), 'utf-8')).photoId;
+const readState = (dir: string): { photoId?: string; seenIds?: string[]; cycle?: number } =>
+  JSON.parse(readFileSync(stateFile(dir), 'utf-8'));
 
 afterEach(() => {
-  flushPersistedPhotoId(); // drain any pending timer so state can't leak between tests
+  flushPersistedState(); // drain any pending timer so state can't leak between tests
   vi.useRealTimers();
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-describe('state-store cursor persistence', () => {
+describe('state-store persistence', () => {
   it('throttles: rapid saves do not each hit the disk', () => {
     vi.useFakeTimers();
     const dir = freshDir();
-    savePersistedPhotoId(dir, 'a');
-    savePersistedPhotoId(dir, 'b');
-    savePersistedPhotoId(dir, 'c');
+    savePersistedState(dir, () => ({ photoId: 'a' }));
+    savePersistedState(dir, () => ({ photoId: 'b' }));
+    savePersistedState(dir, () => ({ photoId: 'c' }));
     expect(existsSync(stateFile(dir))).toBe(false); // deferred, not written yet
   });
 
-  it('coalesces to the latest id when the pending write lands', () => {
+  it('coalesces to the latest snapshot when the pending write lands', () => {
     vi.useFakeTimers();
     const dir = freshDir();
-    savePersistedPhotoId(dir, 'a');
-    savePersistedPhotoId(dir, 'b');
-    savePersistedPhotoId(dir, 'c');
-    flushPersistedPhotoId(); // stand-in for the throttle window elapsing
-    expect(readId(dir)).toBe('c');
+    savePersistedState(dir, () => ({ photoId: 'a' }));
+    savePersistedState(dir, () => ({ photoId: 'b' }));
+    savePersistedState(dir, () => ({ photoId: 'c' }));
+    flushPersistedState(); // stand-in for the throttle window elapsing
+    expect(readState(dir).photoId).toBe('c');
+  });
+
+  it('evaluates the snapshot getter only at write time', () => {
+    vi.useFakeTimers();
+    const dir = freshDir();
+    let current = 'a';
+    savePersistedState(dir, () => ({ photoId: current }));
+    current = 'z'; // moved on before the throttle window elapsed
+    flushPersistedState();
+    expect(readState(dir).photoId).toBe('z');
   });
 
   it('flush writes synchronously for shutdown durability', () => {
     vi.useFakeTimers();
     const dir = freshDir();
-    savePersistedPhotoId(dir, 'x');
-    flushPersistedPhotoId();
-    expect(readId(dir)).toBe('x'); // present with no timer advance
+    savePersistedState(dir, () => ({ photoId: 'x' }));
+    flushPersistedState();
+    expect(readState(dir).photoId).toBe('x'); // present with no timer advance
   });
 
-  it('round-trips through loadPersistedPhotoId', async () => {
+  it('round-trips photoId, seenIds and cycle through loadPersistedState', async () => {
     const dir = freshDir();
-    savePersistedPhotoId(dir, 'resume-me');
-    flushPersistedPhotoId();
-    expect(await loadPersistedPhotoId(dir)).toBe('resume-me');
+    savePersistedState(dir, () => ({ photoId: 'resume-me', seenIds: ['p1', 'p2'], cycle: 3 }));
+    flushPersistedState();
+    const loaded = await loadPersistedState(dir);
+    expect(loaded.photoId).toBe('resume-me');
+    expect(loaded.seenIds).toEqual(['p1', 'p2']);
+    expect(loaded.cycle).toBe(3);
+  });
+
+  it('loads an empty state when no file exists', async () => {
+    const dir = freshDir();
+    expect(await loadPersistedState(dir)).toEqual({});
+  });
+
+  it('loads the legacy cursor-only file shape', async () => {
+    const dir = freshDir();
+    savePersistedState(dir, () => ({ photoId: 'old' }));
+    flushPersistedState();
+    const loaded = await loadPersistedState(dir);
+    expect(loaded.photoId).toBe('old');
+    expect(loaded.seenIds).toBeUndefined();
   });
 
   it('flush is a no-op when nothing is pending', () => {
     const dir = freshDir();
-    flushPersistedPhotoId();
+    flushPersistedState();
     expect(existsSync(stateFile(dir))).toBe(false);
   });
 });

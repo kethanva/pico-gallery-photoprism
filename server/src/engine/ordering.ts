@@ -32,9 +32,19 @@ function isOnThisDay(photo: PhotoMeta): boolean {
   return taken.getMonth() === now.getMonth() && taken.getDate() === now.getDate();
 }
 
-export function orderPhotos(photos: PhotoMeta[], order: PhotoOrder, boostOnThisDay: boolean): PhotoMeta[] {
+/**
+ * @param seedSalt Extra entropy mixed into the daily shuffle seed. The engine
+ * passes its cycle counter so each full pass through the library gets a fresh
+ * permutation instead of replaying the same day-seeded order.
+ */
+export function orderPhotos(
+  photos: PhotoMeta[],
+  order: PhotoOrder,
+  boostOnThisDay: boolean,
+  seedSalt = ''
+): PhotoMeta[] {
   let result: PhotoMeta[];
-  const seed = new Date().toISOString().slice(0, 10);
+  const seed = new Date().toISOString().slice(0, 10) + (seedSalt ? `:${seedSalt}` : '');
 
   switch (order) {
     case 'shuffle':

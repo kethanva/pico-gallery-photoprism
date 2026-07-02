@@ -30,6 +30,14 @@ describe('orderPhotos', () => {
     expect([...a].sort()).toEqual(['a', 'b', 'c']);
   });
 
+  it('shuffle order changes with the seed salt (fresh order per cycle)', () => {
+    const many = Array.from({ length: 20 }, (_, i) => photo(`p${i}`, `20${10 + i}-01-01T00:00:00Z`));
+    const first = orderPhotos(many, 'shuffle', false).map((p) => p.id);
+    const salted = orderPhotos(many, 'shuffle', false, 'cycle-1').map((p) => p.id);
+    expect(salted).not.toEqual(first);
+    expect([...salted].sort()).toEqual([...first].sort()); // same set, new order
+  });
+
   it('keeps every photo when boosting on-this-day', () => {
     const today = new Date();
     const otd = photo('today', new Date(2010, today.getMonth(), today.getDate()).toISOString());

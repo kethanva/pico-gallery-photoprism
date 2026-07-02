@@ -4,7 +4,7 @@ import type { PhotoSource } from '../sources/source.js';
 import { Playlist } from './playlist.js';
 import { bus } from './bus.js';
 import { isDisplayOn } from './schedule.js';
-import { loadPersistedPhotoId, savePersistedPhotoId, flushPersistedPhotoId } from './state-store.js';
+import { loadPersistedState, savePersistedState, flushPersistedState } from './state-store.js';
 import { logger } from '../telemetry/logger.js';
 
 export class SlideshowEngine {
@@ -16,6 +16,11 @@ export class SlideshowEngine {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private refreshing = false;
   private startedAt = new Date().toISOString();
+  // No-repeat guarantee: ids shown this cycle. Auto-advance skips these until
+  // every photo has been shown once, then the set clears and a new cycle starts.
+  private seen = new Set<string>();
+  // Completed-cycle counter; salts the shuffle so each pass gets a fresh order.
+  private cycle = 0;
 
   // How often to re-check the display on/off schedule window.
   private static readonly SCHEDULE_CHECK_MS = 30_000;
@@ -29,8 +34,21 @@ export class SlideshowEngine {
   ) {}
 
   async start(): Promise<void> {
-    const resumePhotoId = await loadPersistedPhotoId(this.cfg.cache.dir);
-    this.playlist = await Playlist.build(this.sources, this.cfg.display, resumePhotoId);
+    const persisted = await loadPersistedState(this.cfg.cache.dir);
+    this.cycle = persisted.cycle ?? 0;
+    this.playlist = await Playlist.build(this.sources, this.cfg.display, {
+      resumePhotoId: persisted.photoId,
+      seedSalt: String(this.cycle),
+    });
+    // Restore the seen-set, dropping ids of photos that have since disappeared.
+    const ids = this.playlist.idSet();
+    this.seen = new Set((persisted.seenIds ?? []).filter((id) => ids.has(id)));
+    // Everything already shown (process died right at a cycle boundary) → new cycle.
+    if (this.playlist.length > 0 && this.seen.size >= this.playlist.length) {
+      this.seen.clear();
+      this.cycle++;
+    }
+    this.markCurrentSeen();
     this.displayOn = isDisplayOn(this.cfg.display.schedule);
     this.scheduleTimer();
     // Re-evaluate the on/off window over time so the display follows the schedule
@@ -55,9 +73,9 @@ export class SlideshowEngine {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
-    // Persist the exact current cursor now — routine saves are throttled, so the
+    // Persist the exact current state now — routine saves are throttled, so the
     // latest one may still be pending. Synchronous, so it survives process exit.
-    flushPersistedPhotoId();
+    flushPersistedState();
   }
 
   /**
@@ -71,7 +89,9 @@ export class SlideshowEngine {
     this.refreshing = true;
     try {
       const currentId = this.playlist.current()?.id;
-      const fresh = await Playlist.build(this.sources, this.cfg.display);
+      const fresh = await Playlist.build(this.sources, this.cfg.display, {
+        seedSalt: String(this.cycle),
+      });
       if (currentId) fresh.goto(currentId);
       this.playlist = fresh;
       this.broadcast();
@@ -100,22 +120,23 @@ export class SlideshowEngine {
       paused: this.paused,
       displayOn: this.displayOn,
       photo: this.playlist.current(),
-      nextPhoto: this.playlist.peekNext(),
+      // Skip seen photos so the client prefetches what next() will actually show.
+      nextPhoto: this.playlist.peekNextUnseen(this.seen),
       startedAt: this.startedAt,
     };
   }
 
   next(): void {
-    this.playlist.next();
+    this.advanceToUnseen();
     this.resetTimer();
-    this.persistCursor();
     this.broadcast();
   }
 
   prev(): void {
+    // Going back deliberately re-views an already-shown photo; no skipping here.
     this.playlist.prev();
+    this.markCurrentSeen();
     this.resetTimer();
-    this.persistCursor();
     this.broadcast();
   }
 
@@ -139,8 +160,8 @@ export class SlideshowEngine {
   goto(id: string): boolean {
     const photo = this.playlist.goto(id);
     if (!photo) return false;
+    this.markCurrentSeen();
     this.resetTimer();
-    this.persistCursor();
     this.broadcast();
     return true;
   }
@@ -157,11 +178,43 @@ export class SlideshowEngine {
     bus.publish({ type: 'state', data: this.getState() });
   }
 
-  /** Best-effort, non-blocking: lets a restart resume on the same photo instead
-   *  of replaying the cycle from the start. */
-  private persistCursor(): void {
+  /**
+   * Advance to the next photo that has not been shown this cycle. When every
+   * photo has been shown, clear the seen-set, bump the cycle counter, and kick a
+   * background rebuild so shuffle users get a fresh order for the new pass.
+   */
+  private advanceToUnseen(): void {
+    const len = this.playlist.length;
+    if (len === 0) return;
+    for (let i = 0; i < len; i++) {
+      const p = this.playlist.next();
+      if (p && !this.seen.has(p.id)) {
+        this.markCurrentSeen();
+        return;
+      }
+    }
+    // Wrapped all the way around: every photo has been shown once.
+    this.seen.clear();
+    this.cycle++;
+    logger.info({ cycle: this.cycle, total: len }, 'Slideshow cycle complete — starting a new pass');
+    this.playlist.next();
+    this.markCurrentSeen();
+    // Background reshuffle for the new cycle (deterministic orders rebuild
+    // identically; the cursor stays anchored to the current photo either way).
+    void this.refresh();
+  }
+
+  /** The current photo has been displayed: record it and schedule a state save.
+   *  Best-effort, non-blocking; lets a restart resume without repeats. */
+  private markCurrentSeen(): void {
     const photo = this.playlist.current();
-    if (photo) savePersistedPhotoId(this.cfg.cache.dir, photo.id);
+    if (!photo) return;
+    this.seen.add(photo.id);
+    savePersistedState(this.cfg.cache.dir, () => ({
+      photoId: this.playlist.current()?.id,
+      seenIds: [...this.seen],
+      cycle: this.cycle,
+    }));
   }
 
   private scheduleTimer(): void {
@@ -171,8 +224,7 @@ export class SlideshowEngine {
       // Hold on the current photo while paused or while the schedule has the
       // display off — no point cycling images nobody is looking at.
       if (!this.paused && this.displayOn) {
-        this.playlist.next();
-        this.persistCursor();
+        this.advanceToUnseen();
         this.broadcast();
       }
     }, ms);
