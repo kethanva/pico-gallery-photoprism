@@ -74,7 +74,7 @@ const READONLY_FEATURES_OFF = [
 // lightbox's own capture/stop-propagation handlers win while it is open.
 // Everything routes through /__slideshow → 302, same as the link.
 const SLIDESHOW_LINK =
-  '<a href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
+  '<a id="pico-slideshow-link" href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
   'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
   'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
   "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
@@ -97,6 +97,18 @@ const SLIDESHOW_LINK =
   'var now=Date.now();' +
   'if(now-lastCtx<=400){lastCtx=0;go();}else{lastCtx=now;}' +
   '});' +
+  // The pill outranks every z-index (it must beat the PhotoPrism chrome), so
+  // it would also float on top of the fullscreen slideshow. Hide it whenever
+  // the lightbox overlay is active; one querySelector per mutation batch is
+  // negligible even on a Pi Zero 2.
+  'var pill=document.getElementById("pico-slideshow-link");' +
+  'function sync(){' +
+  'var open=!!document.querySelector(".p-lightbox.v-overlay--active");' +
+  'pill.style.display=open?"none":"inline-flex";' +
+  '}' +
+  'new MutationObserver(sync).observe(document.documentElement,' +
+  '{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});' +
+  'sync();' +
   '})();</script>';
 
 // ── Resolve backend URL ──────────────────────────────────────────────────────
@@ -381,8 +393,19 @@ function serveStatic(req, res) {
   // "Slideshow" link so the viewer can hop back to the frame. Rewritten once per
   // dist build (keyed on mtime) and served from memory — cheap on a Pi Zero 2.
   if (filePath === join(DIST, 'index.html')) {
-    res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
-    res.end(shellWithLink(filePath));
+    // The shell is NOT emitted by webpack — install.sh (and the release
+    // tarball) copy frontend/index.html into dist. Guard the read so a dist
+    // without it yields a clear 500 instead of an uncaught statSync throw
+    // that would crash the whole host on every page view.
+    try {
+      const html = shellWithLink(filePath);
+      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
+      res.end(html);
+    } catch {
+      console.error(`[host] ${filePath} missing — copy frontend/index.html into frontend/dist (install.sh does this)`);
+      res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('SPA shell missing: frontend/dist/index.html not found. Copy frontend/index.html into frontend/dist.');
+    }
     return;
   }
 

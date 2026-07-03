@@ -63,15 +63,21 @@ its API/WebSocket to the real backend.
 
 - **Boot → slideshow.** `FRAME_URL=http://…:8190/library/photos?kiosk=true`, so
   the SPA auto-opens its native lightbox slideshow in (virtual) fullscreen as
-  soon as photos load. Slide duration comes from `slide_duration_secs` in the
-  config (served to the SPA as `kioskConfig.slideDuration`).
-- **Inside the slideshow (lightbox):** `F` or single middle-click toggles
-  fullscreen (a *virtual* CSS fullscreen backs it where WPE lacks the native
-  API); right-click closes the slideshow to the photo grid; arrows navigate.
-- **On the grid:** `F` or right-click (both injected by the host, plus the
-  floating **"▶ Slideshow"** link) jump back into the autoplaying slideshow via
-  `/__slideshow` → `302` → `/library/photos?kiosk=true`. `F` is ignored while
-  typing in PhotoPrism inputs.
+  soon as photos load. The boot slideshow walks the **whole library** in a
+  random order and repeats a photo only after every photo has been shown
+  (albums targets play the whole album in its curated order instead). Slide
+  duration comes from `slide_duration_secs` in the config (served to the SPA
+  as `kioskConfig.slideDuration`).
+- **Inside the slideshow (lightbox):** `F` or **double right-click** exits to
+  the PhotoPrism photo grid (a lone right-click only pauses and never opens
+  the browser menu); arrows navigate; single middle-click toggles the virtual
+  fullscreen backing WPE's missing native API.
+- **On the grid:** `F` or **double right-click** (both injected by the host,
+  plus the floating **"▶ Slideshow"** link — hidden while the lightbox is
+  open) jump back into the autoplaying slideshow via `/__slideshow` → `302` →
+  `/library/photos?kiosk=true`. `F` is ignored while typing in PhotoPrism
+  inputs. **Clicking any photo** on the grid resumes the fullscreen slideshow
+  starting from that photo.
 
 The unit is only installed for a `photoprism` source (a `webdav` source has no
 PhotoPrism UI). **`frontend/dist` freshness matters**: all of the above is

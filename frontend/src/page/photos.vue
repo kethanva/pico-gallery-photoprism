@@ -64,6 +64,7 @@
 <script>
 import { Photo } from "model/photo";
 import { $gettext } from "common/gettext";
+import { fetchAllPhotos, shuffled } from "common/kiosk";
 import Thumb from "model/thumb";
 import { ACTION_CREATED, ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -174,6 +175,10 @@ export default {
       lastFilter: {},
       routeName: routeName,
       loading: true,
+      // True once the kiosk boot slideshow has been started for this page
+      // instance. Without it, every re-search (filter change, view change)
+      // would spontaneously re-open the slideshow while the user browses.
+      kioskBooted: false,
       lightbox: {
         results: [],
         loading: false,
@@ -490,19 +495,14 @@ export default {
     },
     // loadKioskSlideshow builds the boot slideshow: the WHOLE library, in a
     // random order, with no photo repeated until every one has been shown.
-    //
-    // It paginates in a STABLE order (`added`) rather than `order=random`,
-    // because PhotoPrism re-seeds random per request, so offset-paginating
-    // random returns duplicates and gaps — which would repeat photos. The
-    // lightweight Thumb metadata for the whole library is accumulated (a few MB;
-    // PhotoSwipe lazy-loads the actual images per slide, so only nearby photos
-    // cost real memory on the 512MB Pi), shuffled once client-side, then handed
-    // to the lightbox with autoplay. When the slideshow reaches the end it loops
-    // — i.e. it only ever repeats after the entire library has been displayed.
+    // The lightweight Thumb metadata for the whole library is accumulated (a
+    // few MB; PhotoSwipe lazy-loads the actual images per slide, so only
+    // nearby photos cost real memory on the 512MB Pi), shuffled once
+    // client-side, then handed to the lightbox with autoplay. When the
+    // slideshow reaches the end it loops — i.e. it only ever repeats after the
+    // entire library has been displayed. Pagination/shuffle live in
+    // common/kiosk (shared with the album page).
     loadKioskSlideshow() {
-      const KIOSK_FETCH_COUNT = 1000; // photos per request — few round-trips
-      const KIOSK_MAX_PHOTOS = 10000; // safety cap for the 512MB Pi Zero 2
-
       // Library-scoping filters (private/quality) are preserved, but the grid's
       // order/reverse/q are dropped so the slideshow spans the whole library.
       const base = { merged: true, order: "added" };
@@ -516,31 +516,7 @@ export default {
         Object.assign(base, this.staticFilter);
       }
 
-      const fetchPage = (offset, acc) => {
-        if (acc.length >= KIOSK_MAX_PHOTOS) {
-          return Promise.resolve(acc);
-        }
-
-        return Photo.search({ ...base, count: KIOSK_FETCH_COUNT, offset })
-          .then((resp) => {
-            const models = resp && Array.isArray(resp.models) ? resp.models : [];
-            if (models.length === 0) {
-              return acc;
-            }
-
-            acc.push(...models);
-
-            // Last page reached when the backend returned fewer than requested.
-            if (resp.count < resp.limit || models.length < KIOSK_FETCH_COUNT) {
-              return acc;
-            }
-
-            return fetchPage(offset + models.length, acc);
-          })
-          .catch(() => acc);
-      };
-
-      return fetchPage(0, []).then((all) => {
+      return fetchAllPhotos(base).then((all) => {
         // Fall back to the already-loaded grid page if pagination yielded
         // nothing (e.g. the backend rejected the request).
         const source = all.length > 0 ? all : this.results;
@@ -548,15 +524,7 @@ export default {
           return;
         }
 
-        const thumbs = Thumb.fromPhotos(source);
-
-        // Fisher–Yates shuffle so every boot is a different, non-repeating order.
-        for (let i = thumbs.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [thumbs[i], thumbs[j]] = [thumbs[j], thumbs[i]];
-        }
-
-        this.$lightbox.openModels(thumbs, 0, null, true);
+        this.$lightbox.openModels(shuffled(Thumb.fromPhotos(source)), 0, null, true);
       });
     },
     loadMore(force) {
@@ -677,6 +645,17 @@ export default {
 
       Object.assign(query, this.filter);
 
+      // Keep the kiosk-mode markers across filter changes. They are not part
+      // of the filter model, so rebuilding the query from it would silently
+      // drop them — ending kiosk mode (click-to-resume, boot gestures) the
+      // first time the viewer searches or switches views on the appliance.
+      if (this.$route.query.kiosk) {
+        query.kiosk = this.$route.query.kiosk;
+      }
+      if (this.$route.query.slideshow) {
+        query.slideshow = this.$route.query.slideshow;
+      }
+
       for (let key in query) {
         if (query[key] === undefined || !query[key]) {
           delete query[key];
@@ -785,7 +764,8 @@ export default {
           this.complete = response.count < response.limit;
           this.scrollDisabled = this.complete;
 
-          if ((this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
+          if (!this.kioskBooted && (this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
+            this.kioskBooted = true;
             this.$nextTick(() => {
               this.loadKioskSlideshow();
             });

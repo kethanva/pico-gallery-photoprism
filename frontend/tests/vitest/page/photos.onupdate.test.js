@@ -184,6 +184,104 @@ describe("page/photos.vue kiosk slideshow", () => {
     expect(autoplay).toBe(true);
     expect(models).toHaveLength(3); // the 3 grid results
   });
+
+  it("loadKioskSlideshow keeps paginating when the backend clamps the page size", async () => {
+    // A backend applying X-Limit=500 to a count=1000 request must not look
+    // like an exhausted library after the first page.
+    const stub = kioskStub();
+    const clampedPage = { models: Array.from({ length: 500 }, (_, i) => ({ UID: `c${i}` })), count: 500, limit: 500 };
+    const lastPage = { models: Array.from({ length: 200 }, (_, i) => ({ UID: `d${i}` })), count: 200, limit: 500 };
+    searchSpy = vi.spyOn(Photo, "search").mockResolvedValueOnce(clampedPage).mockResolvedValueOnce(lastPage);
+
+    await loadKioskSlideshow.call(stub);
+
+    expect(searchSpy).toHaveBeenCalledTimes(2);
+    expect(searchSpy.mock.calls[1][0].offset).toBe(500);
+    const [models] = stub.$lightbox.openModels.mock.calls[0];
+    expect(models).toHaveLength(700);
+  });
+
+  it("updateQuery preserves the kiosk marker across filter changes", () => {
+    const stub = {
+      updateFilter: vi.fn(),
+      loading: false,
+      settings: { view: "cards" },
+      filter: { q: "beach" },
+      $route: { query: { kiosk: "true", q: "" } },
+      $router: { replace: vi.fn() },
+    };
+
+    const changed = PPagePhotos.methods.updateQuery.call(stub, {});
+
+    expect(changed).toBe(true);
+    const { query } = stub.$router.replace.mock.calls[0][0];
+    expect(query.kiosk).toBe("true");
+    expect(query.q).toBe("beach");
+  });
+});
+
+describe("page/album/photos.vue kiosk slideshow", () => {
+  const openPhoto = PAlbumPhotos.methods.openPhoto;
+  const loadKioskSlideshow = PAlbumPhotos.methods.loadKioskSlideshow;
+
+  let fromPhotosSpy;
+  let searchSpy;
+  beforeEach(() => {
+    fromPhotosSpy = vi.spyOn(Thumb, "fromPhotos").mockImplementation((arr) => arr.map((p) => ({ uid: p.UID })));
+  });
+  afterEach(() => {
+    fromPhotosSpy?.mockRestore();
+    searchSpy?.mockRestore();
+  });
+
+  it("openPhoto resumes autoplay from the selected index in kiosk mode", () => {
+    const stub = {
+      loading: false,
+      listen: true,
+      selection: [],
+      lightbox: { loading: false },
+      results: [{ UID: "a1" }, { UID: "a2" }],
+      model: { UID: "album-1" },
+      $route: { query: { kiosk: "true" } },
+      $lightbox: { openModels: vi.fn(), openView: vi.fn() },
+    };
+
+    expect(openPhoto.call(stub, 1)).toBe(true);
+    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    expect(index).toBe(1);
+    expect(autoplay).toBe(true);
+    expect(collection).toBe(stub.model);
+    expect(models).toHaveLength(2);
+    expect(stub.$lightbox.openView).not.toHaveBeenCalled();
+  });
+
+  it("loadKioskSlideshow plays the whole album in curated order — no shuffle", async () => {
+    const stub = {
+      uid: "album-1",
+      staticFilter: null,
+      results: [],
+      model: { UID: "album-1" },
+      sortOrder: () => "oldest",
+      sortReverse: () => false,
+      $lightbox: { openModels: vi.fn() },
+    };
+    searchSpy = vi
+      .spyOn(Photo, "search")
+      .mockResolvedValueOnce({ models: [{ UID: "a" }, { UID: "b" }, { UID: "c" }], count: 3, limit: 1000 });
+
+    await loadKioskSlideshow.call(stub);
+
+    const params = searchSpy.mock.calls[0][0];
+    expect(params.s).toBe("album-1");
+    expect(params.order).toBe("oldest");
+
+    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    expect(autoplay).toBe(true);
+    expect(index).toBe(0);
+    expect(collection).toBe(stub.model);
+    // Curated album order preserved exactly.
+    expect(models.map((m) => m.uid)).toEqual(["a", "b", "c"]);
+  });
 });
 
 describe("page/photos.vue refetchResults", () => {

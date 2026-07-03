@@ -877,7 +877,6 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         const ctx = {
           playSlideshow,
           requestFullscreen,
-          isFullscreen: () => true, // already fullscreen -> skip the gesture fallback
           visible: true,
         };
 
@@ -885,6 +884,27 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
 
         expect(playSlideshow).toHaveBeenCalledTimes(1);
         expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      });
+
+      it("onLightboxOpened consumes the autoplay flag exactly once", () => {
+        const wrapper = mountLightbox();
+        const enterFullscreenSlideshow = vi.fn();
+        const ctx = {
+          addEventListeners: vi.fn(),
+          wrapPswpNavGuards: vi.fn(),
+          $event: { publish: vi.fn() },
+          enterFullscreenSlideshow,
+          _autoplayOnOpen: true,
+        };
+
+        wrapper.vm.$options.methods.onLightboxOpened.call(ctx);
+        expect(enterFullscreenSlideshow).toHaveBeenCalledTimes(1);
+        expect(ctx._autoplayOnOpen).toBe(false);
+
+        // A later non-autoplay open must not start the slideshow again.
+        wrapper.vm.$options.methods.onLightboxOpened.call(ctx);
+        expect(enterFullscreenSlideshow).toHaveBeenCalledTimes(1);
+        expect(ctx.$event.publish).toHaveBeenCalledWith("lightbox.opened");
       });
 
       it("onShortCut still routes Escape + KeyI even when face-marker mode is active", () => {

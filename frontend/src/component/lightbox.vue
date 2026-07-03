@@ -404,15 +404,14 @@ export default {
       }
 
       if (data.autoplay) {
-        // Defer autoplay until PhotoSwipe has finished initializing. Rendering
-        // is deferred to the "lightbox.enter" event (see showThumbs), and pswp
-        // only exists once "lightbox.opened" is published from its afterInit
-        // hook (onLightboxOpened). Starting the slideshow in a bare $nextTick
-        // raced that: onSlideshowNext() would see a null pswp and immediately
-        // pause the slideshow, so the frame booted paused and not fullscreen.
-        this.$event.subscribeOnce("lightbox.opened", () => {
-          this.enterFullscreenSlideshow();
-        });
+        // Defer autoplay until PhotoSwipe has finished initializing: the flag
+        // is consumed in onLightboxOpened (pswp's afterInit). Starting the
+        // slideshow in a bare $nextTick raced initialization — onSlideshowNext()
+        // saw a null pswp and immediately paused, so the frame booted paused
+        // and not fullscreen. A flag (not a subscribeOnce on "lightbox.opened")
+        // so that an open that never completes (busy reject) cannot leave a
+        // stale subscription behind that would autoplay a later manual open.
+        this._autoplayOnOpen = true;
       }
     },
     // Pauses the lightbox slideshow and any videos that are playing.
@@ -445,6 +444,7 @@ export default {
     // Hides the lightbox and restores the scrollbar state.
     hideDialog() {
       // Reset component state.
+      this._autoplayOnOpen = false;
       this.onReset();
       this.resetFaceMarkers();
 
@@ -477,6 +477,9 @@ export default {
       //   3. Capture + preventDefault suppresses the host script's own grid
       //      handlers (bubble phase, they bail on defaultPrevented) so a single
       //      press does not both close the lightbox AND re-navigate to it.
+      // Fresh double-click window per lightbox session — a right-click from a
+      // previous session must not pair with the first one here.
+      _lastContextMenuTs = 0;
       if (!_contextMenuListener) {
         _contextMenuListener = (ev) => {
           ev.preventDefault();
@@ -1921,6 +1924,14 @@ export default {
     onLightboxOpened() {
       this.addEventListeners();
       this.wrapPswpNavGuards();
+
+      // Autoplay requested by openLightbox: pswp is initialized now, so the
+      // slideshow can start without racing (see the flag comment there).
+      if (this._autoplayOnOpen) {
+        this._autoplayOnOpen = false;
+        this.enterFullscreenSlideshow();
+      }
+
       this.$event.publish("lightbox.opened");
     },
     // Wraps pswp.prev/next so the unsaved-changes dialog is awaited BEFORE
@@ -3260,23 +3271,12 @@ export default {
     //   - requestFullscreen(): browser fullscreen. A near no-op under Cage,
     //     which already fullscreens the kiosk window, but keeps desktop parity
     //     and flips virtualFullscreen for the toggle-button icon state.
+    // No gesture-retry fallback: requestFullscreen() sets virtualFullscreen
+    // synchronously, so isFullscreen() is already true here even when the
+    // native Fullscreen API rejects — a retry guard could never fire.
     enterFullscreenSlideshow() {
       this.playSlideshow();
       this.requestFullscreen().catch(() => {});
-
-      // Fallback: if the browser blocks fullscreen due to user-gesture
-      // requirements, capture the first interaction on the window to trigger it.
-      if (!this.isFullscreen()) {
-        const enterFS = () => {
-          if (!this.isFullscreen() && this.visible) {
-            this.requestFullscreen().catch(() => {});
-          }
-          window.removeEventListener("click", enterFS, { capture: true });
-          window.removeEventListener("touchstart", enterFS, { capture: true });
-        };
-        window.addEventListener("click", enterFS, { capture: true });
-        window.addEventListener("touchstart", enterFS, { capture: true });
-      }
     },
     // Starts a slideshow, if not already active.
     playSlideshow() {

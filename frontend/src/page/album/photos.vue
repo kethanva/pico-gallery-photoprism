@@ -63,6 +63,7 @@
 <script>
 import { Photo } from "model/photo";
 import Album from "model/album";
+import { fetchAllPhotos } from "common/kiosk";
 import Thumb from "model/thumb";
 import { ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -138,6 +139,9 @@ export default {
       routeName: routeName,
       collectionRoute: this.$route.meta?.collectionRoute ? this.$route.meta.collectionRoute : "albums",
       loading: true,
+      // True once the kiosk boot slideshow has been started for this page
+      // instance — otherwise every re-search would re-open the slideshow.
+      kioskBooted: false,
       lightbox: {
         results: [],
         loading: false,
@@ -323,6 +327,13 @@ export default {
         return false;
       }
 
+      // Kiosk: picking a photo from the album grid resumes the fullscreen
+      // slideshow starting at that photo (same contract as page/photos.vue).
+      if (this.$route.query.kiosk || this.$route.query.slideshow) {
+        this.$lightbox.openModels(Thumb.fromPhotos(this.results), index, this.model, true);
+        return true;
+      }
+
       const selected = this.results[index];
 
       // Do not open as stack if there is only one JPEG or if multiple pictures are selected.
@@ -339,6 +350,33 @@ export default {
       }
 
       return true;
+    },
+    // loadKioskSlideshow builds the boot slideshow for an album kiosk target:
+    // the WHOLE album in its own curated order (no shuffle — album order is
+    // deliberate), paginated past the grid's first batch so long albums play
+    // every photo before looping. Pagination lives in common/kiosk (shared
+    // with page/photos.vue, which shuffles the whole library instead).
+    loadKioskSlideshow() {
+      const base = {
+        s: this.uid,
+        merged: true,
+        order: this.sortOrder(),
+        reverse: this.sortReverse(),
+      };
+      if (this.staticFilter) {
+        Object.assign(base, this.staticFilter);
+      }
+
+      return fetchAllPhotos(base).then((all) => {
+        // Fall back to the already-loaded grid page if pagination yielded
+        // nothing (e.g. the backend rejected the request).
+        const source = all.length > 0 ? all : this.results;
+        if (!source || source.length === 0) {
+          return;
+        }
+
+        this.$lightbox.openModels(Thumb.fromPhotos(source), 0, this.model, true);
+      });
     },
     loadMore(force) {
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {
@@ -462,6 +500,15 @@ export default {
 
       Object.assign(query, this.filter);
 
+      // Keep the kiosk-mode markers across filter changes (see the matching
+      // block in page/photos.vue — dropping them would end kiosk mode).
+      if (this.$route.query.kiosk) {
+        query.kiosk = this.$route.query.kiosk;
+      }
+      if (this.$route.query.slideshow) {
+        query.slideshow = this.$route.query.slideshow;
+      }
+
       for (let key in query) {
         if (query[key] === undefined || !query[key]) {
           delete query[key];
@@ -567,9 +614,10 @@ export default {
           this.complete = response.count < this.batchSize;
           this.scrollDisabled = this.complete;
 
-          if ((this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
+          if (!this.kioskBooted && (this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
+            this.kioskBooted = true;
             this.$nextTick(() => {
-              this.$lightbox.openModels(Thumb.fromPhotos(this.results), 0, this.model, true);
+              this.loadKioskSlideshow();
             });
           }
 
