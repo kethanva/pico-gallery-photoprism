@@ -107,7 +107,10 @@ for cfg in /boot/firmware/config.txt /boot/config.txt; do
   elif [[ -f "$cfg" ]] && grep -q "Added by PicoGallery installer" "$cfg"; then
     info "Removing KMS boot settings appended to $cfg..."
     run cp -a "$cfg" "$cfg.picogallery-un.bak"
-    run sed -i '/# Added by PicoGallery installer/,$d' "$cfg"
+    # Delete exactly the block the installer appended (marker + dtoverlay line)
+    # — an open-ended /marker/,$d would also wipe anything the user or
+    # raspi-config appended after it.
+    run sed -i '/# Added by PicoGallery installer/,/^dtoverlay=vc4-kms-v3d$/d' "$cfg"
     ok "Reverted settings in $cfg"
   fi
   cmdline="${cfg%config.txt}cmdline.txt"

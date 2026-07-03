@@ -62,6 +62,13 @@ cmd_setup() {
 cmd_build() {
   echo "Building PhotoPrism UI (webpack)..."
   ( cd frontend && npm run build )
+  # webpack does NOT emit the SPA shell or runtime config into dist — the host
+  # (scripts/photoprism-host.mjs) serves frontend/dist/index.html and reads
+  # config.json, and install.sh / the release CI copy them in. Mirror that here
+  # so `./run.sh build` alone produces a servable dist (otherwise the host 500s
+  # on the missing shell).
+  [ -f frontend/index.html ] && cp frontend/index.html frontend/dist/index.html
+  [ -f frontend/config.json ] && cp frontend/config.json frontend/dist/config.json
   echo "✓ frontend/dist built"
 }
 
