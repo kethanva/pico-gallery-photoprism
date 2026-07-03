@@ -231,6 +231,11 @@ let _auxClickListener = null;
 // @keydown.f) so it fires regardless of where focus sits while the slideshow
 // runs with its controls hidden. See afterEnter for the full rationale.
 let _fKeyListener = null;
+// Max gap (ms) between two right-clicks to count as a double right-click for the
+// surface toggle. Kept in sync with the injected grid handler in photoprism-host.mjs.
+const DOUBLE_CLICK_MS = 400;
+// Timestamp of the previous right-click, for double right-click detection.
+let _lastContextMenuTs = 0;
 
 
 
@@ -406,22 +411,7 @@ export default {
         // raced that: onSlideshowNext() would see a null pswp and immediately
         // pause the slideshow, so the frame booted paused and not fullscreen.
         this.$event.subscribeOnce("lightbox.opened", () => {
-          this.playSlideshow();
-          this.requestFullscreen().catch(() => {});
-
-          // Fallback: if browser blocks fullscreen due to user-gesture requirements,
-          // capture the first click/touch interaction on the window to trigger it.
-          if (!this.isFullscreen()) {
-            const enterFS = () => {
-              if (!this.isFullscreen() && this.visible) {
-                this.requestFullscreen().catch(() => {});
-              }
-              window.removeEventListener("click", enterFS, { capture: true });
-              window.removeEventListener("touchstart", enterFS, { capture: true });
-            };
-            window.addEventListener("click", enterFS, { capture: true });
-            window.addEventListener("touchstart", enterFS, { capture: true });
-          }
+          this.enterFullscreenSlideshow();
         });
       }
     },
@@ -3251,6 +3241,32 @@ export default {
         this.pauseSlideshow();
       } else {
         this.playSlideshow();
+      }
+    },
+    // enterFullscreenSlideshow combines the two orthogonal operations the kiosk
+    // always wants together — on boot and on the "select a photo to resume"
+    // flow. They stay separate methods (one is usable without the other):
+    //   - playSlideshow(): the auto-advance loop + hidden controls (the part
+    //     that actually matters on the appliance).
+    //   - requestFullscreen(): browser fullscreen. A near no-op under Cage,
+    //     which already fullscreens the kiosk window, but keeps desktop parity
+    //     and flips virtualFullscreen for the toggle-button icon state.
+    enterFullscreenSlideshow() {
+      this.playSlideshow();
+      this.requestFullscreen().catch(() => {});
+
+      // Fallback: if the browser blocks fullscreen due to user-gesture
+      // requirements, capture the first interaction on the window to trigger it.
+      if (!this.isFullscreen()) {
+        const enterFS = () => {
+          if (!this.isFullscreen() && this.visible) {
+            this.requestFullscreen().catch(() => {});
+          }
+          window.removeEventListener("click", enterFS, { capture: true });
+          window.removeEventListener("touchstart", enterFS, { capture: true });
+        };
+        window.addEventListener("click", enterFS, { capture: true });
+        window.addEventListener("touchstart", enterFS, { capture: true });
       }
     },
     // Starts a slideshow, if not already active.
