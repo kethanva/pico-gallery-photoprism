@@ -110,7 +110,7 @@ for cfg in /boot/firmware/config.txt /boot/config.txt; do
     run sed -i '/# Added by PicoGallery installer/,$d' "$cfg"
     ok "Reverted settings in $cfg"
   fi
-  local cmdline="${cfg%config.txt}cmdline.txt"
+  cmdline="${cfg%config.txt}cmdline.txt"
   if [[ -f "$cmdline.picogallery.bak" ]]; then
     run mv "$cmdline.picogallery.bak" "$cmdline"
     ok "Restored $cmdline"
