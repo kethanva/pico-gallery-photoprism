@@ -2997,6 +2997,18 @@ export default {
             this.toggleControls();
           }
           break;
+        case "KeyF":
+          // Bound directly here (see @keydown.f.exact) because the global
+          // $view.onShortCut forwarder only relays Ctrl/Cmd combos and
+          // Escape (see view.js onKeyDown) — plain F never reaches
+          // onShortCut's own "KeyF" case above.
+          ev.preventDefault();
+          ev.stopPropagation();
+
+          if (this.canFullscreen) {
+            this.toggleFullscreen();
+          }
+          break;
       }
     },
     // Returns true when the given KeyboardEvent.code names a shortcut

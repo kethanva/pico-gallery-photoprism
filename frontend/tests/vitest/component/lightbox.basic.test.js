@@ -789,6 +789,32 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         });
       }
 
+      it("onKeyDown routes plain KeyF to toggleFullscreen (view.js only forwards Ctrl/Cmd+key to onShortCut)", () => {
+        const wrapper = mountLightbox();
+        const toggleFullscreen = vi.fn();
+        const ctx = {
+          visible: true,
+          sidebarVisible: false,
+          faceMarkers: makeFaceMarkers({ active: false }),
+          isShortcutDisabledInFaceMarkerMode: wrapper.vm.$options.methods.isShortcutDisabledInFaceMarkerMode,
+          $view: { isActive: () => true },
+          pauseSlideshow: vi.fn(),
+          toggleFullscreen,
+          canFullscreen: true,
+          model: {},
+          video: { controls: false, playing: false },
+          models: [{}],
+          index: 0,
+          $isRtl: false,
+        };
+        wrapper.vm.$options.methods.onKeyDown.call(ctx, {
+          code: "KeyF",
+          preventDefault: () => {},
+          stopPropagation: () => {},
+        });
+        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+      });
+
       it("onShortCut still routes Escape + KeyI even when face-marker mode is active", () => {
         const wrapper = mountLightbox();
         const onEscapeKey = vi.fn();
