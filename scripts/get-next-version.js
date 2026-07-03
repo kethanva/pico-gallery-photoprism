@@ -32,11 +32,24 @@ function main() {
   // 1. Get the latest tag by semver sorting all tags in the repository
   const allTags = run('git tag --list --sort=-v:refname').split('\n').map(t => t.trim()).filter(Boolean);
   let latestTag = allTags.length > 0 ? allTags[0] : '';
-  
-  // If we still don't have a tag, fallback to a safe baseline
+
+  // No tags at all (fresh repo, or the tags were deleted from the remote): base
+  // the next version on package.json and treat the FULL history as unreleased.
+  // The previous hardcoded fallback ("v2.7.3") named a tag that did not exist,
+  // which made `git log <tag>..HEAD` below fail silently, so the release step
+  // skipped on every push — no tarball was ever published and the appliance
+  // had nothing to download.
+  let baselineOnly = false;
   if (!latestTag) {
-    console.log('No tags found in repository history. Using fallback.');
-    latestTag = 'v2.7.3';
+    let pkgVersion = '0.0.0';
+    try {
+      pkgVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version || pkgVersion;
+    } catch {
+      // keep default
+    }
+    latestTag = `v${pkgVersion}`;
+    baselineOnly = true;
+    console.log(`No tags found in repository. Using package.json baseline ${latestTag}.`);
   }
 
   console.log(`Latest tag found: ${latestTag}`);
@@ -51,8 +64,11 @@ function main() {
     return;
   }
 
-  // 3. Get commits between latestTag and HEAD
-  const commitsStr = run(`git log ${latestTag}..HEAD --format=%s`);
+  // 3. Get the unreleased commits. Only use a `<tag>..HEAD` range when the tag
+  // actually resolves — with a baseline "tag" (or a deleted ref) that range
+  // errors out and would be indistinguishable from "no new commits".
+  const tagExists = !baselineOnly && run(`git rev-parse -q --verify refs/tags/${latestTag}`) !== '';
+  const commitsStr = tagExists ? run(`git log ${latestTag}..HEAD --format=%s`) : run('git log --format=%s');
   if (!commitsStr) {
     console.log('No new commits found since the latest tag. Skipping release.');
     setOutput('skip', 'true');
