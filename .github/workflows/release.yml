@@ -54,7 +54,7 @@ jobs:
           
           # Copy scripts and configs
           cp -r scripts picogallery-release/
-          cp install.sh run.sh config.example.toml README.md picogallery-release/
+          cp install.sh uninstall.sh run.sh config.example.toml README.md picogallery-release/
           
           # Tar everything up
           tar -czf picogallery-release.tar.gz -C picogallery-release .
