@@ -12,3 +12,6 @@ dist/
 /server/cache/
 /docker/.data/
 deploy-server/
+
+# Local secrets — PhotoPrism credentials live here; never commit.
+config.local.toml
