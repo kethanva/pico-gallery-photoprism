@@ -17,7 +17,6 @@
     @keydown.space.exact="onKeyDown"
     @keydown.left.exact="onKeyDown"
     @keydown.right.exact="onKeyDown"
-    @keydown.f.exact="onKeyDown"
     @keydown.esc.exact.stop="onEscapeKey"
     @keydown.enter.exact="onEnterKey"
     @keydown.tab="onTabKey"
@@ -227,6 +226,11 @@ let _lastEscapeEvent = null;
 let _contextMenuListener = null;
 // document-level auxclick (middle mouse) listener for single-middle-click fullscreen toggle.
 let _auxClickListener = null;
+// document-level keydown capture listener for the F surface-toggle; attached on
+// dialog open, removed on close. Bound on document (not via the template
+// @keydown.f) so it fires regardless of where focus sits while the slideshow
+// runs with its controls hidden. See afterEnter for the full rationale.
+let _fKeyListener = null;
 
 
 
@@ -395,7 +399,13 @@ export default {
       }
 
       if (data.autoplay) {
-        this.$nextTick(() => {
+        // Defer autoplay until PhotoSwipe has finished initializing. Rendering
+        // is deferred to the "lightbox.enter" event (see showThumbs), and pswp
+        // only exists once "lightbox.opened" is published from its afterInit
+        // hook (onLightboxOpened). Starting the slideshow in a bare $nextTick
+        // raced that: onSlideshowNext() would see a null pswp and immediately
+        // pause the slideshow, so the frame booted paused and not fullscreen.
+        this.$event.subscribeOnce("lightbox.opened", () => {
           this.playSlideshow();
           this.requestFullscreen().catch(() => {});
 
@@ -466,9 +476,17 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
-      // Attach a document-level contextmenu listener (capture phase) so single
-      // right-click works even though Vuetify teleports the dialog overlay outside
-      // the component's DOM tree (where @contextmenu.capture on v-dialog won't fire).
+      // Surface toggle — leave the immersive slideshow for the PhotoPrism browse
+      // UI. Right-click and F both close the lightbox back to the grid; the
+      // reverse hop (grid → slideshow) is the host-injected script in
+      // photoprism-host.mjs. All listeners are document-level capture because:
+      //   1. Vuetify teleports the dialog overlay outside this component's DOM
+      //      tree, so @contextmenu / @keydown bound on the v-dialog never fire.
+      //   2. During autoplay the controls are hidden and focus sits on
+      //      document.body, so a component-scoped @keydown.f would never fire.
+      //   3. Capture + preventDefault suppresses the host script's own grid
+      //      handlers (bubble phase, they bail on defaultPrevented) so a single
+      //      press does not both close the lightbox AND re-navigate to it.
       if (!_contextMenuListener) {
         _contextMenuListener = (ev) => {
           ev.preventDefault();
@@ -476,6 +494,18 @@ export default {
           this.close();
         };
         document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
+      }
+      if (!_fKeyListener) {
+        _fKeyListener = (ev) => {
+          if (ev.key !== "f" && ev.key !== "F") return;
+          if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+          const t = ev.target;
+          if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.close();
+        };
+        document.addEventListener("keydown", _fKeyListener, { capture: true });
       }
       // Attach a document-level auxclick listener for single middle-click fullscreen toggle.
       if (!_auxClickListener) {
@@ -493,6 +523,12 @@ export default {
       if (_contextMenuListener) {
         document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
         _contextMenuListener = null;
+      }
+      // Remove the document-level F surface-toggle listener so the host-injected
+      // grid handler owns F once we are back on the PhotoPrism UI.
+      if (_fKeyListener) {
+        document.removeEventListener("keydown", _fKeyListener, { capture: true });
+        _fKeyListener = null;
       }
       // Remove the document-level auxclick listener.
       if (_auxClickListener) {
@@ -2995,18 +3031,6 @@ export default {
             this.toggleVideo();
           } else {
             this.toggleControls();
-          }
-          break;
-        case "KeyF":
-          // Bound directly here (see @keydown.f.exact) because the global
-          // $view.onShortCut forwarder only relays Ctrl/Cmd combos and
-          // Escape (see view.js onKeyDown) — plain F never reaches
-          // onShortCut's own "KeyF" case above.
-          ev.preventDefault();
-          ev.stopPropagation();
-
-          if (this.canFullscreen) {
-            this.toggleFullscreen();
           }
           break;
       }

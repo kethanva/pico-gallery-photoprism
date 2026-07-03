@@ -789,9 +789,10 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         });
       }
 
-      it("onKeyDown routes plain KeyF to toggleFullscreen (view.js only forwards Ctrl/Cmd+key to onShortCut)", () => {
+      it("onKeyDown no longer handles KeyF (surface toggle moved to the document-level listener in afterEnter)", () => {
         const wrapper = mountLightbox();
         const toggleFullscreen = vi.fn();
+        const close = vi.fn();
         const ctx = {
           visible: true,
           sidebarVisible: false,
@@ -800,6 +801,7 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
           $view: { isActive: () => true },
           pauseSlideshow: vi.fn(),
           toggleFullscreen,
+          close,
           canFullscreen: true,
           model: {},
           video: { controls: false, playing: false },
@@ -809,10 +811,39 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         };
         wrapper.vm.$options.methods.onKeyDown.call(ctx, {
           code: "KeyF",
+          key: "f",
           preventDefault: () => {},
           stopPropagation: () => {},
         });
-        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(toggleFullscreen).not.toHaveBeenCalled();
+        expect(close).not.toHaveBeenCalled();
+      });
+
+      it("afterEnter attaches a document-level F listener that closes the lightbox (surface toggle), and afterLeave removes it", () => {
+        const wrapper = mountLightbox();
+        const close = vi.fn();
+        const ctx = {
+          $event: { publish: vi.fn() },
+          $emit: vi.fn(),
+          $view: { leave: vi.fn() },
+          close,
+          toggleFullscreen: vi.fn(),
+        };
+
+        wrapper.vm.$options.methods.afterEnter.call(ctx);
+
+        // Plain F closes to the PhotoPrism UI regardless of focus.
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
+        expect(close).toHaveBeenCalledTimes(1);
+
+        // Modifier combos and typing targets are ignored.
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
+        expect(close).toHaveBeenCalledTimes(1);
+
+        // afterLeave detaches it so the host-injected grid handler owns F again.
+        wrapper.vm.$options.methods.afterLeave.call(ctx);
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
+        expect(close).toHaveBeenCalledTimes(1);
       });
 
       it("onShortCut still routes Escape + KeyI even when face-marker mode is active", () => {
