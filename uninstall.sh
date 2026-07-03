@@ -66,6 +66,9 @@ run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /et
 run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
 run rm -f "$SEAT_UDEV_RULE"
 run udevadm control --reload 2>/dev/null || true
+run udevadm trigger --subsystem-match=input --action=change 2>/dev/null || true
+run udevadm trigger --subsystem-match=usb --action=change 2>/dev/null || true
+run udevadm settle --timeout=10 2>/dev/null || true
 run systemctl daemon-reload
 
 # 3. Restore console login
@@ -73,11 +76,17 @@ info "Restoring tty1 console login..."
 run systemctl enable --now getty@tty1.service 2>/dev/null || true
 
 # 4. Swap file
-info "Removing build swapfile..."
+info "Removing build swapfile or reverting swap size..."
 if [[ -f /var/swap.picogallery ]]; then
   run swapoff /var/swap.picogallery 2>/dev/null || true
   run sed -i '\#/var/swap.picogallery#d' /etc/fstab 2>/dev/null || true
   run rm -f /var/swap.picogallery
+fi
+if [[ -f /etc/dphys-swapfile ]] && grep -q '^CONF_SWAPSIZE=1024' /etc/dphys-swapfile; then
+  info "Reverting /etc/dphys-swapfile size to 100..."
+  run sed -i 's/^CONF_SWAPSIZE=1024/CONF_SWAPSIZE=100/' /etc/dphys-swapfile
+  run dphys-swapfile setup 2>/dev/null || true
+  run dphys-swapfile swapon 2>/dev/null || true
 fi
 
 # 5. Configuration and Cache
@@ -89,12 +98,17 @@ info "Removing system users..."
 id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
 id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
 
-# 7. Boot Config Backups
-info "Restoring boot configuration backups if available..."
+# 7. Boot Config Backups and Settings
+info "Restoring boot configuration backups or settings if available..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
   if [[ -f "$cfg.picogallery.bak" ]]; then
     run mv "$cfg.picogallery.bak" "$cfg"
-    ok "Restored $cfg"
+    ok "Restored $cfg from backup"
+  elif [[ -f "$cfg" ]] && grep -q "Added by PicoGallery installer" "$cfg"; then
+    info "Removing KMS boot settings appended to $cfg..."
+    run cp -a "$cfg" "$cfg.picogallery-un.bak"
+    run sed -i '/# Added by PicoGallery installer/,$d' "$cfg"
+    ok "Reverted settings in $cfg"
   fi
   local cmdline="${cfg%config.txt}cmdline.txt"
   if [[ -f "$cmdline.picogallery.bak" ]]; then
