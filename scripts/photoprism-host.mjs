@@ -74,23 +74,28 @@ const READONLY_FEATURES_OFF = [
 // lightbox's own capture/stop-propagation handlers win while it is open.
 // Everything routes through /__slideshow → 302, same as the link.
 const SLIDESHOW_LINK =
-  '<a href="/__slideshow" title="Back to the slideshow (F or right-click)" ' +
+  '<a href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
   'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
   'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
   "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
   'background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);' +
   'border-radius:9999px;text-decoration:none;">&#9654; Slideshow</a>' +
   '<script>(function(){' +
+  'var lastCtx=0;' +
   'function go(){window.location.assign("/__slideshow");}' +
   'function typing(t){return t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable);}' +
   'document.addEventListener("keydown",function(e){' +
   'if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;' +
   'if((e.key==="f"||e.key==="F")&&!typing(e.target)){e.preventDefault();go();}' +
   '});' +
+  // Double right-click (two contextmenu events within 400ms) returns to the
+  // slideshow; a lone right-click is swallowed so it does not pop the browser
+  // menu. Threshold mirrors DOUBLE_CLICK_MS in lightbox.vue.
   'document.addEventListener("contextmenu",function(e){' +
   'if(e.defaultPrevented)return;' +
   'e.preventDefault();' +
-  'go();' +
+  'var now=Date.now();' +
+  'if(now-lastCtx<=400){lastCtx=0;go();}else{lastCtx=now;}' +
   '});' +
   '})();</script>';
 

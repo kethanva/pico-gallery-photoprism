@@ -846,6 +846,47 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         expect(close).toHaveBeenCalledTimes(1);
       });
 
+      it("afterEnter: double right-click closes to the PhotoPrism UI; a lone right-click does not", () => {
+        const wrapper = mountLightbox();
+        const close = vi.fn();
+        const ctx = {
+          $event: { publish: vi.fn() },
+          $emit: vi.fn(),
+          $view: { leave: vi.fn() },
+          close,
+          toggleFullscreen: vi.fn(),
+        };
+
+        wrapper.vm.$options.methods.afterEnter.call(ctx);
+
+        // First right-click: browser menu suppressed, but no exit yet.
+        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+        expect(close).not.toHaveBeenCalled();
+
+        // Second right-click within the window: exit to the grid.
+        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+        expect(close).toHaveBeenCalledTimes(1);
+
+        wrapper.vm.$options.methods.afterLeave.call(ctx);
+      });
+
+      it("enterFullscreenSlideshow runs playSlideshow and requestFullscreen together", () => {
+        const wrapper = mountLightbox();
+        const playSlideshow = vi.fn();
+        const requestFullscreen = vi.fn(() => Promise.resolve());
+        const ctx = {
+          playSlideshow,
+          requestFullscreen,
+          isFullscreen: () => true, // already fullscreen -> skip the gesture fallback
+          visible: true,
+        };
+
+        wrapper.vm.$options.methods.enterFullscreenSlideshow.call(ctx);
+
+        expect(playSlideshow).toHaveBeenCalledTimes(1);
+        expect(requestFullscreen).toHaveBeenCalledTimes(1);
+      });
+
       it("onShortCut still routes Escape + KeyI even when face-marker mode is active", () => {
         const wrapper = mountLightbox();
         const onEscapeKey = vi.fn();

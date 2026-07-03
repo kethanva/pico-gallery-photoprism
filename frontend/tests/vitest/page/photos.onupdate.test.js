@@ -11,6 +11,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import PPagePhotos from "page/photos.vue";
 import PAlbumPhotos from "page/album/photos.vue";
 import { Photo } from "model/photo";
+import Thumb from "model/thumb";
 
 // Captures the surface of `this` that onUpdate touches. Lets us
 // assert dirty/complete transitions without instantiating Vue.
@@ -76,6 +77,112 @@ describe("page/photos.vue onUpdate", () => {
     onUpdate.call(stub, "photos.unknown", { entities: ["uid-1"] });
 
     expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("page/photos.vue kiosk slideshow", () => {
+  const openPhoto = PPagePhotos.methods.openPhoto;
+  const loadKioskSlideshow = PPagePhotos.methods.loadKioskSlideshow;
+
+  let fromPhotosSpy;
+  let searchSpy;
+  beforeEach(() => {
+    // Decouple from Thumb internals: passthrough marker preserving UID identity.
+    fromPhotosSpy = vi.spyOn(Thumb, "fromPhotos").mockImplementation((arr) => arr.map((p) => ({ uid: p.UID })));
+  });
+  afterEach(() => {
+    fromPhotosSpy?.mockRestore();
+    searchSpy?.mockRestore();
+  });
+
+  function kioskStub(extra = {}) {
+    return {
+      loading: false,
+      listen: true,
+      selection: [],
+      lightbox: { loading: false },
+      results: [{ UID: "p1" }, { UID: "p2" }, { UID: "p3" }],
+      filter: {},
+      staticFilter: null,
+      $route: { query: { kiosk: "true" } },
+      $lightbox: { openModels: vi.fn(), openView: vi.fn() },
+      ...extra,
+    };
+  }
+
+  it("openPhoto resumes autoplay from the selected index in kiosk mode", () => {
+    const stub = kioskStub();
+
+    const ok = openPhoto.call(stub, 2);
+
+    expect(ok).toBe(true);
+    expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
+    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    expect(index).toBe(2);
+    expect(autoplay).toBe(true);
+    expect(models).toHaveLength(3);
+    // Not routed through the normal openView path.
+    expect(stub.$lightbox.openView).not.toHaveBeenCalled();
+  });
+
+  it("openPhoto keeps the normal openView path outside kiosk mode", () => {
+    const stub = kioskStub({ $route: { query: {} } });
+    stub.results = [{ UID: "p1", jpegFiles: () => [] }];
+
+    const ok = openPhoto.call(stub, 0);
+
+    expect(ok).toBe(true);
+    expect(stub.$lightbox.openView).toHaveBeenCalledTimes(1);
+    expect(stub.$lightbox.openModels).not.toHaveBeenCalled();
+  });
+
+  it("loadKioskSlideshow fetches one page in a stable order, then autoplays", async () => {
+    const stub = kioskStub();
+    searchSpy = vi
+      .spyOn(Photo, "search")
+      .mockResolvedValueOnce({ models: [{ UID: "a" }, { UID: "b" }], count: 2, limit: 1000 });
+
+    await loadKioskSlideshow.call(stub);
+
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+    const params = searchSpy.mock.calls[0][0];
+    // Stable order (offset-paginating order=random would return duplicates).
+    expect(params.order).toBe("added");
+    expect(params.offset).toBe(0);
+
+    expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
+    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    expect(autoplay).toBe(true);
+    expect(index).toBe(0);
+    // Whole library present, order-independent (shuffled).
+    expect(models.map((m) => m.uid).sort()).toEqual(["a", "b"]);
+  });
+
+  it("loadKioskSlideshow paginates until the library is exhausted", async () => {
+    const stub = kioskStub();
+    const fullPage = { models: Array.from({ length: 1000 }, (_, i) => ({ UID: `p${i}` })), count: 1000, limit: 1000 };
+    const lastPage = { models: [{ UID: "last" }], count: 1, limit: 1000 };
+    searchSpy = vi.spyOn(Photo, "search").mockResolvedValueOnce(fullPage).mockResolvedValueOnce(lastPage);
+
+    await loadKioskSlideshow.call(stub);
+
+    expect(searchSpy).toHaveBeenCalledTimes(2);
+    // Second request continues at the next offset — no dupes, no gaps.
+    expect(searchSpy.mock.calls[1][0].offset).toBe(1000);
+    const [models] = stub.$lightbox.openModels.mock.calls[0];
+    expect(models).toHaveLength(1001);
+  });
+
+  it("loadKioskSlideshow falls back to the loaded grid page if pagination yields nothing", async () => {
+    const stub = kioskStub();
+    searchSpy = vi.spyOn(Photo, "search").mockRejectedValue(new Error("offline"));
+
+    await loadKioskSlideshow.call(stub);
+
+    expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
+    const [models, , , autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    expect(autoplay).toBe(true);
+    expect(models).toHaveLength(3); // the 3 grid results
   });
 });
 

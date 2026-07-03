@@ -481,7 +481,16 @@ export default {
         _contextMenuListener = (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          this.close();
+          // Double right-click exits to the PhotoPrism UI; a lone right-click
+          // only suppresses the browser menu (and pauses the slideshow via the
+          // pointerdown capture). Two contextmenu events inside the window win.
+          const now = Date.now();
+          if (now - _lastContextMenuTs <= DOUBLE_CLICK_MS) {
+            _lastContextMenuTs = 0;
+            this.close();
+          } else {
+            _lastContextMenuTs = now;
+          }
         };
         document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
       }
