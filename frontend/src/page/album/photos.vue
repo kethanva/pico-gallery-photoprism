@@ -1,6 +1,7 @@
 <template>
   <div ref="page" tabindex="-1" class="p-page p-page-album-photos" :class="$config.aclClasses('photos')">
     <p-album-toolbar
+      v-if="!kioskMode"
       ref="toolbar"
       :filter="filter"
       :album="model"
@@ -153,6 +154,10 @@ export default {
     };
   },
   computed: {
+    // Kiosk mode hides the album search/view toolbar so the frame shows only photos.
+    kioskMode: function () {
+      return !!(this.$route.query.kiosk || this.$route.query.slideshow);
+    },
     selectMode: function () {
       return this.selection.length > 0;
     },
