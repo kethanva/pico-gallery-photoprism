@@ -25,24 +25,30 @@
         console.warn("Failed to load config.json, using defaults:", e);
       }
 
-      var serverUrl = "";
       var windowTitle = "Photo Frame";
       var appConfig = {};
       if (configReq.status === 200) {
         appConfig = JSON.parse(configReq.responseText);
-        serverUrl = (appConfig.serverUrl || "").replace(/\/+$/, "");
         windowTitle = appConfig.windowTitle || windowTitle;
       }
 
       document.title = windowTitle;
 
-      // Inject global config object expected by PhotoPrism frontend
+      // The SPA is always served by the PhotoPrism host (scripts/photoprism-host.mjs),
+      // which reverse-proxies /api/v1 to the real PhotoPrism backend, so the API base
+      // MUST be same-origin and relative. The old code derived it from config.json's
+      // `serverUrl`; the committed value points at the deleted :8188 @pico server, and
+      // an absolute base makes every API / websocket / thumbnail call bypass the proxy
+      // and hit that dead host directly. The host masks this today by forcing
+      // serverUrl:"" in the config.json it serves, but the SPA should not depend on
+      // that rewrite. Hardcode relative here; `serverUrl` now configures ONLY the
+      // host's proxy-target fallback.
       window.__CONFIG__ = {
-        baseUri: serverUrl,
+        baseUri: "",
         staticUri: "static",
-        apiUri: serverUrl + "/api/v1",
-        contentUri: serverUrl + "/api/v1",
-        videoUri: serverUrl + "/api/v1",
+        apiUri: "/api/v1",
+        contentUri: "/api/v1",
+        videoUri: "/api/v1",
         previewToken: "public",
         downloadToken: "public",
         theme: "default",
