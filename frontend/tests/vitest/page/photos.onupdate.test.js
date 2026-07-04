@@ -136,69 +136,32 @@ describe("page/photos.vue kiosk slideshow", () => {
     expect(stub.$lightbox.openModels).not.toHaveBeenCalled();
   });
 
-  it("loadKioskSlideshow fetches one page in a stable order, then autoplays", async () => {
+  it("loadKioskSlideshow plays the already-loaded grid page — shuffled, autoplay, no re-fetch", () => {
     const stub = kioskStub();
-    searchSpy = vi
-      .spyOn(Photo, "search")
-      .mockResolvedValueOnce({ models: [{ UID: "a" }, { UID: "b" }], count: 2, limit: 1000 });
+    searchSpy = vi.spyOn(Photo, "search");
 
-    await loadKioskSlideshow.call(stub);
+    loadKioskSlideshow.call(stub);
 
-    expect(searchSpy).toHaveBeenCalledTimes(1);
-    const params = searchSpy.mock.calls[0][0];
-    // Stable order (offset-paginating order=random would return duplicates).
-    expect(params.order).toBe("added");
-    expect(params.offset).toBe(0);
-
+    // The boot slideshow must NOT page the whole library up front — that froze
+    // the 512 MB Pi Zero 2 W main thread before the first slide. It plays the
+    // grid page search() already loaded (this.results).
+    expect(searchSpy).not.toHaveBeenCalled();
     expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
     const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
     expect(autoplay).toBe(true);
     expect(index).toBe(0);
-    // Whole library present, order-independent (shuffled).
-    expect(models.map((m) => m.uid).sort()).toEqual(["a", "b"]);
+    // The three loaded grid photos, order-independent (shuffled).
+    expect(models.map((m) => m.uid).sort()).toEqual(["p1", "p2", "p3"]);
   });
 
-  it("loadKioskSlideshow paginates until the library is exhausted", async () => {
-    const stub = kioskStub();
-    const fullPage = { models: Array.from({ length: 1000 }, (_, i) => ({ UID: `p${i}` })), count: 1000, limit: 1000 };
-    const lastPage = { models: [{ UID: "last" }], count: 1, limit: 1000 };
-    searchSpy = vi.spyOn(Photo, "search").mockResolvedValueOnce(fullPage).mockResolvedValueOnce(lastPage);
+  it("loadKioskSlideshow no-ops when no grid page is loaded yet", () => {
+    const stub = kioskStub({ results: [] });
+    searchSpy = vi.spyOn(Photo, "search");
 
-    await loadKioskSlideshow.call(stub);
+    loadKioskSlideshow.call(stub);
 
-    expect(searchSpy).toHaveBeenCalledTimes(2);
-    // Second request continues at the next offset — no dupes, no gaps.
-    expect(searchSpy.mock.calls[1][0].offset).toBe(1000);
-    const [models] = stub.$lightbox.openModels.mock.calls[0];
-    expect(models).toHaveLength(1001);
-  });
-
-  it("loadKioskSlideshow falls back to the loaded grid page if pagination yields nothing", async () => {
-    const stub = kioskStub();
-    searchSpy = vi.spyOn(Photo, "search").mockRejectedValue(new Error("offline"));
-
-    await loadKioskSlideshow.call(stub);
-
-    expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
-    const [models, , , autoplay] = stub.$lightbox.openModels.mock.calls[0];
-    expect(autoplay).toBe(true);
-    expect(models).toHaveLength(3); // the 3 grid results
-  });
-
-  it("loadKioskSlideshow keeps paginating when the backend clamps the page size", async () => {
-    // A backend applying X-Limit=500 to a count=1000 request must not look
-    // like an exhausted library after the first page.
-    const stub = kioskStub();
-    const clampedPage = { models: Array.from({ length: 500 }, (_, i) => ({ UID: `c${i}` })), count: 500, limit: 500 };
-    const lastPage = { models: Array.from({ length: 200 }, (_, i) => ({ UID: `d${i}` })), count: 200, limit: 500 };
-    searchSpy = vi.spyOn(Photo, "search").mockResolvedValueOnce(clampedPage).mockResolvedValueOnce(lastPage);
-
-    await loadKioskSlideshow.call(stub);
-
-    expect(searchSpy).toHaveBeenCalledTimes(2);
-    expect(searchSpy.mock.calls[1][0].offset).toBe(500);
-    const [models] = stub.$lightbox.openModels.mock.calls[0];
-    expect(models).toHaveLength(700);
+    expect(searchSpy).not.toHaveBeenCalled();
+    expect(stub.$lightbox.openModels).not.toHaveBeenCalled();
   });
 
   it("updateQuery preserves the kiosk marker across filter changes", () => {
@@ -255,31 +218,28 @@ describe("page/album/photos.vue kiosk slideshow", () => {
     expect(stub.$lightbox.openView).not.toHaveBeenCalled();
   });
 
-  it("loadKioskSlideshow plays the whole album in curated order — no shuffle", async () => {
+  it("loadKioskSlideshow plays the already-loaded album page in curated order — no shuffle, no re-fetch", () => {
     const stub = {
       uid: "album-1",
       staticFilter: null,
-      results: [],
+      results: [{ UID: "a" }, { UID: "b" }, { UID: "c" }],
       model: { UID: "album-1" },
       sortOrder: () => "oldest",
       sortReverse: () => false,
       $lightbox: { openModels: vi.fn() },
     };
-    searchSpy = vi
-      .spyOn(Photo, "search")
-      .mockResolvedValueOnce({ models: [{ UID: "a" }, { UID: "b" }, { UID: "c" }], count: 3, limit: 1000 });
+    searchSpy = vi.spyOn(Photo, "search");
 
-    await loadKioskSlideshow.call(stub);
+    loadKioskSlideshow.call(stub);
 
-    const params = searchSpy.mock.calls[0][0];
-    expect(params.s).toBe("album-1");
-    expect(params.order).toBe("oldest");
-
+    // No whole-album re-fetch on boot (that froze the Pi Zero 2 W); it plays the
+    // grid page search() already loaded (this.results).
+    expect(searchSpy).not.toHaveBeenCalled();
     const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
     expect(autoplay).toBe(true);
     expect(index).toBe(0);
     expect(collection).toBe(stub.model);
-    // Curated album order preserved exactly.
+    // Curated album order preserved exactly (no shuffle).
     expect(models.map((m) => m.uid)).toEqual(["a", "b", "c"]);
   });
 });

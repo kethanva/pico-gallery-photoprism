@@ -64,7 +64,6 @@
 <script>
 import { Photo } from "model/photo";
 import Album from "model/album";
-import { fetchAllPhotos } from "common/kiosk";
 import Thumb from "model/thumb";
 import { ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -356,32 +355,21 @@ export default {
 
       return true;
     },
-    // loadKioskSlideshow builds the boot slideshow for an album kiosk target:
-    // the WHOLE album in its own curated order (no shuffle — album order is
-    // deliberate), paginated past the grid's first batch so long albums play
-    // every photo before looping. Pagination lives in common/kiosk (shared
-    // with page/photos.vue, which shuffles the whole library instead).
+    // loadKioskSlideshow starts the album boot slideshow from the grid page that
+    // search() has ALREADY loaded (Photo.batchSize() photos), in the album's
+    // curated order (no shuffle — album order is deliberate), autoplaying. Like
+    // the library page it no longer re-fetches the whole album first: that paged
+    // fetch + building a Thumb per photo froze the 512 MB Pi Zero 2 W for
+    // seconds before the first slide, swallowing taps and stalling fullscreen.
+    // PhotoSwipe lazy-loads each image, so the already-loaded page is all the
+    // frame needs to start.
     loadKioskSlideshow() {
-      const base = {
-        s: this.uid,
-        merged: true,
-        order: this.sortOrder(),
-        reverse: this.sortReverse(),
-      };
-      if (this.staticFilter) {
-        Object.assign(base, this.staticFilter);
+      const source = this.results;
+      if (!source || source.length === 0) {
+        return;
       }
 
-      return fetchAllPhotos(base).then((all) => {
-        // Fall back to the already-loaded grid page if pagination yielded
-        // nothing (e.g. the backend rejected the request).
-        const source = all.length > 0 ? all : this.results;
-        if (!source || source.length === 0) {
-          return;
-        }
-
-        this.$lightbox.openModels(Thumb.fromPhotos(source), 0, this.model, true);
-      });
+      this.$lightbox.openModels(Thumb.fromPhotos(source), 0, this.model, true);
     },
     loadMore(force) {
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {

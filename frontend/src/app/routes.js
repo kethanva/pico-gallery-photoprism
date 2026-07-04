@@ -23,25 +23,35 @@ Additional information can be found in our Developer Guide:
 
 */
 
+// Appliance perf (Pi Zero 2 W, 512 MB): the frame's kiosk path only ever reaches
+// the photo grid and the album grid, so those two pages alone are compiled into
+// the boot bundle. Every other page is a route-level lazy import — webpack emits
+// each as its own chunk that the frame never downloads (the nav rail is hidden
+// in kiosk mode and the read-only host ACL hides the controls that route there).
+// This strips the parse/execute cost of ~15 unused pages (settings, admin,
+// people, the maplibre-backed places map, labels, discover, …) out of the boot
+// path on the weak CPU WITHOUT removing any feature: navigating to a route still
+// loads it on demand. The route table below is unchanged — Vue Router accepts a
+// `() => import()` factory anywhere a component object is accepted.
 import Photos from "page/photos.vue";
-import Albums from "page/albums.vue";
 import AlbumPhotos from "page/album/photos.vue";
-import Places from "page/places.vue";
-import Browse from "page/library/browse.vue";
-import Errors from "page/library/errors.vue";
-import Labels from "page/labels.vue";
-import People from "page/people.vue";
-import Library from "page/library.vue";
-import Settings from "page/settings.vue";
-import Admin from "page/admin.vue";
-import Cluster from "page/cluster.vue";
-import Login from "page/auth/login.vue";
-import Instances from "page/auth/instances.vue";
-import Discover from "page/discover.vue";
-import About from "page/about/about.vue";
-import License from "page/about/license.vue";
-import Help from "page/help.vue";
-import Connect from "page/connect.vue";
+const Albums = () => import(/* webpackChunkName: "page-albums" */ "page/albums.vue");
+const Places = () => import(/* webpackChunkName: "page-places" */ "page/places.vue");
+const Browse = () => import(/* webpackChunkName: "page-browse" */ "page/library/browse.vue");
+const Errors = () => import(/* webpackChunkName: "page-errors" */ "page/library/errors.vue");
+const Labels = () => import(/* webpackChunkName: "page-labels" */ "page/labels.vue");
+const People = () => import(/* webpackChunkName: "page-people" */ "page/people.vue");
+const Library = () => import(/* webpackChunkName: "page-library" */ "page/library.vue");
+const Settings = () => import(/* webpackChunkName: "page-settings" */ "page/settings.vue");
+const Admin = () => import(/* webpackChunkName: "page-admin" */ "page/admin.vue");
+const Cluster = () => import(/* webpackChunkName: "page-cluster" */ "page/cluster.vue");
+const Login = () => import(/* webpackChunkName: "page-login" */ "page/auth/login.vue");
+const Instances = () => import(/* webpackChunkName: "page-instances" */ "page/auth/instances.vue");
+const Discover = () => import(/* webpackChunkName: "page-discover" */ "page/discover.vue");
+const About = () => import(/* webpackChunkName: "page-about" */ "page/about/about.vue");
+const License = () => import(/* webpackChunkName: "page-license" */ "page/about/license.vue");
+const Help = () => import(/* webpackChunkName: "page-help" */ "page/help.vue");
+const Connect = () => import(/* webpackChunkName: "page-connect" */ "page/connect.vue");
 import { $gettext, $pgettext } from "common/gettext";
 import { $config, $session } from "./session";
 

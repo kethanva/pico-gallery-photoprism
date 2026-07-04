@@ -65,7 +65,7 @@
 <script>
 import { Photo } from "model/photo";
 import { $gettext } from "common/gettext";
-import { fetchAllPhotos, shuffled } from "common/kiosk";
+import { shuffled } from "common/kiosk";
 import Thumb from "model/thumb";
 import { ACTION_CREATED, ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -498,39 +498,22 @@ export default {
 
       return true;
     },
-    // loadKioskSlideshow builds the boot slideshow: the WHOLE library, in a
-    // random order, with no photo repeated until every one has been shown.
-    // The lightweight Thumb metadata for the whole library is accumulated (a
-    // few MB; PhotoSwipe lazy-loads the actual images per slide, so only
-    // nearby photos cost real memory on the 512MB Pi), shuffled once
-    // client-side, then handed to the lightbox with autoplay. When the
-    // slideshow reaches the end it loops — i.e. it only ever repeats after the
-    // entire library has been displayed. Pagination/shuffle live in
-    // common/kiosk (shared with the album page).
+    // loadKioskSlideshow starts the boot slideshow from the grid page that
+    // search() has ALREADY loaded (Photo.batchSize() photos), shuffled and
+    // autoplaying. It intentionally does NOT re-fetch the whole library first:
+    // on the 512 MB Pi Zero 2 W that paged fetch pulled thousands of photos and
+    // built a Thumb (a URL per thumbnail size) for each one synchronously before
+    // the first slide — seconds of frozen main thread that swallowed taps and
+    // stalled the jump to fullscreen. A freshly shuffled page is ample variety
+    // for a frame (PhotoSwipe lazy-loads each image) and the slideshow now
+    // appears effectively instantly; the shuffle varies the order across boots.
     loadKioskSlideshow() {
-      // Library-scoping filters (private/quality) are preserved, but the grid's
-      // order/reverse/q are dropped so the slideshow spans the whole library.
-      const base = { merged: true, order: "added" };
-      if (this.filter?.public) {
-        base.public = this.filter.public;
-      }
-      if (this.filter?.quality) {
-        base.quality = this.filter.quality;
-      }
-      if (this.staticFilter) {
-        Object.assign(base, this.staticFilter);
+      const source = this.results;
+      if (!source || source.length === 0) {
+        return;
       }
 
-      return fetchAllPhotos(base).then((all) => {
-        // Fall back to the already-loaded grid page if pagination yielded
-        // nothing (e.g. the backend rejected the request).
-        const source = all.length > 0 ? all : this.results;
-        if (!source || source.length === 0) {
-          return;
-        }
-
-        this.$lightbox.openModels(shuffled(Thumb.fromPhotos(source)), 0, null, true);
-      });
+      this.$lightbox.openModels(shuffled(Thumb.fromPhotos(source)), 0, null, true);
     },
     loadMore(force) {
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {

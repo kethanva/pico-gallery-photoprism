@@ -163,6 +163,7 @@ import Lightbox from "photoswipe/lightbox";
 import Captions from "common/captions";
 import $api from "common/api";
 import $fullscreen from "common/fullscreen";
+import { ensureHls } from "common/hls";
 import Thumb from "model/thumb";
 import Collection from "model/collection";
 import { Photo } from "model/photo";
@@ -1088,6 +1089,12 @@ export default {
       const model = data.model;
       const format = data.format;
       const posterSrc = data.msrc;
+
+      // Ready window.Hls on demand. hls.js is not in the boot bundle (common/hls);
+      // opening a video is the first moment it could be needed. The source path
+      // below is native <source>, so this is fire-and-forget — a photo-only
+      // frame never triggers it and so never downloads hls.js.
+      ensureHls();
 
       // See https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement.
       const video = document.createElement("video");

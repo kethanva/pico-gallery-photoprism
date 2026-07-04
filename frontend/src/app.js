@@ -50,7 +50,6 @@ import VueSanitize from "vue-sanitize-directive";
 import VueLuxon from "vue-luxon";
 import { passiveSupport } from "passive-events-support/src/utils";
 import * as themes from "options/themes";
-import Hls from "hls.js";
 import { createGettext, T } from "common/gettext";
 import { Locale } from "locales";
 import { aliases, mdi } from "vuetify/iconsets/mdi";
@@ -84,9 +83,6 @@ $config.update().finally(() => {
 
   // Detect right-to-left languages such as Arabic and Hebrew
   const $isRtl = $config.isRtl();
-
-  // HTTP Live Streaming (video support).
-  window.Hls = Hls;
 
   // Assign helpers to VueJS prototype.
   app.config.globalProperties.$isRtl = $isRtl;
