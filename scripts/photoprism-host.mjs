@@ -410,11 +410,30 @@ function serveStatic(req, res) {
   }
 
   const type = MIME[extname(filePath)] || 'application/octet-stream';
-  const cache = filePath.includes(`${join('static', 'build')}`)
-    ? 'public, max-age=31536000, immutable'
-    : 'no-cache';
-  res.writeHead(200, { 'content-type': type, 'cache-control': cache });
-  createReadStream(filePath).pipe(res);
+  const isBuildAsset = filePath.includes(`${join('static', 'build')}`);
+  const cache = isBuildAsset ? 'public, max-age=31536000, immutable' : 'no-cache';
+
+  // Serve the .zst/.gz sibling scripts/precompress.js writes at build time
+  // instead of compressing on every request — the Pi Zero 2 pays for a plain
+  // file read either way, but the client downloads ~70-80% fewer bytes of the
+  // ~2.7 MB app bundle. Only build assets are ever precompressed; index.html
+  // and config.json (no-cache, dynamically rewritten) are untouched.
+  const headers = { 'content-type': type, 'cache-control': cache };
+  let servePath = filePath;
+  if (isBuildAsset) {
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    headers['vary'] = 'Accept-Encoding';
+    if (acceptEncoding.includes('zstd') && existsSync(`${filePath}.zst`)) {
+      servePath = `${filePath}.zst`;
+      headers['content-encoding'] = 'zstd';
+    } else if (acceptEncoding.includes('gzip') && existsSync(`${filePath}.gz`)) {
+      servePath = `${filePath}.gz`;
+      headers['content-encoding'] = 'gzip';
+    }
+  }
+
+  res.writeHead(200, headers);
+  createReadStream(servePath).pipe(res);
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────

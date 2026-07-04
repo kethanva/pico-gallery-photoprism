@@ -4,9 +4,10 @@
 Copyright (c) 2018 - 2026 PhotoPrism UG. All rights reserved.
 
 Pre-compresses bundled frontend assets (JS, CSS, fonts, JSON, SVG, …) into
-`.gz` and `.zst` siblings so that the Go static handler in
-`internal/server/routes_static.go` can serve them verbatim and skip the
-runtime compression middleware on the hot static-asset path.
+`.gz` and `.zst` siblings so that `scripts/photoprism-host.mjs`'s static
+handler can serve them verbatim (Accept-Encoding permitting) instead of
+compressing on every request. Compression runs once here, at build time, off
+the Raspberry Pi — the appliance only ever does a cheap sibling-file read.
 
 Skipped extensions are formats that are already compressed (woff2, webp, …)
 or binary blobs where compression adds CPU without meaningful savings.
@@ -55,7 +56,12 @@ const MIN_BYTES = 1024;
 // (already encoded, near-random) are not worth a separate disk read.
 const MIN_RATIO = 0.95;
 
-const DEFAULT_TARGET = path.join(__dirname, "..", "..", "assets", "static", "build");
+// __dirname is frontend/scripts — the actual webpack output the appliance
+// serves is frontend/dist/static/build (scripts/photoprism-host.mjs DIST).
+// The old target (assets/static/build) is a stale path left over from an
+// earlier PhotoPrism Go server layout and does not exist in this repo, so the
+// postbuild hook silently produced zero .gz/.zst siblings on every build.
+const DEFAULT_TARGET = path.join(__dirname, "..", "dist", "static", "build");
 
 // `--clean` removes any precompressed siblings under the target directory
 // without producing new ones. Used by the watch script so stale bundles
