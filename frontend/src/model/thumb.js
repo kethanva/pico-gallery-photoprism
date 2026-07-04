@@ -5,7 +5,20 @@ import $util from "common/util";
 import { $config } from "app/session.js";
 import { $gettext } from "common/gettext";
 
-const thumbs = window.__CONFIG__.thumbs;
+// Thumbnail size list, read LIVE from $config each time a Thumb is built.
+// The appliance's static index.html shell does NOT populate
+// window.__CONFIG__.thumbs — only the real backend's /api/v1/config carries it,
+// which $config.update() loads before the app mounts. Reading the static global
+// at module load left this undefined, so fromPhoto()/fromFiles()/notFound() threw
+// "Cannot read properties of undefined (reading 'length')" on the very first
+// Thumb.fromPhotos() call — which is exactly the kiosk boot slideshow AND the
+// tap-to-open-a-photo path. The grid rendered but the lightbox never opened
+// (blank fullscreen on boot, dead clicks). Falls back to [] so a missing config
+// degrades to no-thumbnail-sources instead of crashing the whole surface.
+const thumbSizes = () => {
+  const t = $config.get("thumbs");
+  return Array.isArray(t) ? t : [];
+};
 
 // Thumb represents a lightweight slide/photo preview record used by the lightbox.
 export class Thumb extends Model {
@@ -287,6 +300,7 @@ export class Thumb extends Model {
       DownloadUrl: "",
     };
 
+    const thumbs = thumbSizes();
     for (let i = 0; i < thumbs.length; i++) {
       let t = thumbs[i];
 
@@ -362,6 +376,7 @@ export class Thumb extends Model {
       DownloadUrl: this.downloadUrl(photo),
     };
 
+    const thumbs = thumbSizes();
     for (let i = 0; i < thumbs.length; i++) {
       let t = thumbs[i];
       let size = photo.calculateSize(t.w, t.h);
@@ -406,6 +421,7 @@ export class Thumb extends Model {
       DownloadUrl: this.downloadUrl(file),
     };
 
+    const thumbs = thumbSizes();
     for (let i = 0; i < thumbs.length; i++) {
       let t = thumbs[i];
       let size = this.calculateSize(file, t.w, t.h);
