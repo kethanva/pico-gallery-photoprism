@@ -872,6 +872,27 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         wrapper.vm.$options.methods.afterLeave.call(ctx);
       });
 
+      // getOptions() trims the PhotoSwipe preload window on the frame so one
+      // fewer full-resolution bitmap stays resident on the 512 MB Pi Zero 2 W.
+      const buildOptions = (query) => {
+        const ctx = {
+          $route: { query },
+          getLightboxElement: () => null,
+          index: 0,
+          $gettext: (s) => s,
+        };
+        return PLightbox.methods.getOptions.call(ctx);
+      };
+
+      it("getOptions preloads only the next slide in kiosk mode ([0,1])", () => {
+        expect(buildOptions({ kiosk: "true" }).preload).toEqual([0, 1]);
+        expect(buildOptions({ slideshow: "true" }).preload).toEqual([0, 1]);
+      });
+
+      it("getOptions keeps the neighbor preload window off the frame ([1,1])", () => {
+        expect(buildOptions({}).preload).toEqual([1, 1]);
+      });
+
       it("enterFullscreenSlideshow runs playSlideshow and requestFullscreen together", () => {
         const wrapper = mountLightbox();
         const playSlideshow = vi.fn();

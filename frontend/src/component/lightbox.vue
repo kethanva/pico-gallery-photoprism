@@ -588,6 +588,12 @@ export default {
     },
     // Returns the PhotoSwipe config options, see https://photoswipe.com/options/.
     getOptions() {
+      // On the photos-only frame the slideshow only ever advances forward, so
+      // PhotoSwipe never needs the PREVIOUS image decoded — dropping it from the
+      // preload window ([1,1] → [0,1]) keeps one fewer full-resolution bitmap
+      // resident, which is real headroom on the 512 MB Pi Zero 2 W where GPU and
+      // page memory share the same pool. Desktop keeps [1,1] for snappy back-nav.
+      const kiosk = !!(this.$route?.query?.kiosk || this.$route?.query?.slideshow);
       return {
         appendToEl: this.getLightboxElement(),
         pswpModule: PhotoSwipe,
@@ -614,7 +620,7 @@ export default {
         wheelToZoom: true,
         maxZoomLevel: 8,
         bgOpacity: 1,
-        preload: [1, 1],
+        preload: kiosk ? [0, 1] : [1, 1],
         mainClass: "p-lightbox__pswp",
         tapAction: (point, ev) => this.onContentClick(point, ev),
         imageClickAction: (point, ev) => this.onContentClick(point, ev),
