@@ -20,9 +20,8 @@
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
 # never scans a local photo directory. One on-device surface:
-#   :8190 — photoprism-host.mjs: the full PhotoPrism Vue UI (read-only), proxied
-#           to the backend. Cog boots it at /library/photos?kiosk=true, which
-#           auto-opens the native slideshow in (virtual) fullscreen.
+#   :8190 — photoprism-host.mjs: lightweight frame (static HTML/JS in frame/),
+#           reverse-proxies PhotoPrism /api/v1 (read-only). Cog opens http://localhost:8190/
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -402,102 +401,12 @@ step_node() {
   fi
 }
 
-# ── Frontend dist freshness ──────────────────────────────────────────────────
-# ALL kiosk behavior (slideshow autoplay, F/fullscreen, right-click) is compiled
-# into frontend/dist bundles. A stale dist is the silent killer: the frame renders
-# but every new feature is missing. Staleness is tracked with a git tree-hash
-# stamp inside dist (mtime tricks don't survive the index.html copy in
-# step_build). When stale, rebuild locally if the board has the RAM for webpack;
-# otherwise download the prebuilt dist that CI publishes with every release.
-FRONTEND_STAMP="frontend/dist/.pico-src-tree"
-
-frontend_src_tree() {
-  git -C "$REPO_ROOT" rev-parse "HEAD:frontend/src" 2>/dev/null || echo "unknown"
-}
-
-frontend_write_stamp() {
-  [[ "$DRY_RUN" -eq 1 ]] && return 0
-  frontend_src_tree > "$REPO_ROOT/$FRONTEND_STAMP" 2>/dev/null || true
-}
-
-frontend_dist_is_stale() {
-  local dist="$REPO_ROOT/frontend/dist"
-  [[ -d "$dist" && -n "$(ls -A "$dist" 2>/dev/null)" ]] || return 0   # missing/empty = stale
-  local want have
-  want="$(frontend_src_tree)"
-  [[ "$want" == "unknown" ]] && return 1  # not a git checkout — can't judge, assume fresh
-  have="$(cat "$REPO_ROOT/$FRONTEND_STAMP" 2>/dev/null || echo none)"
-  [[ "$want" != "$have" ]]
-}
-
-build_frontend_dist() {
-  ( cd "$REPO_ROOT/frontend" && run npm ci && run npm run build )
-  frontend_write_stamp
-}
-
-# Fetch the prebuilt dist from the latest GitHub release (CI builds it on every
-# push to main). This is how a 512 MB board gets fresh UI bundles without running
-# webpack. Best-effort: any failure falls through to a loud warning.
-download_frontend_dist() {
-  local remote repo url tmp
-  remote="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
-  repo="$(printf '%s' "$remote" | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')"
-  [[ -n "$repo" && "$repo" != "$remote" || "$remote" == https://github.com/* ]] || return 1
-  url="https://github.com/$repo/releases/latest/download/picogallery-release.tar.gz"
-  tmp="$(mktemp -d)" || return 1
-  info "Downloading prebuilt PhotoPrism UI from the latest release…"
-  if ! curl -fsSL --max-time 300 -o "$tmp/rel.tgz" "$url"; then rm -rf "$tmp"; return 1; fi
-  if ! tar -xzf "$tmp/rel.tgz" -C "$tmp" ./frontend/dist 2>/dev/null && \
-     ! tar -xzf "$tmp/rel.tgz" -C "$tmp" frontend/dist 2>/dev/null; then
-    rm -rf "$tmp"; return 1
-  fi
-  [[ -f "$tmp/frontend/dist/index.html" || -d "$tmp/frontend/dist/static" ]] || { rm -rf "$tmp"; return 1; }
-  rm -rf "$REPO_ROOT/frontend/dist"
-  mv "$tmp/frontend/dist" "$REPO_ROOT/frontend/dist"
-  rm -rf "$tmp"
-  frontend_write_stamp
-  ok "Prebuilt PhotoPrism UI installed from release"
-}
-
-ensure_frontend_dist() {
-  if ! frontend_dist_is_stale; then
-    ok "frontend/dist is current (matches frontend/src tree $(frontend_src_tree | cut -c1-12))"
-    return 0
-  fi
-  if (( RAM_MB >= 1500 )); then
-    info "frontend/dist stale or missing — building PhotoPrism UI (webpack)"
-    build_frontend_dist
-    return 0
-  fi
-  # Low-RAM board: webpack would swap/OOM. Pull CI's prebuilt bundles instead.
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf '%s[dry-run]%s would download prebuilt frontend/dist from the latest release\n' "$C_DIM" "$C_RESET"
-    return 0
-  fi
-  if download_frontend_dist; then return 0; fi
-  if [[ -d "$REPO_ROOT/frontend/dist" ]]; then
-    warn "frontend/dist is STALE and the release download failed — kiosk features (autoplay, F/fullscreen, right-click) may be missing."
-  else
-    warn "frontend/dist is MISSING and the release download failed — the UI host cannot start."
-  fi
-  warn "Build on a capable host and copy it over:"
-  warn "  cd frontend && npm ci && npm run build && rsync -a dist/ <pi>:$REPO_ROOT/frontend/dist/"
-}
-
-# Install workspace deps + build shared→server→client (resource-capped for small Pis).
+# Verify the lightweight frame client is present (no webpack build step).
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
-
-  ensure_frontend_dist
-
-  if [[ "$DRY_RUN" -ne 1 ]]; then
-    mkdir -p "$REPO_ROOT/frontend/dist"
-    [[ -f "$REPO_ROOT/frontend/index.html" ]] && cp "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/dist/index.html" || true
-    [[ -f "$REPO_ROOT/frontend/config.json" ]] && cp "$REPO_ROOT/frontend/config.json" "$REPO_ROOT/frontend/dist/config.json" || true
-  fi
-  
-  [[ "$DRY_RUN" -eq 1 ]] || [[ -d "$REPO_ROOT/frontend/dist" ]] || die "Build did not produce frontend/dist"
-  ok "Build complete"
+  [[ "$DRY_RUN" -eq 1 ]] || [[ -d "$REPO_ROOT/frame" && -f "$REPO_ROOT/frame/index.html" ]] || \
+    die "frame/ missing — clone the repo or copy the lightweight frame client into frame/"
+  ok "frame/ present"
 }
 
 # Generate /etc/picogallery/config.toml from the chosen source (0640, server-readable).
@@ -631,10 +540,9 @@ step_server_unit() {
   return 0
 }
 
-# The appliance surface: photoprism-host.mjs serves the vendored PhotoPrism SPA
-# (frontend/dist) on :8190 and reverse-proxies its API/WebSocket to the real
-# backend. Cog boots straight into it (kiosk mode = native slideshow autoplay).
-# Only meaningful for a photoprism source (webdav has no PhotoPrism UI).
+# The appliance surface: photoprism-host.mjs serves the lightweight frame (frame/)
+# on :8190 and reverse-proxies PhotoPrism /api/v1 to the real backend (read-only).
+# Cog opens http://localhost:8190/ (or --server-url). photoprism source only.
 step_photoprism_unit() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   [[ "$SOURCE_KIND" == "photoprism" ]] || return 0
@@ -644,14 +552,14 @@ step_photoprism_unit() {
   # board (Pi Zero 2 W) cap it so it can never squeeze the WebKit kiosk.
   local pp_runtime_env=""
   if (( RAM_MB < 900 )); then pp_runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=96"; fi
-  [[ -d "$REPO_ROOT/frontend/dist" ]] || \
-    warn "frontend/dist missing — the PhotoPrism UI host will not start until it is built (cd frontend && npm ci && npm run build)"
+  [[ -d "$REPO_ROOT/frame" && -f "$REPO_ROOT/frame/index.html" ]] || \
+    warn "frame/ missing — the lightweight frame host will not start until frame/ is present"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write /etc/systemd/system/picogallery-photoprism.service\n' "$C_DIM" "$C_RESET"
   else
     cat >/etc/systemd/system/picogallery-photoprism.service <<EOF
 [Unit]
-Description=PicoGallery PhotoPrism UI host
+Description=PicoGallery lightweight frame host
 After=network-online.target
 Wants=network-online.target
 
@@ -667,7 +575,7 @@ WorkingDirectory=$REPO_ROOT
 ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs
 Restart=always
 RestartSec=3
-# Hardening (read-only: serves the vendored SPA + proxies to the backend).
+# Hardening (read-only: serves frame/ + proxies to the backend).
 NoNewPrivileges=true
 ProtectSystem=strict
 PrivateTmp=true
@@ -679,7 +587,7 @@ EOF
   run systemctl daemon-reload
   run systemctl enable picogallery-photoprism.service
   run systemctl restart picogallery-photoprism.service
-  ok "picogallery-photoprism.service enabled (PhotoPrism UI on :8190 — Esc from the frame)"
+  ok "picogallery-photoprism.service enabled (lightweight frame on :8190)"
 }
 
 # Ensure input devices are tagged onto seat0 so wlroots/libinput (under Cage) can
@@ -863,8 +771,8 @@ step_kiosk() {
     printf '%s[dry-run]%s would write %s/kiosk.env\n' "$C_DIM" "$C_RESET" "$CONFIG_DIR"
   else
     local target_url="$SERVER_URL"
-    if [[ "$target_url" != *"/library/photos"* && "$target_url" != *"/library/albums"* ]]; then
-      target_url="${target_url%/}/library/photos?kiosk=true"
+    if [[ -z "$target_url" ]]; then
+      target_url="http://localhost:8190/"
     fi
     cat >"$CONFIG_DIR/kiosk.env" <<EOF
 # PicoGallery kiosk runtime config. Edit and: systemctl restart picogallery-kiosk

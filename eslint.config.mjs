@@ -31,7 +31,7 @@ export default [
       '**/*.d.ts',
       'sample_photos/**',
       'agent/**',
-      'frontend/**',
+      'frame/**',
       'plan/**',
       'plans/**',
       '**/*.config.ts',

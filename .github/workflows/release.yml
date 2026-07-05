@@ -24,11 +24,10 @@ jobs:
       - name: Install root dependencies
         run: npm install
         
-      - name: Run CI Checks & Build
+      - name: Run CI Checks
         run: |
           npm run lint
-          cd frontend && npm ci
-          npm run build
+          npm test
           
       - name: Determine version
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -41,22 +40,15 @@ jobs:
           # Inject release version details into install.sh
           sed -i 's/SCRIPT_VERSION="2.0.0"/SCRIPT_VERSION="'"${{ steps.version.outputs.version }}"'"/g' install.sh
 
-          mkdir -p picogallery-release/frontend
+          mkdir -p picogallery-release
           
-          # Copy frontend dist
-          cp -r frontend/dist picogallery-release/frontend/
-          cp frontend/index.html picogallery-release/frontend/dist/
-          cp frontend/config.json picogallery-release/frontend/dist/
+          cp -r frame picogallery-release/
           cp -r kiosk picogallery-release/
           
-          # Copy essential package configs
           cp package.json picogallery-release/
-          
-          # Copy scripts and configs
           cp -r scripts picogallery-release/
           cp install.sh uninstall.sh run.sh config.example.toml README.md picogallery-release/
           
-          # Tar everything up
           tar -czf picogallery-release.tar.gz -C picogallery-release .
           
       - name: Upload Release

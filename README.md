@@ -1,60 +1,43 @@
 # PicoGallery V2
 
-A browser-first digital photo frame. A small, lightweight **Fastify** server streams and
-resizes photos from a source (local folder, PhotoPrism, or WebDAV) and a static
-**SPA** renders a fullscreen, server-driven slideshow with crossfades, an OSD,
-night mode, and a phone remote. Designed to run a frame on anything that can open
-a URL — including a Raspberry Pi in kiosk mode.
+A lightweight digital photo frame for Raspberry Pi (especially **Pi Zero 2 W**). A static
+frame client in frame/ (plain HTML/CSS/JS) runs in the kiosk browser; a small Node
+host on port **8190** serves those files, builds a cached playlist from PhotoPrism, and
+reverse-proxies read-only GET/HEAD/OPTIONS to a **PhotoPrism backend** on your LAN. No
+webpack, no Vue SPA, no WebSocket proxy.
 
 ```mermaid
 graph TD
-    subgraph Client
-        Kiosk[Kiosk Browser / Cog / WPE WebKit]
-        Remote[Phone Remote UI]
+    subgraph Display
+        Kiosk[Cog / WPE WebKit kiosk]
     end
 
-    subgraph ServerApp
-        HTTP[Fastify HTTP Server]
-        Engine[Slideshow Engine]
-        ImgService[Image Service]
-        DiskCache[Disk Cache]
-        
-        HTTP --- Engine
-        Engine --> ImgService
-        ImgService --- DiskCache
+    subgraph Host8190[Node host :8190]
+        Static[frame static files]
+        Playlist[GET /frame/playlist]
+        Proxy[/api/v1 proxy]
+        Static --- Playlist
+        Static --- Proxy
     end
 
-    subgraph ProxyApp
-        ProxyServer[Node HTTP Server]
-        PP_SPA[PhotoPrism Vue SPA]
-        ProxyServer --- PP_SPA
+    subgraph Backend
+        PhotoPrism[PhotoPrism Go backend]
     end
 
-    subgraph Sources
-        LocalDir[Local Directory]
-        WebDAV[WebDAV Server]
-        PhotoPrism[PhotoPrism Backend]
-    end
-
-    Kiosk -->|Load SPA| HTTP
-    Kiosk -->|Subscribes SSE| HTTP
-    Remote -->|Control commands| HTTP
-
-    ImgService -->|Stream Original| LocalDir
-    ImgService -->|Stream Original| WebDAV
-    ImgService -->|Query and Stream| PhotoPrism
-
-    ProxyServer -->|Proxy API and WebSocket| PhotoPrism
-    Kiosk -->|Direct Admin UI| ProxyServer
+    Kiosk -->|slideshow + grid| Static
+    Kiosk -->|thumbnails via API| Proxy
+    Playlist -->|pages photos| PhotoPrism
+    Proxy --> PhotoPrism
 ```
 
-## Packages
+## Layout
 
-| Package        | Role                                                          |
-|----------------|---------------------------------------------------------------|
-| `@pico/shared` | Zod schemas + types shared by client and server (the contract)|
-| `@pico/server` | HTTP API, slideshow engine, image service, photo sources      |
-| `@pico/client` | Vite SPA: frame view (`/`) and phone remote (`/remote`)       |
+| Path | Role |
+|------|------|
+| frame/ | Slideshow + photo grid UI, keyboard/touch input |
+| scripts/photoprism-host.mjs | Static server, playlist cache, PhotoPrism API proxy |
+| scripts/frame-utils.mjs | Shared playlist compaction helpers |
+| install.sh | Pi kiosk + systemd units for host and Cog |
 
 ## Quick start (local)
 

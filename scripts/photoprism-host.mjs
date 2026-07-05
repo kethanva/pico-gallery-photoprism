@@ -1,31 +1,22 @@
 #!/usr/bin/env node
 //
-// photoprism-host — serve the vendored PhotoPrism SPA (frontend/dist) and
-// reverse-proxy its API to a real PhotoPrism backend.
+// photoprism-host — serve the lightweight frame (frame/) and reverse-proxy
+// PhotoPrism /api/v1 to a real backend (read-only GET/HEAD/OPTIONS).
 //
-// Why this exists: frontend/dist is a complete PhotoPrism Vue build, but it is
-// only a CLIENT. All data (config, photos, thumbnails, websocket) comes from a
-// PhotoPrism Go backend. Serving the SPA same-origin and proxying /api/v1 to the
-// backend avoids browser CORS/TLS blocks that a cross-origin build would hit.
-//
-// Usage:
-//   node scripts/photoprism-host.mjs [backend-url]
-// Env:
-//   PICO_PP_PORT     listen port (default 8190)
-//   PICO_PP_BACKEND  backend url (overridden by the CLI arg if given)
-//
-// Backend resolution order: CLI arg > PICO_PP_BACKEND > frontend/dist/config.json serverUrl.
+// Backend resolution: CLI arg > PICO_PP_BACKEND > frame/config.json serverUrl.
 
 import http from 'node:http';
 import https from 'node:https';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compactPhoto } from './frame-utils.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
-const DIST = join(ROOT, 'frontend', 'dist');
-const CONFIG_FILE = join(DIST, 'config.json');
+const FRAME = join(ROOT, 'frame');
+const FRAME_CONFIG_FILE = join(FRAME, 'config.json');
+const PLAYLIST_TTL_MS = 15 * 60 * 1000;
 
 const PORT = Number(process.env.PICO_PP_PORT || 8190);
 
@@ -38,95 +29,22 @@ const READ_ONLY = process.env.PICO_PP_READONLY !== '0';
 // Hard boundary: only side-effect-free HTTP methods may cross the proxy.
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-// UI-side mirror of the same policy: the SPA hides controls the ACL denies, so
-// grant browse/view perms only. Resources absent here (files, services, users,
-// config, settings, …) are denied entirely — Config.allow() defaults to false.
-const READONLY_ACL = {
-  photos: { search: true, view: true, access_all: true, access_library: true },
-  albums: { search: true, view: true },
-  labels: { search: true, view: true },
-  places: { search: true, view: true },
-  people: { search: true, view: true },
-};
-
-// Feature flags backing $config.feature(...) checks; kill every mutating or
-// admin surface so the SPA doesn't render dead buttons that 403 at the proxy.
-const READONLY_FEATURES_OFF = [
-  'upload',
-  'import',
-  'edit',
-  'delete',
-  'archive',
-  'share',
-  'download',
-  'library',
-  'services',
-  'account',
-  'settings',
-  'review',
-];
-
-// Injected into the SPA shell so the viewer can return to the frame: a floating
-// link plus the reverse half of the surface toggle — F or double right-click
-// jumps back to the slideshow, mirroring the same gestures in the frame (which
-// jump here). The keyboard handler ignores typing targets so the PhotoPrism
-// search box keeps its "f", and both handlers run in the bubble phase so the
-// lightbox's own capture/stop-propagation handlers win while it is open.
-// Everything routes through /__slideshow → 302, same as the link.
-const SLIDESHOW_LINK =
-  '<a id="pico-slideshow-link" href="/__slideshow" title="Back to the slideshow (F or double right-click)" ' +
-  'style="position:fixed;right:16px;bottom:16px;z-index:2147483647;' +
-  'display:inline-flex;align-items:center;gap:6px;padding:10px 14px;' +
-  "font:600 14px/1 system-ui,-apple-system,sans-serif;color:#fff;" +
-  'background:rgba(0,0,0,.72);border:1px solid rgba(255,255,255,.18);' +
-  'border-radius:9999px;text-decoration:none;">&#9654; Slideshow</a>' +
-  '<script>(function(){' +
-  'var lastCtx=0;' +
-  'function go(){window.location.assign("/__slideshow");}' +
-  'function typing(t){return t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA"||t.isContentEditable);}' +
-  'document.addEventListener("keydown",function(e){' +
-  'if(e.defaultPrevented||e.altKey||e.ctrlKey||e.metaKey)return;' +
-  'if((e.key==="f"||e.key==="F")&&!typing(e.target)){e.preventDefault();go();}' +
-  '});' +
-  // Double right-click (two contextmenu events within 400ms) returns to the
-  // slideshow; a lone right-click is swallowed so it does not pop the browser
-  // menu. Threshold mirrors DOUBLE_CLICK_MS in lightbox.vue.
-  'document.addEventListener("contextmenu",function(e){' +
-  'if(e.defaultPrevented)return;' +
-  'e.preventDefault();' +
-  'var now=Date.now();' +
-  'if(now-lastCtx<=400){lastCtx=0;go();}else{lastCtx=now;}' +
-  '});' +
-  // The pill outranks every z-index (it must beat the PhotoPrism chrome), so
-  // it would also float on top of the fullscreen slideshow. Hide it whenever
-  // the lightbox overlay is active; one querySelector per mutation batch is
-  // negligible even on a Pi Zero 2.
-  'var pill=document.getElementById("pico-slideshow-link");' +
-  'function sync(){' +
-  'var open=!!document.querySelector(".p-lightbox.v-overlay--active");' +
-  'pill.style.display=open?"none":"inline-flex";' +
-  '}' +
-  'new MutationObserver(sync).observe(document.documentElement,' +
-  '{subtree:true,childList:true,attributes:true,attributeFilter:["class"]});' +
-  'sync();' +
-  '})();</script>';
-
 // ── Resolve backend URL ──────────────────────────────────────────────────────
-function readDistConfig() {
+function readFrameConfig() {
   try {
-    return JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    return JSON.parse(readFileSync(FRAME_CONFIG_FILE, 'utf8'));
   } catch {
     return {};
   }
 }
 
-const distConfig = readDistConfig();
+const frameConfig = readFrameConfig();
 const backendRaw =
-  process.argv[2] || process.env.PICO_PP_BACKEND || distConfig.serverUrl || '';
+  process.argv[2] || process.env.PICO_PP_BACKEND || frameConfig.serverUrl || '';
 
-if (!existsSync(DIST)) {
-  console.error(`ERROR: ${DIST} not found. Build it first:`);
-  console.error('  cd frontend && npm ci --ignore-scripts && npm run build');
+if (!existsSync(FRAME)) {
+  console.error(`ERROR: ${FRAME} not found.`);
+  
   process.exit(1);
 }
 if (!backendRaw) {
@@ -138,11 +56,11 @@ if (!backendRaw) {
 const backend = new URL(backendRaw.replace(/\/+$/, ''));
 const backendAgent = backend.protocol === 'https:' ? https : http;
 // PhotoPrism instances on a LAN often use self-signed certs.
-const rejectUnauthorized = distConfig.ignoreCertificateErrors !== true;
+const rejectUnauthorized = frameConfig.ignoreCertificateErrors !== true;
 
 let ppUser = '';
 let ppPass = '';
-let displayConfig = {};
+let slideDurationSecs = 10;
 try {
   const configPath = process.env.PICO_CONFIG || '/etc/picogallery/config.toml';
   const toml = readFileSync(configPath, 'utf8');
@@ -153,7 +71,7 @@ try {
 
   const durationMatch = toml.match(/slide_duration_secs\s*=\s*([0-9]+)/);
   if (durationMatch) {
-    displayConfig.slideDuration = parseInt(durationMatch[1]);
+    slideDurationSecs = parseInt(durationMatch[1], 10);
   }
 } catch {
   // Ignore missing config
@@ -242,15 +160,76 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 
-// config.json is served dynamically: force serverUrl:"" so the SPA calls the API
-// same-origin (this host), and we proxy those calls to the real backend.
 const servedConfig = JSON.stringify({
-  ...distConfig,
+  ...frameConfig,
   serverUrl: '',
-  kioskConfig: {
-    slideDuration: displayConfig.slideDuration || 10,
-  }
+  slideDuration: slideDurationSecs,
+  kioskConfig: { slideDuration: slideDurationSecs },
 });
+
+let playlistCache = { at: 0, body: '' };
+
+function backendGet(pathname, sessionId) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(pathname, backend);
+    const headers = { host: backend.host, accept: 'application/json' };
+    if (sessionId) headers['x-auth-token'] = sessionId;
+    const req = backendAgent.request(
+      target,
+      { method: 'GET', headers, rejectUnauthorized },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          if (res.statusCode === 401 || res.statusCode === 403) activeSessionId = null;
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            reject(new Error(`GET ${pathname} → HTTP ${res.statusCode}`));
+            return;
+          }
+          try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.setTimeout(60000, () => req.destroy(new Error('ETIMEDOUT')));
+    req.end();
+  });
+}
+
+function photosFromPayload(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.models)) return data.models;
+  if (Array.isArray(data?.photos)) return data.photos;
+  return [];
+}
+
+async function buildPlaylistBody() {
+  const sessionId = await getSessionId();
+  const out = [];
+  let offset = 0;
+  const pageSize = 1000;
+  for (;;) {
+    const q = `/api/v1/photos?count=${pageSize}&offset=${offset}&merged=true`;
+    const data = await backendGet(q, sessionId);
+    const page = photosFromPayload(data);
+    for (const photo of page) {
+      const compact = compactPhoto(photo);
+      if (compact) out.push(compact);
+    }
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return JSON.stringify(out);
+}
+
+async function getPlaylistBody() {
+  if (playlistCache.body && Date.now() - playlistCache.at < PLAYLIST_TTL_MS) return playlistCache.body;
+  const body = await buildPlaylistBody();
+  playlistCache = { at: Date.now(), body };
+  console.log(`[playlist] cached ${JSON.parse(body).length} photos`);
+  return body;
+}
+
 
 // ── Proxy /api/v1/* → backend ────────────────────────────────────────────────
 async function proxyRequest(req, res) {
@@ -281,38 +260,6 @@ async function proxyRequest(req, res) {
         activeSessionId = null;
       }
       
-      // Intercept /api/v1/config to trick the Vue SPA into bypassing the login screen
-      if (req.method === 'GET' && req.url.startsWith('/api/v1/config') && up.statusCode === 200) {
-        let body = '';
-        up.on('data', chunk => body += chunk);
-        up.on('end', () => {
-          try {
-            const config = JSON.parse(body);
-            config.public = true;
-            config.login = false;
-            if (READ_ONLY) {
-              // Mirror the method gate in the UI: readonly hides library
-              // import/upload, the ACL hides edit/delete/share controls, and the
-              // feature flags remove the remaining admin surfaces.
-              config.readonly = true;
-              config.acl = READONLY_ACL;
-              if (config.settings?.features) {
-                for (const f of READONLY_FEATURES_OFF) config.settings.features[f] = false;
-              }
-            }
-            const modifiedBody = JSON.stringify(config);
-            const modifiedHeaders = { ...up.headers };
-            modifiedHeaders['content-length'] = Buffer.byteLength(modifiedBody);
-            res.writeHead(200, modifiedHeaders);
-            res.end(modifiedBody);
-          } catch {
-            res.writeHead(up.statusCode, up.headers);
-            res.end(body);
-          }
-        });
-        return;
-      }
-
       res.writeHead(up.statusCode || 502, up.headers);
       up.pipe(res);
     }
@@ -330,34 +277,9 @@ async function proxyRequest(req, res) {
   req.pipe(upstream);
 }
 
-// Memoized SPA shell with the "Slideshow" link injected, invalidated by mtime so
-// a rebuilt frontend/dist is picked up without restarting the service.
-let shellCache = { mtimeMs: 0, html: '' };
-function shellWithLink(filePath) {
-  const mtimeMs = statSync(filePath).mtimeMs;
-  if (shellCache.mtimeMs !== mtimeMs) {
-    const html = readFileSync(filePath, 'utf8');
-    shellCache = {
-      mtimeMs,
-      html: html.includes('</body>')
-        ? html.replace('</body>', `${SLIDESHOW_LINK}\n</body>`)
-        : html + SLIDESHOW_LINK,
-    };
-  }
-  return shellCache.html;
-}
-
 // ── Static file serving with SPA history fallback ────────────────────────────
 function serveStatic(req, res) {
   let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
-
-  // Handle SPA relative path weirdness: if the browser is on /library/browse,
-  // it might request /library/config.json or /library/static/build/assets.json.
-  if (urlPath.endsWith('/config.json')) {
-    urlPath = '/config.json';
-  } else if (urlPath.includes('/static/')) {
-    urlPath = urlPath.substring(urlPath.indexOf('/static/'));
-  }
 
   if (urlPath === '/config.json') {
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
@@ -365,10 +287,10 @@ function serveStatic(req, res) {
     return;
   }
 
-  // Resolve safely inside DIST (block path traversal).
   const rel = normalize(urlPath).replace(/^(\.\.[/\\])+/, '');
-  let filePath = join(DIST, rel);
-  if (!filePath.startsWith(DIST)) {
+  const frameRel = rel.startsWith('/frame/') ? rel.slice('/frame/'.length) : rel.replace(/^\//, '');
+  let filePath = join(FRAME, frameRel === '' || frameRel === '/' ? 'index.html' : frameRel);
+  if (!filePath.startsWith(FRAME)) {
     res.writeHead(403).end('Forbidden');
     return;
   }
@@ -380,60 +302,19 @@ function serveStatic(req, res) {
   }
 
   if (!stat) {
-    // History-mode fallback: extensionless routes (e.g. /library) → index.html.
     if (extname(urlPath) === '') {
-      filePath = join(DIST, 'index.html');
-    } else {
+      filePath = join(FRAME, 'index.html');
+      stat = existsSync(filePath) ? statSync(filePath) : null;
+    }
+    if (!stat) {
       res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
       return;
     }
   }
 
-  // Serving the SPA shell (direct or via history fallback): inject the floating
-  // "Slideshow" link so the viewer can hop back to the frame. Rewritten once per
-  // dist build (keyed on mtime) and served from memory — cheap on a Pi Zero 2.
-  if (filePath === join(DIST, 'index.html')) {
-    // The shell is NOT emitted by webpack — install.sh (and the release
-    // tarball) copy frontend/index.html into dist. Guard the read so a dist
-    // without it yields a clear 500 instead of an uncaught statSync throw
-    // that would crash the whole host on every page view.
-    try {
-      const html = shellWithLink(filePath);
-      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
-      res.end(html);
-    } catch {
-      console.error(`[host] ${filePath} missing — copy frontend/index.html into frontend/dist (install.sh does this)`);
-      res.writeHead(500, { 'content-type': 'text/plain' });
-      res.end('SPA shell missing: frontend/dist/index.html not found. Copy frontend/index.html into frontend/dist.');
-    }
-    return;
-  }
-
   const type = MIME[extname(filePath)] || 'application/octet-stream';
-  const isBuildAsset = filePath.includes(`${join('static', 'build')}`);
-  const cache = isBuildAsset ? 'public, max-age=31536000, immutable' : 'no-cache';
-
-  // Serve the .zst/.gz sibling scripts/precompress.js writes at build time
-  // instead of compressing on every request — the Pi Zero 2 pays for a plain
-  // file read either way, but the client downloads ~70-80% fewer bytes of the
-  // ~2.7 MB app bundle. Only build assets are ever precompressed; index.html
-  // and config.json (no-cache, dynamically rewritten) are untouched.
-  const headers = { 'content-type': type, 'cache-control': cache };
-  let servePath = filePath;
-  if (isBuildAsset) {
-    const acceptEncoding = req.headers['accept-encoding'] || '';
-    headers['vary'] = 'Accept-Encoding';
-    if (acceptEncoding.includes('zstd') && existsSync(`${filePath}.zst`)) {
-      servePath = `${filePath}.zst`;
-      headers['content-encoding'] = 'zstd';
-    } else if (acceptEncoding.includes('gzip') && existsSync(`${filePath}.gz`)) {
-      servePath = `${filePath}.gz`;
-      headers['content-encoding'] = 'gzip';
-    }
-  }
-
-  res.writeHead(200, headers);
-  createReadStream(servePath).pipe(res);
+  res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache' });
+  createReadStream(filePath).pipe(res);
 }
 
 // ── Server ───────────────────────────────────────────────────────────────────
@@ -443,11 +324,21 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok' }));
     return;
   }
-  // Back-to-the-frame hop for the injected link. Redirect to the slideshow on the
-  // same host (derived from the request Host so it works on localhost and the LAN).
-  if ((req.url || '').split('?')[0] === '/__slideshow') {
-    res.writeHead(302, { location: `/library/photos?kiosk=true` });
-    res.end();
+  const pathOnly = (req.url || '').split('?')[0];
+  if (pathOnly === '/frame/playlist' && req.method === 'GET') {
+    getPlaylistBody()
+      .then((body) => {
+        res.writeHead(200, {
+          'content-type': 'application/json; charset=utf-8',
+          'cache-control': 'public, max-age=900',
+        });
+        res.end(body);
+      })
+      .catch((err) => {
+        console.error('[playlist]', err.message);
+        res.writeHead(502, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
     return;
   }
   if ((req.url || '').startsWith('/api/')) {
@@ -457,45 +348,6 @@ const server = http.createServer((req, res) => {
   }
 });
 
-// Proxy websocket upgrades (PhotoPrism uses /api/v1/ws via sockette).
-server.on('upgrade', async (req, socket, head) => {
-  if (!(req.url || '').startsWith('/api/')) {
-    socket.destroy();
-    return;
-  }
-  const target = new URL(req.url, backend);
-  const headers = { ...req.headers, host: backend.host };
-  
-  const sessionId = await getSessionId();
-  if (sessionId) {
-    // Lowercase key: req.headers is already lowercased by Node, so this OVERWRITES
-    // any token the (public-mode) SPA sent instead of emitting a duplicate header
-    // line — Go's Header.Get would otherwise read the empty first value.
-    headers['x-auth-token'] = sessionId;
-  }
-
-  const upstream = backendAgent.request(target, {
-    method: req.method,
-    headers,
-    rejectUnauthorized,
-  });
-  upstream.on('upgrade', (upRes, upSocket, upHead) => {
-    const lines = [
-      `HTTP/1.1 ${upRes.statusCode} ${upRes.statusMessage}`,
-      ...Object.entries(upRes.headers).map(([k, v]) => `${k}: ${v}`),
-      '\r\n',
-    ];
-    socket.write(lines.join('\r\n'));
-    if (upHead?.length) socket.write(upHead);
-    upSocket.pipe(socket);
-    socket.pipe(upSocket);
-    upSocket.on('error', () => socket.destroy());
-    socket.on('error', () => upSocket.destroy());
-  });
-  upstream.on('error', () => socket.destroy());
-  if (head?.length) upstream.write(head);
-  upstream.end();
-});
 
 // One-shot backend reachability probe so failures surface at startup, not just
 // as opaque 502s in the browser.
@@ -523,10 +375,13 @@ function probeBackend() {
 }
 
 server.listen(PORT, () => {
-  console.log(`PhotoPrism UI host`);
-  console.log(`  serving:  ${DIST}`);
-  console.log(`  backend:  ${backend.origin}  (proxying /api/v1)`);
-  console.log(`  open:     http://localhost:${PORT}${distConfig.startupPage || '/'}`);
+  console.log('PicoGallery lightweight frame host');
+  console.log(`  serving:  ${FRAME}`);
+  console.log(`  backend:  ${backend.origin}  (proxying /api/v1, read-only=${READ_ONLY})`);
+  console.log(`  open:     http://localhost:${PORT}/`);
   console.log('Press Ctrl+C to stop.');
   probeBackend();
+  getPlaylistBody()
+    .then(() => console.log('[playlist] cache warmed'))
+    .catch((e) => console.warn('[playlist] warm failed:', e.message));
 });
