@@ -190,6 +190,46 @@ describe("page/photos.vue kiosk slideshow", () => {
   });
 });
 
+// The frame boots one page and loops it as a slideshow; loadMore must never
+// grow this.results past that page (Photo.limit() is 100,000 heavy reactive
+// objects — an OOM on the 512 MB Pi Zero 2 W). Guard is gated on ?kiosk/?slideshow.
+describe("loadMore footprint guard (kiosk)", () => {
+  let searchSpy;
+  beforeEach(() => {
+    // Never-resolving promise: loadMore calls Photo.search synchronously, and we
+    // only assert on that call — the .then() must not run against a partial stub.
+    searchSpy = vi.spyOn(Photo, "search").mockImplementation(() => new Promise(() => {}));
+  });
+  afterEach(() => searchSpy?.mockRestore());
+
+  const growStub = (query) => ({
+    $route: { query },
+    $view: { isHidden: () => false },
+    dirty: false,
+    page: 0,
+    batchSize: 90,
+    offset: 0,
+    scrollDisabled: false,
+    listen: true,
+    lastFilter: {},
+    staticFilter: null,
+    lightbox: { open: false },
+  });
+
+  it.each([[{ kiosk: "true" }], [{ slideshow: "true" }]])("no-ops loadMore on the frame (%o)", (query) => {
+    const stub = growStub(query);
+    PPagePhotos.methods.loadMore.call(stub, true); // force=true must still be blocked
+    expect(searchSpy).not.toHaveBeenCalled();
+    PAlbumPhotos.methods.loadMore.call(stub, true);
+    expect(searchSpy).not.toHaveBeenCalled();
+  });
+
+  it("still loads more off the frame (no kiosk query)", () => {
+    PPagePhotos.methods.loadMore.call(growStub({}), true);
+    expect(searchSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("page/album/photos.vue kiosk slideshow", () => {
   const openPhoto = PAlbumPhotos.methods.openPhoto;
   const loadKioskSlideshow = PAlbumPhotos.methods.loadKioskSlideshow;

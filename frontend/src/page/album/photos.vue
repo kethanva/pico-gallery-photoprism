@@ -376,6 +376,15 @@ export default {
       this.$lightbox.openModels(Thumb.fromPhotos(source), 0, this.model, true);
     },
     loadMore(force) {
+      // Photos-only frame: the slideshow plays the initial page and loops it
+      // (see the bounded-boot design). Never grow this.results past that page —
+      // infinite scroll appends heavy reactive Photo objects toward Photo.limit()
+      // (100,000), and the recursive viewport-fill can spiral at boot; either is
+      // an OOM on the 512 MB Pi Zero 2 W. The grid is covered by the fullscreen
+      // slideshow and unreachable, so nothing on the frame needs more.
+      if (this.$route?.query?.kiosk || this.$route?.query?.slideshow) {
+        return;
+      }
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {
         return;
       }
