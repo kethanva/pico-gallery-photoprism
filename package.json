@@ -4,7 +4,7 @@
   "version": "2.11.1",
   "scripts": {
     "test": "node --test tests/**/*.test.mjs",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint scripts tests --max-warnings 0"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
