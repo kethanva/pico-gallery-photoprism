@@ -15,3 +15,7 @@ deploy-server/
 
 # Local secrets — PhotoPrism credentials live here; never commit.
 config.local.toml
+# Skill outputs
+graphify-out/
+.cursor/
+scripts/build-graphify.py
