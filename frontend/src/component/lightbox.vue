@@ -467,17 +467,20 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
-      // Surface toggle — leave the immersive slideshow for the PhotoPrism browse
-      // UI. Right-click and F both close the lightbox back to the grid; the
-      // reverse hop (grid → slideshow) is the host-injected script in
-      // photoprism-host.mjs. All listeners are document-level capture because:
+      // Fullscreen toggle — F, double-right-click, and middle-click all invoke
+      // PhotoPrism's native toggleFullscreen(). These document-level capture
+      // listeners exist because in the kiosk slideshow the native onShortCut
+      // KeyF path can't reach the event:
       //   1. Vuetify teleports the dialog overlay outside this component's DOM
       //      tree, so @contextmenu / @keydown bound on the v-dialog never fire.
       //   2. During autoplay the controls are hidden and focus sits on
       //      document.body, so a component-scoped @keydown.f would never fire.
       //   3. Capture + preventDefault suppresses the host script's own grid
       //      handlers (bubble phase, they bail on defaultPrevented) so a single
-      //      press does not both close the lightbox AND re-navigate to it.
+      //      press does not both toggle fullscreen here AND trigger the grid.
+      // NOTE: under Cage/WPE the window is already fullscreen, so on the frame
+      // toggleFullscreen() is a near no-op — this restores desktop parity and
+      // keeps a single, consistent meaning for F across surfaces.
       // Fresh double-click window per lightbox session — a right-click from a
       // previous session must not pair with the first one here.
       _lastContextMenuTs = 0;
@@ -527,8 +530,8 @@ export default {
         document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
         _contextMenuListener = null;
       }
-      // Remove the document-level F surface-toggle listener so the host-injected
-      // grid handler owns F once we are back on the PhotoPrism UI.
+      // Remove the document-level F fullscreen-toggle listener so the
+      // host-injected grid handler owns F once we are back on the PhotoPrism UI.
       if (_fKeyListener) {
         document.removeEventListener("keydown", _fKeyListener, { capture: true });
         _fKeyListener = null;

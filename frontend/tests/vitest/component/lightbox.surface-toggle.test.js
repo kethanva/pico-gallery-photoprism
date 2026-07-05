@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import PLightbox from "component/lightbox.vue";
 
-// The appliance surface toggle (leave the immersive slideshow → PhotoPrism grid)
-// is wired with DOCUMENT-LEVEL capture listeners attached in afterEnter and
-// removed in afterLeave, NOT via template @keydown bindings — during an
-// autoplaying slideshow the controls are hidden and focus sits on document.body,
-// so a component-scoped @keydown.f would never fire. These tests pin that
-// contract: plain F and double right-click close the lightbox, the guards hold,
-// and afterLeave fully detaches so the grid-side (host-injected) handlers regain
-// ownership. See lightbox.vue afterEnter/afterLeave.
+// F / double-right-click / middle-click toggle PhotoPrism's native fullscreen
+// from inside the immersive slideshow. They are wired with DOCUMENT-LEVEL
+// capture listeners attached in afterEnter and removed in afterLeave, NOT via
+// template @keydown bindings — during an autoplaying slideshow the controls are
+// hidden and focus sits on document.body, so a component-scoped @keydown.f would
+// never fire (and Vuetify teleports the dialog out of this component's DOM tree).
+// These tests pin that contract: plain F and double right-click call
+// toggleFullscreen(), the guards hold, and afterLeave fully detaches so the
+// grid-side (host-injected) handlers regain ownership of F.
+// See lightbox.vue afterEnter/afterLeave.
 const { afterEnter, afterLeave } = PLightbox.methods;
 
 // Minimal stand-in for the component instance the two lifecycle hooks touch.
@@ -32,7 +34,7 @@ const fire = (type, target, init = {}) => {
   return ev;
 };
 
-describe("PLightbox — appliance surface toggle (document-level F / right-click)", () => {
+describe("PLightbox — fullscreen toggle (document-level F / right-click / middle-click)", () => {
   let ctx;
 
   afterEach(() => {
@@ -44,23 +46,25 @@ describe("PLightbox — appliance surface toggle (document-level F / right-click
     }
   });
 
-  it("plain F closes the lightbox and swallows the event", () => {
+  it("plain F toggles fullscreen and swallows the event", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     const ev = fire("keydown", document, { key: "f" });
 
-    expect(ctx.close).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.close).not.toHaveBeenCalled();
     expect(ev.defaultPrevented).toBe(true);
   });
 
-  it("uppercase F (shift) also closes", () => {
+  it("uppercase F (shift) also toggles fullscreen", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     fire("keydown", document, { key: "F" });
 
-    expect(ctx.close).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.close).not.toHaveBeenCalled();
   });
 
   it("F with a modifier is ignored (Ctrl/⌘+F stays a real shortcut)", () => {
@@ -71,7 +75,7 @@ describe("PLightbox — appliance surface toggle (document-level F / right-click
     fire("keydown", document, { key: "f", metaKey: true });
     fire("keydown", document, { key: "f", altKey: true });
 
-    expect(ctx.close).not.toHaveBeenCalled();
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
   });
 
   it("F typed into an input/textarea is ignored", () => {
@@ -84,43 +88,55 @@ describe("PLightbox — appliance surface toggle (document-level F / right-click
     try {
       fire("keydown", input, { key: "f" });
       fire("keydown", textarea, { key: "f" });
-      expect(ctx.close).not.toHaveBeenCalled();
+      expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     } finally {
       input.remove();
       textarea.remove();
     }
   });
 
-  it("a non-F key does not close", () => {
+  it("a non-F key does not toggle", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     fire("keydown", document, { key: "g" });
 
-    expect(ctx.close).not.toHaveBeenCalled();
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
   });
 
-  it("a lone right-click only suppresses the menu; it does not close", () => {
+  it("a lone right-click only suppresses the menu; it does not toggle", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     const ev = fire("contextmenu", document);
 
-    expect(ctx.close).not.toHaveBeenCalled();
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ev.defaultPrevented).toBe(true); // browser menu suppressed
   });
 
-  it("double right-click within the window closes", () => {
+  it("double right-click within the window toggles fullscreen", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     fire("contextmenu", document);
     fire("contextmenu", document);
 
-    expect(ctx.close).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.close).not.toHaveBeenCalled();
   });
 
-  it("afterLeave detaches: F on the grid no longer closes (host handler regains F)", () => {
+  it("middle-click (auxclick button 1) toggles fullscreen; other buttons are ignored", () => {
+    ctx = makeCtx();
+    afterEnter.call(ctx);
+
+    fire("auxclick", document, { button: 2 }); // right aux — ignored
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
+
+    fire("auxclick", document, { button: 1 }); // middle — toggles
+    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("afterLeave detaches: F on the grid no longer toggles (host handler regains F)", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
     afterLeave.call(ctx);
@@ -128,7 +144,9 @@ describe("PLightbox — appliance surface toggle (document-level F / right-click
     fire("keydown", document, { key: "f" });
     fire("contextmenu", document);
     fire("contextmenu", document);
+    fire("auxclick", document, { button: 1 });
 
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ctx.close).not.toHaveBeenCalled();
     ctx = null; // already detached; skip afterEach re-detach
   });

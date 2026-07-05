@@ -819,53 +819,55 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         expect(close).not.toHaveBeenCalled();
       });
 
-      it("afterEnter attaches a document-level F listener that closes the lightbox (surface toggle), and afterLeave removes it", () => {
+      it("afterEnter attaches a document-level F listener that toggles fullscreen, and afterLeave removes it", () => {
         const wrapper = mountLightbox();
-        const close = vi.fn();
+        const toggleFullscreen = vi.fn();
         const ctx = {
           $event: { publish: vi.fn() },
           $emit: vi.fn(),
           $view: { leave: vi.fn() },
-          close,
-          toggleFullscreen: vi.fn(),
+          close: vi.fn(),
+          toggleFullscreen,
         };
 
         wrapper.vm.$options.methods.afterEnter.call(ctx);
 
-        // Plain F closes to the PhotoPrism UI regardless of focus.
+        // Plain F toggles fullscreen regardless of focus.
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
 
         // Modifier combos and typing targets are ignored.
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
 
         // afterLeave detaches it so the host-injected grid handler owns F again.
         wrapper.vm.$options.methods.afterLeave.call(ctx);
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(ctx.close).not.toHaveBeenCalled();
       });
 
-      it("afterEnter: double right-click closes to the PhotoPrism UI; a lone right-click does not", () => {
+      it("afterEnter: double right-click toggles fullscreen; a lone right-click does not", () => {
         const wrapper = mountLightbox();
-        const close = vi.fn();
+        const toggleFullscreen = vi.fn();
         const ctx = {
           $event: { publish: vi.fn() },
           $emit: vi.fn(),
           $view: { leave: vi.fn() },
-          close,
-          toggleFullscreen: vi.fn(),
+          close: vi.fn(),
+          toggleFullscreen,
         };
 
         wrapper.vm.$options.methods.afterEnter.call(ctx);
 
-        // First right-click: browser menu suppressed, but no exit yet.
+        // First right-click: browser menu suppressed, but no toggle yet.
         document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(close).not.toHaveBeenCalled();
+        expect(toggleFullscreen).not.toHaveBeenCalled();
 
-        // Second right-click within the window: exit to the grid.
+        // Second right-click within the window: toggle fullscreen.
         document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(close).toHaveBeenCalledTimes(1);
+        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(ctx.close).not.toHaveBeenCalled();
 
         wrapper.vm.$options.methods.afterLeave.call(ctx);
       });
