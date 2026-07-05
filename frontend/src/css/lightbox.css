@@ -1,0 +1,957 @@
+/* Lightbox Styles */
+
+.p-lightbox {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100vw;
+    z-index: 2500;
+    border-radius: 0;
+}
+
+.p-lightbox,
+.p-lightbox > .v-overlay__scrim {
+    transition: none !important;
+}
+
+.p-lightbox__container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: stretch;
+    overflow: hidden;
+    border-radius: 0;
+    z-index: 1;
+}
+
+.p-lightbox__underlay {
+    pointer-events: auto;
+    touch-action: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    background-color: inherit;
+    border-radius: 0;
+    opacity: 0;
+    z-index: -1;
+}
+
+.pswp {
+    position: absolute;
+}
+
+.p-lightbox__container > .p-lightbox__content {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    flex-grow: 1;
+    z-index: 100000;
+    height: 100%;
+}
+
+.p-lightbox__container > .p-lightbox__content .p-lightbox__pswp {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: 0;
+    z-index: 1;
+}
+
+/* Lightbox Tooltips */
+
+.v-tooltip.v-theme--lightbox > .v-overlay__content {
+    background: rgba(var(--v-theme-surface), var(--v-medium-emphasis-opacity));
+    color: rgb(var(--v-theme-on-surface));
+}
+
+/* Lightbox Sidebar */
+
+.p-lightbox__container > .p-lightbox__sidebar {
+    position: relative;
+    display: block;
+    overflow: auto;
+    width: 300px;
+    z-index: 1;
+    opacity: 1;
+    user-select: none;
+    border-color: rgba(var(--v-border-color), var(--v-border-opacity));
+}
+
+.is-ltr .p-lightbox__container > .p-lightbox__sidebar {
+    border-left-style: solid;
+    border-left-width: thin;
+}
+
+.is-rtl .p-lightbox__container > .p-lightbox__sidebar {
+    border-right-style: solid;
+    border-right-width: thin;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-toolbar {
+    padding: 2px 0 2px 0;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-toolbar .v-toolbar-title {
+    font-size: 1.125rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    line-height: 1.75rem;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-list-item__prepend .v-icon {
+    font-size: 24px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-list.v-list--nav {
+    padding-left: 12px;
+    padding-right: 12px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-list.v-list--nav .metadata__item {
+    user-select: text;
+}
+
+/* Reset Vuetify's `v-list nav` cursor:pointer on non-clickable rows so the
+   browser picks context-appropriate cursors (text I-beam, link pointer). */
+.p-lightbox__container > .p-lightbox__sidebar .metadata__item:not(.clickable) {
+    cursor: auto;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .metadata__item .v-list-item-title,
+.p-lightbox__container > .p-lightbox__sidebar .metadata__item .v-list-item-subtitle {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-title {
+    font-weight: 700;
+    word-wrap: normal;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-caption,
+.p-lightbox__container > .p-lightbox__sidebar .meta-notes {
+    white-space: pre-wrap;
+    overflow-wrap: normal;
+    word-wrap: normal;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable {
+    max-height: 120px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--v-theme-on-surface), 0.2) transparent;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable.meta-caption {
+    max-height: 320px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable::-webkit-scrollbar {
+    width: 4px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable::-webkit-scrollbar-thumb {
+    background: rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 2px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-scrollable::-webkit-scrollbar-thumb:hover {
+    background: rgba(var(--v-theme-on-surface), 0.4);
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-keywords {
+    word-break: break-word;
+    text-align: start;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.4;
+    cursor: pointer;
+    user-select: none;
+    min-height: 32px;
+    max-width: 100%;
+    min-width: 0;
+    transition: all 0.2s ease;
+    background-color: rgb(var(--v-theme-secondary-light, var(--v-theme-surface-bright, var(--v-theme-surface))));
+    color: rgb(var(--v-theme-on-surface));
+    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-on-surface), 0.12);
+}
+
+/* Allow the label to shrink within the chip's inline-flex layout so
+   Vuetify's `text-truncate` (overflow + ellipsis + nowrap) can engage on
+   single-word titles like `WWWWWWW…`; the chip itself is constrained by
+   `max-width: 100%` against its flex-wrap parent. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip__label {
+    min-width: 0;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip:hover {
+    background-color: rgba(var(--v-theme-secondary-light, var(--v-theme-surface-bright, var(--v-theme-surface))), 0.7);
+}
+
+/* Keyboard focus ring drawn inside the chip (negative offset) so it isn't
+   clipped when chips wrap against the sidebar edge. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip:focus {
+    outline: 2px solid rgba(var(--v-theme-on-surface), 0.5);
+    outline-offset: -2px;
+}
+
+/* Suppress the ring on mouse focus where supported; click on a chip already
+   navigates or toggles, so a transient outline there is just visual noise. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip:focus:not(:focus-visible) {
+    outline: none;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip--primary {
+    background-color: rgb(var(--v-theme-secondary-light, var(--v-theme-surface-bright, var(--v-theme-surface))));
+    color: rgb(var(--v-theme-on-surface));
+    box-shadow: inset 0 0 0 1px rgba(var(--v-theme-on-surface), 0.12);
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip--primary:hover {
+    background-color: rgba(var(--v-theme-secondary-light, var(--v-theme-surface-bright, var(--v-theme-surface))), 0.7);
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip .v-icon {
+    opacity: 0.7;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip .v-icon:hover {
+    opacity: 1;
+}
+
+/* Lightweight native icon buttons (B1: clickable controls are real buttons
+   for keyboard activation + focus ring + button role) used inside bespoke
+   chrome where Vuetify's <v-btn> box model would fight the compact layout. */
+.p-lightbox__container .meta-icon-btn {
+    -webkit-appearance: none;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 0;
+    cursor: pointer;
+}
+
+.p-lightbox__container .meta-icon-btn:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    border-radius: 50%;
+}
+
+.p-lightbox__container .meta-icon-btn:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-chip__remove:hover .v-icon {
+    opacity: 1;
+}
+
+/* Person row in sidebar */
+.p-lightbox__container > .p-lightbox__sidebar .metadata__person-row {
+    min-height: 44px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-person__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    margin-right: 12px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-person__name {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Inline edit fields in sidebar */
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit {
+    margin: 0;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-input--density-compact {
+    /* Sets the v-text-field control height and the floor for auto-grown
+       textareas. Do not add `min-height` on .v-field__input — it would
+       shadow Vuetify's auto-grow inheritance and freeze textareas at 36 px. */
+    --v-input-control-height: 36px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-input--density-compact .v-field {
+    --v-field-input-padding-top: 6px;
+    --v-field-input-padding-bottom: 6px;
+    --v-field-padding-start: 10px;
+    --v-field-padding-end: 10px;
+    --v-field-padding-after: 0;
+    --v-field-padding-top: 6px;
+    --v-field-padding-bottom: 6px;
+    padding-inline-end: 4px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .v-input--density-compact .v-field .v-field__input {
+    font-size: 0.875rem;
+}
+
+/* Thin themed scrollbar for textareas; legible against the dark surface on
+   Firefox/Chromium. Do not unset min-height — see the comment above. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit textarea.v-field__input {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--v-theme-on-surface), 0.2) transparent;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit textarea.v-field__input::-webkit-scrollbar {
+    width: 4px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit textarea.v-field__input::-webkit-scrollbar-thumb {
+    background: rgba(var(--v-theme-on-surface), 0.2);
+    border-radius: 2px;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-title .v-field__input {
+    font-weight: 700;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-caption .v-field__input {
+    white-space: pre-wrap;
+    overflow-wrap: normal;
+    word-wrap: normal;
+    word-break: break-word;
+}
+
+/* Drop Vuetify's top fade-mask on auto-grown inline textareas — without
+   a scroll viewport, the mask just dims the first line of text. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-field__input,
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-textarea__sizer {
+    mask-image: none;
+}
+
+/* Pencil button: hidden by default, revealed on list-item hover. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-pencil {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .metadata__item:hover > .v-list-item__append .meta-inline-pencil {
+    display: inline-flex;
+}
+
+/* `.hide-edit-pencils` on the sidebar root hides every pencil even on hover;
+   row clicks and chip-toolbar Save/Undo remain reachable. */
+.p-lightbox__container > .p-lightbox__sidebar > .p-lightbox-sidebar.hide-edit-pencils .metadata__item:hover > .v-list-item__append .meta-inline-pencil,
+.p-lightbox__container > .p-lightbox__sidebar > .p-lightbox-sidebar.hide-edit-pencils .meta-inline-pencil {
+    display: none;
+}
+
+/* Hide inline-text Undo/Save (keyboard covers commit/cancel/revert); chip
+   toolbars opt out via `meta-chip-*`. Keep `:not()` on the hide rule itself
+   so the minifier doesn't collapse it into `:is()` and break the combinator. */
+.p-lightbox__container > .p-lightbox__sidebar > .p-lightbox-sidebar.hide-edit-undo .meta-inline-undo:not(.meta-chip-undo) {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar > .p-lightbox-sidebar.hide-edit-save .meta-inline-confirm:not(.meta-chip-confirm) {
+    display: none;
+}
+
+/* Add prompt for empty editable fields */
+.p-lightbox__container > .p-lightbox__sidebar .meta-add-prompt {
+    color: rgba(var(--v-theme-on-surface), 0.35);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-add-prompt:hover {
+    color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+/* Per-row marker buttons (× reject, ⏏ Unassign) — hidden by default, revealed
+   on row hover so a non-hovered row has no nested focusable targets. */
+.p-lightbox__container > .p-lightbox__sidebar .meta-marker-remove,
+.p-lightbox__container > .p-lightbox__sidebar .meta-marker-clear-subject {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .metadata__person-row:hover .meta-marker-remove,
+.p-lightbox__container > .p-lightbox__sidebar .metadata__person-row:hover .meta-marker-clear-subject {
+    display: inline-flex;
+}
+
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-combobox__selection,
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-autocomplete__selection,
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-select__selection,
+.p-lightbox__container > .p-lightbox__sidebar .meta-inline-edit .v-field--focused .v-label.v-field-label {
+    color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+/* density="compact" leaves the v-list title at 16 px; trim it so the menu
+   matches the sidebar's 0.875 rem inline editors. */
+.meta-inline-menu .v-list-item-title {
+    font-size: 0.8125rem;
+    line-height: 1.125rem;
+}
+
+/* Media Content */
+
+.pswp__content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100%;
+}
+
+.pswp__html,
+.pswp__media {
+    position: absolute;
+    left: 0;
+    top: 0;
+    max-width: 100vw;
+    max-height: 100vh;
+}
+
+.pswp__media .pswp__image,
+.pswp__media .pswp__video,
+.pswp__media .pswp__play {
+    position: absolute;
+    cursor: pointer;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.pswp__media .pswp__image,
+.pswp__media .pswp__video {
+    object-fit: contain;
+    max-width: 100%;
+    max-height: 100vh;
+    width: auto;
+    height: 100%;
+}
+
+.pswp__media.pswp__media--live {
+    position: absolute;
+    max-width: none;
+    max-height: none;
+}
+
+.pswp__media.pswp__media--live .pswp__image,
+.pswp__media.pswp__media--live .pswp__video {
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    right: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    transform: none !important;
+}
+
+.pswp__media .pswp__image {
+    visibility: hidden;
+    z-index: 1;
+}
+
+.pswp__media .pswp__video {
+    background-color: transparent;
+    z-index: 2;
+}
+
+.pswp__media .pswp__play {
+    font-size: 150px;
+    line-height: 150px;
+    border-radius: 50%;
+    width: auto;
+    height: auto;
+    color: #ffffff55;
+    z-index: 3;
+    background: transparent;
+    overflow: visible;
+    visibility: hidden;
+}
+
+.pswp__media.is-broken .pswp__video,
+.pswp__media.is-broken .pswp__play,
+.pswp__media.is-waiting .pswp__video {
+    cursor: default;
+}
+
+.pswp__media.is-broken .pswp__play,
+.pswp__media.is-waiting .pswp__play,
+.pswp__media.pswp__media--live .pswp__play {
+    display: none;
+}
+
+.pswp__media.is-broken .pswp__image,
+.pswp__media.pswp__media--live .pswp__image,
+.pswp__media.pswp__media--animated .pswp__image,
+.pswp__media.pswp__media--image .pswp__image {
+    visibility: visible;
+}
+
+.pswp__media.is-broken .pswp__video,
+.pswp__media.pswp__media--live .pswp__video,
+.pswp__media.pswp__media--animated .pswp__video,
+.pswp__media.pswp__media--image .pswp__video {
+    visibility: hidden;
+}
+
+.pswp__media.pswp__media--animated.is-playing .pswp__image,
+.pswp__media.pswp__media--live.is-playing .pswp__image {
+    visibility: hidden;
+}
+
+.pswp__media.pswp__media--animated.is-playing .pswp__video,
+.pswp__media.pswp__media--live.is-playing .pswp__video {
+    visibility: visible;
+}
+
+.pswp__media.pswp__media--video .pswp__image {
+    visibility: hidden;
+}
+
+.pswp__media.pswp__media--video:not(.is-playing) .pswp__play,
+.pswp__media.pswp__media--video .pswp__video {
+    visibility: visible;
+}
+
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--video .pswp__video,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--live .pswp__video,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--animated .pswp__video,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--video .pswp__play,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--live .pswp__play,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--animated .pswp__play {
+    visibility: hidden !important;
+}
+
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--video .pswp__image,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--live .pswp__image,
+.p-lightbox__content.face-marker-mode .pswp__media.pswp__media--animated .pswp__image {
+    visibility: visible !important;
+}
+
+/* Hide every chrome element while face-marker mode is active; the overlay's
+   Back button (.p-meta-face-markers__btn--back) is the sole exit affordance.
+   Sidebar chrome lives in a different region and stays reachable. */
+.p-lightbox__content.face-marker-mode .pswp__top-bar .pswp__button,
+.p-lightbox__content.face-marker-mode .pswp__button--arrow,
+.p-lightbox__content.face-marker-mode .pswp__dynamic-caption,
+.p-lightbox__content.face-marker-mode .pswp__counter,
+.p-lightbox__content.face-marker-mode .p-lightbox__controls {
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
+.pswp__img {
+    -webkit-touch-callout: default;
+}
+
+.is-zoomable .pswp__img {
+    cursor: zoom-in;
+}
+
+.pswp-caption-content,
+.hidden-caption-content {
+    display: none;
+}
+
+/* Dynamic Captions */
+
+.pswp__dynamic-caption {
+    position: absolute;
+    width: 100%;
+    left: 0;
+    top: 0;
+    font-size: 14px;
+    font-weight: 400;
+    color: #f3f3f3;
+    pointer-events: auto;
+    touch-action: auto;
+}
+
+.p-lightbox__container > .p-lightbox__content.slideshow-active:not(.is-video) .pswp__dynamic-caption {
+    opacity: 1 !important;
+}
+
+.p-lightbox__container > .p-lightbox__content.sidebar-visible .pswp__dynamic-caption {
+    display: none !important;
+}
+
+.p-lightbox__container > .p-lightbox__content.is-video .pswp__dynamic-caption--faded,
+.p-lightbox__container > .p-lightbox__content:not(.slideshow-active) .pswp__dynamic-caption--faded {
+    opacity: 0 !important;
+}
+
+.pswp__dynamic-caption--aside {
+    width: auto;
+    max-width: 300px;
+    padding: 20px;
+    margin-top: 72px;
+}
+
+.pswp__dynamic-caption--below {
+    width: auto;
+    max-width: 700px;
+    margin: 20px 0 0;
+    max-height: 30vh;
+    overflow-y: auto;
+}
+
+.pswp__dynamic-caption--on-hor-edge {
+    padding-top: 0;
+    padding-left: 52px;
+    padding-right: 52px;
+}
+
+.pswp__dynamic-caption.pswp__dynamic-caption--aside h4,
+.pswp__dynamic-caption.pswp__dynamic-caption--below h4,
+.pswp__dynamic-caption.pswp__dynamic-caption--on-hor-edge h4 {
+    margin-top: 0;
+    padding-top: 0;
+    font-size: 16px;
+}
+
+.pswp__dynamic-caption--mobile {
+    margin: 20px 12px 48px 12px;
+    padding: 0 8px;
+    /* background: rgba(0, 0, 0, 0.5); */
+    background: transparent;
+    left: 0 !important;
+    right: 0;
+    width: auto;
+    max-width: 100vw;
+    top: auto !important;
+    bottom: 0;
+    max-height: 30vh;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.pswp__dynamic-caption--mobile h4,
+.pswp__dynamic-caption--mobile p,
+.pswp__dynamic-caption--mobile a {
+    position: relative;
+}
+
+.pswp__dynamic-caption h4,
+.pswp__dynamic-caption div,
+.pswp__dynamic-caption p {
+    font-size: 14px;
+    text-align: start;
+    color: #f3f3f3;
+    text-shadow:
+        -1px -1px 0 #0006,
+        1px -1px 0 #0006,
+        -1px 1px 0 #0006,
+        1px 1px 0 #0006;
+    line-height: normal;
+    letter-spacing: normal;
+    margin: 0 0 8px 0;
+    padding: 0;
+    pointer-events: none;
+    touch-action: none;
+}
+
+.pswp__dynamic-caption h4 {
+    font-weight: 600;
+    word-wrap: normal;
+    word-break: break-word;
+    hyphens: auto;
+}
+
+.pswp__dynamic-caption div {
+    font-weight: 400;
+}
+
+.pswp__dynamic-caption p {
+    font-weight: 400;
+    white-space: pre-wrap;
+}
+
+/* User-toggled caption visibility (Ctrl+H, #5580). */
+
+.p-lightbox__container > .p-lightbox__content.hide-caption .pswp__dynamic-caption {
+    display: none !important;
+    transition: none !important;
+}
+
+/* Top Bar Controls */
+
+.pswp__top-bar {
+    align-items: center;
+}
+
+.pswp__top-bar .pswp__button {
+    height: 48px;
+    width: 44px;
+    display: flex;
+    user-select: none;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.is-rtl .pswp__button--close {
+    margin-right: 0;
+    margin-left: 6px;
+}
+
+.pswp__top-bar .pswp__button .pswp__icn {
+    display: block;
+    position: static;
+    top: auto;
+    left: auto;
+    bottom: auto;
+    right: auto;
+    width: 32px;
+    height: 32px;
+}
+
+.pswp__top-bar .pswp__button--mdi .pswp__icn {
+    width: 22px;
+    height: 22px;
+}
+
+.pswp__top-bar .pswp__button--info-button .pswp__icn {
+    width: 20px;
+    height: 20px;
+}
+
+.p-lightbox__content.sidebar-visible .pswp__top-bar .pswp__button--info-button .pswp__icn {
+    display: none;
+}
+
+.pswp__top-bar .pswp__button.pswp__button--close-button {
+    margin-inline-start: 6px;
+    pointer-events: auto;
+    z-index: 20;
+}
+
+.pswp__top-bar .pswp__button.pswp__button--menu-button {
+    margin-inline-end: 6px;
+    pointer-events: auto;
+    z-index: 20;
+}
+
+.is-ltr .pswp__preloader {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+.is-ltr .pswp__preloader .pswp__icn {
+    left: auto;
+    right: 9px;
+}
+
+/* Video Controls */
+
+.p-lightbox__controls {
+    position: absolute;
+    top: auto;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    overflow: hidden;
+    user-select: none;
+    border-radius: 0;
+    z-index: 10;
+    margin: 0;
+    padding: 20px 12px 12px 12px;
+    gap: 6px;
+    background: linear-gradient(0deg, #000000bf, #00000000);
+}
+
+.p-lightbox__controls .video-label,
+.p-lightbox__controls .video-control,
+.p-lightbox__controls .v-slider .v-icon {
+    color: #ffffffdd;
+    stroke: #ffffffdd;
+    fill: #ffffffdd;
+}
+
+.p-lightbox__controls .video-control.video-control--cast,
+.p-lightbox__controls .video-control.video-control--duration {
+    padding-inline-end: 8px;
+}
+
+.p-lightbox__controls .video-btn:hover,
+.p-lightbox__controls .video-btn:focus-visible {
+    color: #ffffff;
+}
+
+.p-lightbox__controls .v-slider .v-slider-thumb {
+    color: #ffffff;
+}
+
+.p-lightbox__controls .v-slider .v-slider-thumb__label {
+    color: #ffffffdd;
+    background-color: #ffffffdd;
+}
+
+.p-lightbox__controls .v-slider .v-slider-thumb__label::before {
+    color: #ffffffdd;
+}
+
+.p-lightbox__controls .v-slider .v-slider-track__background {
+    background-color: #ffffffcc;
+}
+
+.p-lightbox__controls .v-slider .v-slider-track__fill {
+    background-color: #ffffff;
+}
+
+.p-lightbox__controls .v-slider .v-slider-track__tick {
+    background-color: #ffffffdd;
+}
+
+.p-lightbox__controls .v-slider .v-slider-track__tick--filled {
+    background-color: #ffffffbb;
+}
+
+/* Zoom Toggle */
+
+.p-lightbox__container > .p-lightbox__content:not(.is-zoomable) .pswp__button.pswp__button--zoom,
+.p-lightbox__container > .p-lightbox__content.slideshow-active .pswp__button.pswp__button--zoom {
+    display: none;
+}
+
+/* Slideshow Toggle and Animation */
+
+.p-lightbox__container > .p-lightbox__content.slideshow-active .pswp__button--slideshow-toggle .pswp__icn-slideshow-off {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content:not(.slideshow-active) .pswp__button--slideshow-toggle .pswp__icn-slideshow-on {
+    display: none;
+}
+
+.p-lightbox__container > .slideshow-active .pswp__container {
+    transition: transform 0.8s ease-in-out;
+}
+
+/* Fullscreen Toggle */
+
+.p-lightbox__container > .p-lightbox__content.is-fullscreen .pswp__button--fullscreen-toggle .pswp__icn-fullscreen-off {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content:not(.is-fullscreen) .pswp__button--fullscreen-toggle .pswp__icn-fullscreen-on {
+    display: none;
+}
+
+/* Favorite/Dislike Toggle */
+
+.p-lightbox__container > .p-lightbox__content.is-favorite .pswp__button--favorite-toggle .pswp__icn-favorite-off {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content:not(.is-favorite) .pswp__button--favorite-toggle .pswp__icn-favorite-on {
+    display: none;
+}
+
+/* Sound Mute/Unmute Toggle */
+
+.p-lightbox__container > .p-lightbox__content:not(.is-playable) .pswp__button--sound-toggle {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content.is-muted .pswp__button--sound-toggle .pswp__icn-sound-on {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content:not(.is-muted) .pswp__button--sound-toggle .pswp__icn-sound-off {
+    display: none;
+}
+
+/* Selection Toggle */
+
+.p-lightbox__container > .p-lightbox__content.is-selected .pswp__button--select-toggle .pswp__icn-select-off {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content:not(.is-selected) .pswp__button--select-toggle .pswp__icn-select-on {
+    display: none;
+}
+
+/* Navigation Arrow Buttons */
+
+.pswp__button--arrow {
+    height: 50vh;
+    margin-top: -25vh;
+    width: 150px;
+    max-width: 16vw;
+}
+
+.pswp__button--arrow .pswp__icn {
+    height: 50px;
+    margin-top: -25px;
+    top: 50%;
+    width: 50px;
+    max-width: 16vw;
+}
+
+/* Allow navigation buttons on touch devices to be used without being visible. */
+
+.p-lightbox__container > .p-lightbox__content > .pswp--touch .pswp__button--arrow {
+    display: none;
+}
+
+.p-lightbox__container > .p-lightbox__content > .pswp--touch .pswp__button--arrow .pswp__icn {
+    display: none;
+}
+
+/* On 360° sphere slides, swipe is captured for panning the sphere instead of switching
+   photos, so the navigation arrows must stay visible on touch devices — where PhotoSwipe
+   hides them with `visibility: hidden` because a swipe normally navigates. The
+   `pswp--sphere` marker is set on the PhotoSwipe root only while a 360° slide is active.
+   Only `visibility` is overridden (not `display`) so disabled arrows at the first/last
+   photo stay hidden via PhotoSwipe's `:disabled { display: none }` rule. */
+
+.pswp--touch.pswp--sphere .pswp__button--arrow {
+    visibility: visible;
+}

@@ -1,0 +1,153 @@
+import Marker from "model/marker";
+import RestModel from "model/rest";
+import { DateTime } from "luxon";
+import { $config } from "app/session";
+import { $gettext } from "common/gettext";
+import * as src from "common/src";
+import $api from "common/api";
+import typeaheadCache from "common/typeahead-cache";
+
+export let BatchSize = 60;
+
+// Face describes detected faces and their metadata within a photo.
+export class Face extends RestModel {
+  constructor(values) {
+    super(values);
+  }
+
+  getDefaults() {
+    return {
+      ID: "",
+      Src: "",
+      SubjUID: "",
+      SubjSrc: "",
+      FileUID: "",
+      MarkerUID: "",
+      Samples: 0,
+      SampleRadius: 0.0,
+      Collisions: 0,
+      CollisionRadius: 0.0,
+      Hidden: false,
+      MatchedAt: "",
+      CreatedAt: "",
+      UpdatedAt: "",
+      Name: "",
+      FaceDist: 0.0,
+      Size: 0,
+      Score: 0,
+      Review: false,
+      Invalid: false,
+      Thumb: "",
+    };
+  }
+
+  route(view) {
+    return { name: view, query: { q: "face:" + this.ID } };
+  }
+
+  classes(selected) {
+    let classes = ["is-face", "uid-" + this.ID];
+
+    if (this.Hidden) {
+      classes.push("is-hidden");
+    }
+    if (selected) {
+      classes.push("is-selected");
+    }
+
+    return classes;
+  }
+
+  getEntityName() {
+    return this.ID;
+  }
+
+  getTitle() {
+    return this.Name;
+  }
+
+  thumbnailUrl(size) {
+    if (!size) {
+      size = "tile_160";
+    }
+
+    if (this.Thumb) {
+      return `${$config.contentUri}/t/${this.Thumb}/${$config.previewToken}/${size}`;
+    } else {
+      return `${$config.contentUri}/svg/portrait`;
+    }
+  }
+
+  getDateString() {
+    return DateTime.fromISO(this.CreatedAt).toLocaleString(DateTime.DATETIME_MED);
+  }
+
+  show() {
+    this.Hidden = false;
+    return this.update();
+  }
+
+  hide() {
+    this.Hidden = true;
+    return this.update();
+  }
+
+  toggleHidden() {
+    this.Hidden = !this.Hidden;
+
+    return $api.put(this.getEntityResource(), { Hidden: this.Hidden });
+  }
+
+  setName(newName = this.Name) {
+    if (!newName || newName.trim() === "") {
+      // Can't save an empty name.
+      return Promise.resolve(this);
+    }
+
+    this.SubjSrc = src.Manual;
+
+    const payload = { SubjSrc: this.SubjSrc, Name: newName };
+
+    return $api.put(Marker.getCollectionResource() + "/" + this.MarkerUID, payload).then((resp) => {
+      // A returned Name signals the save applied; adopt the server's canonical
+      // values, then seed the people typeahead cache from them so the saved name
+      // is suggestible immediately, before the subjects WS event (which can lag a
+      // quick re-entry).
+      if (resp && resp.data && resp.data.Name) {
+        const data = resp.data;
+        this.setValues({
+          Name: data.Name,
+          SubjSrc: data.SubjSrc,
+          SubjUID: data.SubjUID,
+          Review: data.Review,
+          Invalid: data.Invalid,
+          Thumb: data.Thumb,
+        });
+        typeaheadCache.upsertPerson({ UID: this.SubjUID, Name: this.Name });
+      }
+
+      return Promise.resolve(this);
+    });
+  }
+
+  static batchSize() {
+    return BatchSize;
+  }
+
+  static setBatchSize(count) {
+    const s = parseInt(count);
+    if (!isNaN(s) && s >= 24) {
+      BatchSize = s;
+    }
+  }
+
+  static getCollectionResource() {
+    return "faces";
+  }
+
+  static getModelName() {
+    return $gettext("Face");
+  }
+}
+
+export default Face;
