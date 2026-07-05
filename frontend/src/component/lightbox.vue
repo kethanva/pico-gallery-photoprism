@@ -485,13 +485,13 @@ export default {
         _contextMenuListener = (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          // Double right-click exits to the PhotoPrism UI; a lone right-click
+          // Double right-click toggles fullscreen; a lone right-click
           // only suppresses the browser menu (and pauses the slideshow via the
           // pointerdown capture). Two contextmenu events inside the window win.
           const now = Date.now();
           if (now - _lastContextMenuTs <= DOUBLE_CLICK_MS) {
             _lastContextMenuTs = 0;
-            this.close();
+            this.toggleFullscreen();
           } else {
             _lastContextMenuTs = now;
           }
@@ -506,7 +506,7 @@ export default {
           if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
           ev.preventDefault();
           ev.stopPropagation();
-          this.close();
+          this.toggleFullscreen();
         };
         document.addEventListener("keydown", _fKeyListener, { capture: true });
       }
