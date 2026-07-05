@@ -23,8 +23,11 @@ Additional information can be found in our Developer Guide:
 
 */
 
-import "core-js/stable";
-import "regenerator-runtime/runtime";
+// core-js / regenerator polyfills are no longer imported wholesale here: .babelrc
+// uses @babel/preset-env useBuiltIns:"usage", so babel injects only the specific
+// polyfills each file needs for the browserslist target. On the frame's modern
+// WPE WebKit that is nearly nothing, trimming ~100-150 KB of unused polyfill off
+// the boot bundle (less to parse on the Pi Zero 2 W).
 import $api from "common/api";
 import $notify from "common/notify";
 import { $view } from "common/view";

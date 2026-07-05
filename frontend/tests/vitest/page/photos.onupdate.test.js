@@ -116,13 +116,20 @@ describe("page/photos.vue kiosk slideshow", () => {
     const ok = openPhoto.call(stub, 2);
 
     expect(ok).toBe(true);
-    expect(stub.$lightbox.openModels).toHaveBeenCalledTimes(1);
-    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    // Kiosk taps route through the LAZY openView(view, index, autoplay) path —
+    // openView fetches `photos/view` (server returns Thumb-shaped rows → cheap
+    // Thumb.wrap) asynchronously, so the tap returns immediately. The old
+    // synchronous openModels(Thumb.fromPhotos(this.results)) rebuilt a Thumb (a
+    // URL per thumbnail size) for every loaded result on the tap and froze the
+    // 512 MB Pi Zero 2 W once infinite scroll had grown this.results.
+    expect(stub.$lightbox.openView).toHaveBeenCalledTimes(1);
+    const [view, index, autoplay] = stub.$lightbox.openView.mock.calls[0];
+    expect(view).toBe(stub);
     expect(index).toBe(2);
     expect(autoplay).toBe(true);
-    expect(models).toHaveLength(3);
-    // Not routed through the normal openView path.
-    expect(stub.$lightbox.openView).not.toHaveBeenCalled();
+    // The synchronous prebuilt-models path must not run on the tap.
+    expect(stub.$lightbox.openModels).not.toHaveBeenCalled();
+    expect(fromPhotosSpy).not.toHaveBeenCalled();
   });
 
   it("openPhoto keeps the normal openView path outside kiosk mode", () => {
@@ -210,12 +217,17 @@ describe("page/album/photos.vue kiosk slideshow", () => {
     };
 
     expect(openPhoto.call(stub, 1)).toBe(true);
-    const [models, index, collection, autoplay] = stub.$lightbox.openModels.mock.calls[0];
+    // Lazy openView path (async photos/view fetch + cheap Thumb.wrap). The album
+    // collection is derived inside showView from view.model (Album extends
+    // Collection), so it is not passed to openView here. No synchronous
+    // Thumb.fromPhotos build runs on the tap — that froze the Pi Zero 2 W.
+    expect(stub.$lightbox.openView).toHaveBeenCalledTimes(1);
+    const [view, index, autoplay] = stub.$lightbox.openView.mock.calls[0];
+    expect(view).toBe(stub);
     expect(index).toBe(1);
     expect(autoplay).toBe(true);
-    expect(collection).toBe(stub.model);
-    expect(models).toHaveLength(2);
-    expect(stub.$lightbox.openView).not.toHaveBeenCalled();
+    expect(stub.$lightbox.openModels).not.toHaveBeenCalled();
+    expect(fromPhotosSpy).not.toHaveBeenCalled();
   });
 
   it("loadKioskSlideshow plays the already-loaded album page in curated order — no shuffle, no re-fetch", () => {

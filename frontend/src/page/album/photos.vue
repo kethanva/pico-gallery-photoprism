@@ -333,8 +333,12 @@ export default {
 
       // Kiosk: picking a photo from the album grid resumes the fullscreen
       // slideshow starting at that photo (same contract as page/photos.vue).
+      // Uses the LAZY openView path — async `photos/view` fetch + cheap
+      // Thumb.wrap — instead of synchronously rebuilding a Thumb for every
+      // loaded result, which froze the 512 MB Pi Zero 2 W on the tap. openView
+      // derives the album collection from this.model (Album extends Collection).
       if (this.$route.query.kiosk || this.$route.query.slideshow) {
-        this.$lightbox.openModels(Thumb.fromPhotos(this.results), index, this.model, true);
+        this.$lightbox.openView(this, index, true);
         return true;
       }
 

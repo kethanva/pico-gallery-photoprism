@@ -10,8 +10,8 @@ export class Lightbox {
     $event.publish("lightbox.open", { models, index, collection, autoplay });
   }
 
-  openView(view, index) {
-    $event.publish("lightbox.open", { view, index });
+  openView(view, index, autoplay = false) {
+    $event.publish("lightbox.open", { view, index, autoplay });
   }
 }
 

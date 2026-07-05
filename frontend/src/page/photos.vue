@@ -472,12 +472,20 @@ export default {
         return false;
       }
 
-      // Kiosk: picking a photo from the PhotoPrism UI resumes the fullscreen
-      // slideshow starting at that photo and walking the rest of the loaded set
-      // without repeats (autoplay=true → the lightbox enters fullscreen and
-      // auto-advances; see openLightbox/enterFullscreenSlideshow).
+      // Kiosk: picking a photo resumes the fullscreen slideshow from that photo
+      // (autoplay=true → the lightbox enters fullscreen and auto-advances; see
+      // openLightbox/enterFullscreenSlideshow).
+      //
+      // This routes through the LAZY openView path, not openModels: openView
+      // fetches `photos/view` (the server returns Thumb-shaped rows → a cheap
+      // Thumb.wrap, no per-size URL building) asynchronously, so the tap returns
+      // immediately. The old openModels(Thumb.fromPhotos(this.results)) rebuilt a
+      // Thumb — a URL for every thumbnail size — for EVERY loaded result
+      // synchronously on the tap. Once infinite scroll had grown this.results to
+      // hundreds, that multi-hundred-ms main-thread freeze on the 512 MB Pi Zero
+      // 2 W was the "tap does nothing / no fullscreen" symptom.
       if (this.$route.query.kiosk || this.$route.query.slideshow) {
-        this.$lightbox.openModels(Thumb.fromPhotos(this.results), index, null, true);
+        this.$lightbox.openView(this, index, true);
         return true;
       }
 

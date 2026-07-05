@@ -134,10 +134,22 @@ const config = {
         exclude: [
           /\.map$/,
           /\.txt$/,
+          // @mdi/font ships eot/ttf/woff/woff2; WPE WebKit only ever loads
+          // woff2. The others are dead fallbacks — precaching the 1.3 MB .eot
+          // (a legacy IE format) alone was a third of the SW download for bytes
+          // the frame can never use.
+          /\.eot(\?.*)?$/,
           /\.ttf(\?.*)?$/,
           /\.woff(\?.*)?$/,
           /assets\.json$/,
-          /chunk\/.*-json\.[a-f0-9]+\.js$/,
+          // Precache only the boot bundle (app.*.js/css + splash), never the
+          // lazy chunks. Everything in chunk/ is loaded on demand and the
+          // photos-only frame never reaches it: the page-* routes, the
+          // maplibre / photo-sphere-viewer / hls libraries, and the per-language
+          // locale JSON. Precaching them made the service worker download ~5 MB
+          // of code the Pi Zero 2 W frame never runs. (A visited route still
+          // fetches its chunk live; the SW just doesn't pre-pull them.)
+          /chunk\//,
           /locales\/json\/.*\.json$/,
           /share\.[a-f0-9]+\.(js|css)$/,
         ],
