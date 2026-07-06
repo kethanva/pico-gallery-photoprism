@@ -334,9 +334,11 @@ step_base_packages() {
 step_kms_boot() {
   [[ "$IS_PI" -eq 1 && -n "$BOOT_CFG" ]] || { debug "no Pi boot config; skipping KMS/gpu_mem"; return 0; }
   step "Display/boot configuration ($BOOT_CFG)"
+  # Each addition is wrapped in "# BEGIN/END PicoGallery installer" markers so the
+  # uninstaller can delete exactly what we appended (no orphaned lines).
   if ! grep -qE '^\s*dtoverlay=vc4-kms-v3d' "$BOOT_CFG"; then
     info "Enabling KMS driver (dtoverlay=vc4-kms-v3d) — required by Cage"
-    run bash -c "printf '\n# Added by PicoGallery installer (Cage/WPE needs KMS)\ndtoverlay=vc4-kms-v3d\n' >> '$BOOT_CFG'"
+    run bash -c "printf '\n# BEGIN PicoGallery installer (Cage/WPE needs KMS)\ndtoverlay=vc4-kms-v3d\n# END PicoGallery installer\n' >> '$BOOT_CFG'"
     REBOOT_REQUIRED=1
   else
     debug "KMS driver already enabled"
@@ -348,7 +350,7 @@ step_kms_boot() {
     local gpu_mem=128
     if (( RAM_MB <= 640 )); then gpu_mem=64; fi
     info "Setting gpu_mem=$gpu_mem"
-    run bash -c "printf 'gpu_mem=$gpu_mem\n' >> '$BOOT_CFG'"
+    run bash -c "printf '\n# BEGIN PicoGallery installer (gpu_mem)\ngpu_mem=$gpu_mem\n# END PicoGallery installer\n' >> '$BOOT_CFG'"
     REBOOT_REQUIRED=1
   fi
 }
@@ -943,12 +945,28 @@ step_verify() {
 }
 
 # ── Uninstall ────────────────────────────────────────────────────────────────
+# Delegate to the comprehensive, self-contained uninstall.sh so there is a single
+# source of truth for cleanup (units, users, config, caches, boot-config reverts,
+# swap, backups, install log, and local build artifacts). Falls back to a minimal
+# inline removal only if uninstall.sh is missing from the checkout.
 do_uninstall() {
-  step "Uninstalling PicoGallery"
+  local uninstaller="$REPO_ROOT/uninstall.sh"
+  if [[ -f "$uninstaller" ]]; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      info "[dry-run] would run $uninstaller $([[ "$ASSUME_YES" -eq 1 ]] && echo --yes)"
+      return 0
+    fi
+    step "Delegating to uninstall.sh (comprehensive cleanup)"
+    local args=()
+    [[ "$ASSUME_YES" -eq 1 ]] && args+=(--yes)
+    exec bash "$uninstaller" "${args[@]}"
+  fi
+
+  step "Uninstalling PicoGallery (minimal fallback — uninstall.sh not found)"
   confirm "Remove PicoGallery services, users, config, and cache?" || die "Aborted."
   # Current units + every legacy kiosk name this project shipped under previous
   # names (see purge_legacy_kiosk), so uninstall leaves nothing to fight a reinstall.
-  for unit in picogallery-kiosk.service picogallery.service \
+  for unit in picogallery-kiosk.service picogallery-photoprism.service picogallery.service \
               pico-display-on.timer pico-display-off.timer \
               pico-display-on.service pico-display-off.service \
               pico-google-photos.service photoprism-kiosk.service \
@@ -956,6 +974,7 @@ do_uninstall() {
     run systemctl disable --now "$unit" 2>/dev/null || true
     run rm -f "/etc/systemd/system/$unit"
     run rm -rf "/etc/systemd/system/$unit.d"
+    run systemctl reset-failed "$unit" 2>/dev/null || true
   done
   run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /etc/sudoers.d/picogallery-kiosk
   run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
@@ -971,6 +990,7 @@ do_uninstall() {
     run rm -f /var/swap.picogallery
   fi
   run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
+  run rm -f "$LOG_FILE"
   id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
   id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
   ok "Uninstalled. (Packages cog/cage/node left installed; remove with apt if desired.)"

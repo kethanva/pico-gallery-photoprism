@@ -225,7 +225,7 @@ Run on the device as root: `sudo ./install.sh [flags]`.
 | `-y, --yes` | (None) | Don't prompt; accept safe defaults. |
 | `--dry-run` | (None) | Print actions without changing the system. |
 | `--verbose` | (None) | Verbose output. |
-| `--uninstall` | (None) | Remove PicoGallery services, users, config, and cache. |
+| `--uninstall` | (None) | Remove **all** PicoGallery traces: services/timers (incl. legacy names), binaries, sudoers, seat udev rule, users + home caches, `/etc/picogallery`, `/var/cache/picogallery`, the install log, the build swap, reverted boot-config/USB backups, and local `node_modules`/`dist`. Delegates to `uninstall.sh`. |
 
 ---
 

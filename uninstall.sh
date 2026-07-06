@@ -1,23 +1,37 @@
 #!/usr/bin/env bash
 #
-# PicoGallery Uninstaller
+# PicoGallery Uninstaller — comprehensive, self-contained cleanup.
 # =============================================================================
-# Cleans all traces of the project on the Raspberry Pi. This includes:
-# - Systemd services, timers, and drop-ins
-# - Users and groups created for the kiosk/server
-# - Configuration directories and caches
-# - Swap files created for building
-# - Udev rules and boot configuration backups
+# Removes every trace this project leaves on a Raspberry Pi. It is the single
+# source of truth for cleanup (install.sh --uninstall delegates here). It cleans:
+# - Systemd services, timers, and drop-ins (current + every legacy unit name)
+# - Binaries, sudoers, and the seat udev rule
+# - Users and groups created for the kiosk/server (with their home dirs)
+# - Configuration + cache directories, the kiosk browser cache, and the install log
+# - The build swapfile (and fstab entry) / reverted dphys-swapfile size
+# - Boot-config additions (KMS overlay, gpu_mem) and USB host-mode backups
 # - Local node_modules and frontend/dist build artifacts
+#
+# Usage: sudo ./uninstall.sh [-y|--yes]
 # =============================================================================
 
 set -Eeuo pipefail
 
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
+readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
 readonly SERVER_USER="picogallery"
 readonly SEAT_UDEV_RULE="/etc/udev/rules.d/72-picogallery-seat.rules"
+
+ASSUME_YES=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -y|--yes) ASSUME_YES=1; shift ;;
+    -h|--help) printf 'Usage: sudo ./uninstall.sh [-y|--yes]\n'; exit 0 ;;
+    *) printf 'Unknown option: %s (try --help)\n' "$1" >&2; exit 1 ;;
+  esac
+done
 
 if [[ -t 1 ]]; then
   C_RESET=$'\033[0m'; C_INFO=$'\033[1;34m'; C_OK=$'\033[1;32m'; C_WARN=$'\033[1;33m'; C_ERR=$'\033[1;31m'
@@ -37,8 +51,8 @@ run() {
 }
 
 confirm() {
-  local prompt="$1"
-  local ans
+  [[ "$ASSUME_YES" -eq 1 ]] && return 0
+  local prompt="$1" ans
   read -r -p "$prompt [y/N] " ans || true
   [[ "$ans" =~ ^[Yy] ]]
 }
@@ -48,7 +62,9 @@ confirm() {
 step "Uninstalling PicoGallery"
 confirm "Remove PicoGallery services, users, config, cache, and all system traces?" || die "Aborted."
 
-# 1. Systemd Services and Timers
+# 1. Systemd Services and Timers — current units plus every legacy name this
+#    project shipped under previous identities, so nothing survives to fight a
+#    reinstall or to keep grabbing tty1/DRM.
 info "Disabling and removing systemd services..."
 for unit in picogallery-kiosk.service picogallery-photoprism.service picogallery.service \
             pico-display-on.timer pico-display-off.timer \
@@ -58,9 +74,10 @@ for unit in picogallery-kiosk.service picogallery-photoprism.service picogallery
   run systemctl disable --now "$unit" 2>/dev/null || true
   run rm -f "/etc/systemd/system/$unit"
   run rm -rf "/etc/systemd/system/$unit.d"
+  run systemctl reset-failed "$unit" 2>/dev/null || true
 done
 
-# 2. System binaries and rules
+# 2. System binaries, sudoers, and udev rules
 info "Removing binaries and udev rules..."
 run rm -f /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power /etc/sudoers.d/picogallery-kiosk
 run rm -rf /etc/systemd/system/picogallery-kiosk.service.d
@@ -75,7 +92,7 @@ run systemctl daemon-reload
 info "Restoring tty1 console login..."
 run systemctl enable --now getty@tty1.service 2>/dev/null || true
 
-# 4. Swap file
+# 4. Swap file / dphys-swapfile size
 info "Removing build swapfile or reverting swap size..."
 if [[ -f /var/swap.picogallery ]]; then
   run swapoff /var/swap.picogallery 2>/dev/null || true
@@ -89,29 +106,49 @@ if [[ -f /etc/dphys-swapfile ]] && grep -q '^CONF_SWAPSIZE=1024' /etc/dphys-swap
   run dphys-swapfile swapon 2>/dev/null || true
 fi
 
-# 5. Configuration and Cache
-info "Removing configuration and cache directories..."
-run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
+# 5. Kiosk browser cache — remove explicitly first (userdel -r below also drops
+#    the home dir, but do it here too in case the account was already deleted or
+#    userdel fails, so no stale Service Workers / cached SPA files are left).
+info "Clearing kiosk browser cache and local storage..."
+run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" 2>/dev/null || true
 
-# 6. Users
+# 6. Configuration, cache, and install log
+info "Removing configuration, cache, and install log..."
+run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
+run rm -f "$LOG_FILE"
+
+# 7. Users
 info "Removing system users..."
 id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
 id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
 
-# 7. Boot Config Backups and Settings
-info "Restoring boot configuration backups or settings if available..."
+# 8. Boot Config additions and backups
+info "Restoring boot configuration backups or reverting appended settings..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
   if [[ -f "$cfg.picogallery.bak" ]]; then
+    # USB host-mode guard saved a full backup before editing — restoring it also
+    # reverts any KMS/gpu_mem block we appended to the same file.
     run mv "$cfg.picogallery.bak" "$cfg"
     ok "Restored $cfg from backup"
-  elif [[ -f "$cfg" ]] && grep -q "Added by PicoGallery installer" "$cfg"; then
-    info "Removing KMS boot settings appended to $cfg..."
+  elif [[ -f "$cfg" ]] && grep -q "PicoGallery installer" "$cfg"; then
+    info "Removing settings appended to $cfg..."
     run cp -a "$cfg" "$cfg.picogallery-un.bak"
-    # Delete exactly the block the installer appended (marker + dtoverlay line)
-    # — an open-ended /marker/,$d would also wipe anything the user or
-    # raspi-config appended after it.
-    run sed -i '/# Added by PicoGallery installer/,/^dtoverlay=vc4-kms-v3d$/d' "$cfg"
-    ok "Reverted settings in $cfg"
+    # Current format: delete every "# BEGIN … # END PicoGallery installer" block
+    # (covers the KMS overlay and gpu_mem in one deterministic pass).
+    run sed -i '/# BEGIN PicoGallery installer/,/# END PicoGallery installer/d' "$cfg"
+    # Legacy format (marker line + dtoverlay, no END marker) from older installs.
+    local_removed_legacy=0
+    if grep -q "# Added by PicoGallery installer" "$cfg"; then
+      run sed -i '/# Added by PicoGallery installer/,/^dtoverlay=vc4-kms-v3d$/d' "$cfg"
+      local_removed_legacy=1
+    fi
+    # The legacy layout appended gpu_mem right after the KMS block with no marker,
+    # so the range delete above orphaned it. Only strip a lone gpu_mem line we
+    # would have written (64/128) when we actually removed a legacy KMS block.
+    if [[ "$local_removed_legacy" -eq 1 ]]; then
+      run sed -i -E '/^gpu_mem=(64|128)$/d' "$cfg"
+    fi
+    ok "Reverted appended settings in $cfg"
   fi
   cmdline="${cfg%config.txt}cmdline.txt"
   if [[ -f "$cmdline.picogallery.bak" ]]; then
@@ -125,7 +162,7 @@ if [[ -f /etc/modules.picogallery.bak ]]; then
   ok "Restored /etc/modules"
 fi
 
-# 8. Local Project Caches
+# 9. Local Project Caches (node_modules + built frontend/dist)
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_PATH/package.json" ]]; then
   info "Cleaning local project build caches and node_modules in $SCRIPT_PATH..."
@@ -135,4 +172,5 @@ if [[ -f "$SCRIPT_PATH/package.json" ]]; then
 fi
 
 ok "Uninstalled PicoGallery successfully."
-ok "To completely remove the codebase, you can delete this folder: rm -rf $SCRIPT_PATH"
+info "Packages (cog/cage/seatd/node) were left installed; remove with apt if desired."
+ok "To completely remove the codebase, delete this folder: rm -rf $SCRIPT_PATH"
