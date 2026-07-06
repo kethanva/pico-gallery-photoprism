@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import PLightbox from "component/lightbox.vue";
 
-// F / double-right-click / middle-click toggle PhotoPrism's native fullscreen
-// from inside the immersive slideshow. They are wired with DOCUMENT-LEVEL
-// capture listeners attached in afterEnter and removed in afterLeave, NOT via
-// template @keydown bindings — during an autoplaying slideshow the controls are
-// hidden and focus sits on document.body, so a component-scoped @keydown.f would
-// never fire (and Vuetify teleports the dialog out of this component's DOM tree).
-// These tests pin that contract: plain F and double right-click call
-// toggleFullscreen(), the guards hold, and afterLeave fully detaches so the
-// grid-side (host-injected) handlers regain ownership of F.
+// F / double-right-click exit the kiosk slideshow back to the PhotoPrism grid;
+// middle-click remains a pure virtual-fullscreen toggle. They are wired with
+// DOCUMENT-LEVEL capture listeners attached in afterEnter and removed in
+// afterLeave, NOT via template @keydown bindings — during an autoplaying
+// slideshow the controls are hidden and focus sits on document.body, so a
+// component-scoped @keydown.f would never fire (and Vuetify teleports the
+// dialog out of this component's DOM tree).
+// These tests pin that contract: plain F and double right-click call the kiosk
+// surface toggle, the guards hold, and afterLeave fully detaches so the grid-side
+// handlers regain ownership of F.
 // See lightbox.vue afterEnter/afterLeave.
-const { afterEnter, afterLeave } = PLightbox.methods;
+const { afterEnter, afterLeave, toggleKioskSurface, onShortCut } = PLightbox.methods;
 
 // Minimal stand-in for the component instance the two lifecycle hooks touch.
 const makeCtx = () => ({
@@ -20,6 +21,7 @@ const makeCtx = () => ({
   $emit: vi.fn(),
   close: vi.fn(),
   toggleFullscreen: vi.fn(),
+  toggleKioskSurface: vi.fn(),
   visible: true,
   busy: false,
   closing: false,
@@ -34,7 +36,7 @@ const fire = (type, target, init = {}) => {
   return ev;
 };
 
-describe("PLightbox — fullscreen toggle (document-level F / right-click / middle-click)", () => {
+describe("PLightbox — kiosk surface toggle (document-level F / right-click / middle-click)", () => {
   let ctx;
 
   afterEach(() => {
@@ -46,24 +48,26 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
     }
   });
 
-  it("plain F toggles fullscreen and swallows the event", () => {
+  it("plain F exits/toggles the kiosk surface and swallows the event", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     const ev = fire("keydown", document, { key: "f" });
 
-    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleKioskSurface).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ctx.close).not.toHaveBeenCalled();
     expect(ev.defaultPrevented).toBe(true);
   });
 
-  it("uppercase F (shift) also toggles fullscreen", () => {
+  it("uppercase F (shift) also exits/toggles the kiosk surface", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     fire("keydown", document, { key: "F" });
 
-    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleKioskSurface).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ctx.close).not.toHaveBeenCalled();
   });
 
@@ -75,6 +79,7 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
     fire("keydown", document, { key: "f", metaKey: true });
     fire("keydown", document, { key: "f", altKey: true });
 
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
   });
 
@@ -88,6 +93,7 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
     try {
       fire("keydown", input, { key: "f" });
       fire("keydown", textarea, { key: "f" });
+      expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
       expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     } finally {
       input.remove();
@@ -101,6 +107,7 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
 
     fire("keydown", document, { key: "g" });
 
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
   });
 
@@ -110,18 +117,20 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
 
     const ev = fire("contextmenu", document);
 
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ev.defaultPrevented).toBe(true); // browser menu suppressed
   });
 
-  it("double right-click within the window toggles fullscreen", () => {
+  it("double right-click within the window exits/toggles the kiosk surface", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
 
     fire("contextmenu", document);
     fire("contextmenu", document);
 
-    expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleKioskSurface).toHaveBeenCalledTimes(1);
+    expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ctx.close).not.toHaveBeenCalled();
   });
 
@@ -130,13 +139,15 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
     afterEnter.call(ctx);
 
     fire("auxclick", document, { button: 2 }); // right aux — ignored
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
 
-    fire("auxclick", document, { button: 1 }); // middle — toggles
+    fire("auxclick", document, { button: 1 }); // middle — toggles fullscreen only
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
   });
 
-  it("afterLeave detaches: F on the grid no longer toggles (host handler regains F)", () => {
+  it("afterLeave detaches: F on the grid no longer toggles", () => {
     ctx = makeCtx();
     afterEnter.call(ctx);
     afterLeave.call(ctx);
@@ -146,8 +157,60 @@ describe("PLightbox — fullscreen toggle (document-level F / right-click / midd
     fire("contextmenu", document);
     fire("auxclick", document, { button: 1 });
 
+    expect(ctx.toggleKioskSurface).not.toHaveBeenCalled();
     expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     expect(ctx.close).not.toHaveBeenCalled();
     ctx = null; // already detached; skip afterEach re-detach
+  });
+
+  it("toggleKioskSurface closes the lightbox on kiosk routes", () => {
+    const routeCtx = {
+      isKioskRoute: () => true,
+      pauseLightbox: vi.fn(),
+      exitFullscreen: vi.fn(() => Promise.resolve()),
+      close: vi.fn(),
+      toggleFullscreen: vi.fn(),
+    };
+
+    toggleKioskSurface.call(routeCtx);
+
+    expect(routeCtx.pauseLightbox).toHaveBeenCalledTimes(1);
+    expect(routeCtx.exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(routeCtx.close).toHaveBeenCalledTimes(1);
+    expect(routeCtx.pauseLightbox.mock.invocationCallOrder[0]).toBeLessThan(routeCtx.exitFullscreen.mock.invocationCallOrder[0]);
+    expect(routeCtx.exitFullscreen.mock.invocationCallOrder[0]).toBeLessThan(routeCtx.close.mock.invocationCallOrder[0]);
+    expect(routeCtx.toggleFullscreen).not.toHaveBeenCalled();
+  });
+
+  it("toggleKioskSurface keeps normal fullscreen behavior outside kiosk routes", () => {
+    const routeCtx = {
+      isKioskRoute: () => false,
+      pauseLightbox: vi.fn(),
+      exitFullscreen: vi.fn(() => Promise.resolve()),
+      close: vi.fn(),
+      toggleFullscreen: vi.fn(),
+    };
+
+    toggleKioskSurface.call(routeCtx);
+
+    expect(routeCtx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    expect(routeCtx.close).not.toHaveBeenCalled();
+    expect(routeCtx.pauseLightbox).not.toHaveBeenCalled();
+  });
+
+  it("KeyF shortcut uses the same kiosk surface exit path", () => {
+    const routeCtx = {
+      canFullscreen: true,
+      faceMarkers: { active: false },
+      toggleKioskSurface: vi.fn(),
+      toggleFullscreen: vi.fn(),
+      trace: false,
+    };
+
+    const handled = onShortCut.call(routeCtx, { code: "KeyF" });
+
+    expect(handled).toBe(true);
+    expect(routeCtx.toggleKioskSurface).toHaveBeenCalledTimes(1);
+    expect(routeCtx.toggleFullscreen).not.toHaveBeenCalled();
   });
 });

@@ -467,20 +467,19 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
-      // Fullscreen toggle — F, double-right-click, and middle-click all invoke
-      // PhotoPrism's native toggleFullscreen(). These document-level capture
+      // Kiosk surface toggle — F and double-right-click exit the immersive
+      // slideshow back to the grid; middle-click remains a pure fullscreen
+      // toggle. These document-level capture
       // listeners exist because in the kiosk slideshow the native onShortCut
       // KeyF path can't reach the event:
       //   1. Vuetify teleports the dialog overlay outside this component's DOM
       //      tree, so @contextmenu / @keydown bound on the v-dialog never fire.
       //   2. During autoplay the controls are hidden and focus sits on
       //      document.body, so a component-scoped @keydown.f would never fire.
-      //   3. Capture + preventDefault suppresses the host script's own grid
-      //      handlers (bubble phase, they bail on defaultPrevented) so a single
-      //      press does not both toggle fullscreen here AND trigger the grid.
-      // NOTE: under Cage/WPE the window is already fullscreen, so on the frame
-      // toggleFullscreen() is a near no-op — this restores desktop parity and
-      // keeps a single, consistent meaning for F across surfaces.
+      //   3. Capture + preventDefault keeps one gesture from reaching both the
+      //      lightbox and any grid-level handlers.
+      // Outside kiosk routes, the same gestures keep PhotoPrism's normal
+      // fullscreen toggle behavior.
       // Fresh double-click window per lightbox session — a right-click from a
       // previous session must not pair with the first one here.
       _lastContextMenuTs = 0;
@@ -488,13 +487,13 @@ export default {
         _contextMenuListener = (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          // Double right-click toggles fullscreen; a lone right-click
-          // only suppresses the browser menu (and pauses the slideshow via the
-          // pointerdown capture). Two contextmenu events inside the window win.
+          // Double right-click exits/toggles the kiosk surface; a lone
+          // right-click only suppresses the browser menu (and pauses the
+          // slideshow via the pointerdown capture).
           const now = Date.now();
           if (now - _lastContextMenuTs <= DOUBLE_CLICK_MS) {
             _lastContextMenuTs = 0;
-            this.toggleFullscreen();
+            this.toggleKioskSurface();
           } else {
             _lastContextMenuTs = now;
           }
@@ -503,20 +502,28 @@ export default {
       }
       if (!_fKeyListener) {
         _fKeyListener = (ev) => {
-          if (ev.key !== "f" && ev.key !== "F") return;
-          if (ev.altKey || ev.ctrlKey || ev.metaKey) return;
+          if (ev.key !== "f" && ev.key !== "F") {
+            return;
+          }
+          if (ev.altKey || ev.ctrlKey || ev.metaKey) {
+            return;
+          }
           const t = ev.target;
-          if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+          if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+            return;
+          }
           ev.preventDefault();
           ev.stopPropagation();
-          this.toggleFullscreen();
+          this.toggleKioskSurface();
         };
         document.addEventListener("keydown", _fKeyListener, { capture: true });
       }
       // Attach a document-level auxclick listener for single middle-click fullscreen toggle.
       if (!_auxClickListener) {
         _auxClickListener = (ev) => {
-          if (ev.button !== 1) return; // only middle button
+          if (ev.button !== 1) {
+            return; // only middle button
+          }
           ev.preventDefault();
           this.toggleFullscreen();
         };
@@ -624,7 +631,7 @@ export default {
         mainClass: "p-lightbox__pswp",
         tapAction: (point, ev) => this.onContentClick(point, ev),
         imageClickAction: (point, ev) => this.onContentClick(point, ev),
-        doubleTapAction: (point, ev) => {
+        doubleTapAction: () => {
           this.toggleFullscreen();
           return false;
         },
@@ -2648,7 +2655,9 @@ export default {
       }
 
       const pswp = this.pswp();
-      if (!pswp) return;
+      if (!pswp) {
+        return;
+      }
 
       // Extract clientX from the event (pointer, mouse, touch) or parsed point coordinates.
       let x = event?.clientX;
@@ -2713,6 +2722,23 @@ export default {
       } else {
         this.requestFullscreen().catch(() => {});
       }
+    },
+    // Toggles the user-facing kiosk surface. On the appliance, "fullscreen"
+    // means the PhotoSwipe slideshow surface; leaving it must reveal the grid
+    // even when WPE has no native Fullscreen API to exit.
+    toggleKioskSurface() {
+      if (this.isKioskRoute()) {
+        this.pauseLightbox();
+        this.exitFullscreen().catch(() => {});
+        this.close();
+        return;
+      }
+
+      this.toggleFullscreen();
+    },
+    // Returns true while the PhotoPrism UI is running as the appliance surface.
+    isKioskRoute() {
+      return !!(this.$route?.query?.kiosk || this.$route?.query?.slideshow);
     },
     // Returns true if fullscreen mode is enabled.
     isFullscreen() {
@@ -2965,8 +2991,11 @@ export default {
           }
           return true;
         case "KeyF":
+          // Normally the document-level capture listener in afterEnter owns F
+          // while the lightbox is open; keep this fallback in sync for any
+          // shortcut-forwarding path that reaches onShortCut directly.
           if (this.canFullscreen) {
-            this.toggleFullscreen();
+            this.toggleKioskSurface();
           }
           return true;
         case "KeyH":
