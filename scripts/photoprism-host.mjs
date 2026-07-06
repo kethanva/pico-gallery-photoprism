@@ -58,6 +58,11 @@ const backendAgent = backend.protocol === 'https:' ? https : http;
 // PhotoPrism instances on a LAN often use self-signed certs.
 const rejectUnauthorized = frameConfig.ignoreCertificateErrors !== true;
 
+// Re-use TCP connections (Keep-Alive) to reduce TLS/TCP handshake overhead on Pi CPU
+const keepAliveAgent = backend.protocol === 'https:'
+  ? new https.Agent({ keepAlive: true, rejectUnauthorized })
+  : new http.Agent({ keepAlive: true });
+
 let ppUser = '';
 let ppPass = '';
 let slideDurationSecs = 10;
@@ -91,6 +96,7 @@ function fetchSession() {
         'Content-Length': Buffer.byteLength(postData),
         'Host': backend.host
       },
+      agent: keepAliveAgent,
       rejectUnauthorized
     }, (res) => {
       let body = '';
@@ -176,7 +182,7 @@ function backendGet(pathname, sessionId) {
     if (sessionId) headers['x-auth-token'] = sessionId;
     const req = backendAgent.request(
       target,
-      { method: 'GET', headers, rejectUnauthorized },
+      { method: 'GET', headers, rejectUnauthorized, agent: keepAliveAgent },
       (res) => {
         let body = '';
         res.on('data', (chunk) => { body += chunk; });
@@ -253,7 +259,7 @@ async function proxyRequest(req, res) {
 
   const upstream = backendAgent.request(
     target,
-    { method: req.method, headers, rejectUnauthorized },
+    { method: req.method, headers, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
       if (sessionId && (up.statusCode === 401 || up.statusCode === 403)) {
         console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);
@@ -355,7 +361,7 @@ function probeBackend() {
   const target = new URL('/api/v1/config', backend);
   const req = backendAgent.request(
     target,
-    { method: 'GET', headers: { host: backend.host }, rejectUnauthorized },
+    { method: 'GET', headers: { host: backend.host }, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
       console.log(`  probe:    GET ${target.href} → HTTP ${up.statusCode} ✓`);
       up.resume();

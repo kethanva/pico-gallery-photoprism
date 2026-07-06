@@ -26,8 +26,8 @@ export function thumbUrl(hash, token, size) {
  * @param {number} dpr devicePixelRatio
  */
 export function slideshowSize(vw, vh, dpr) {
-  // Pi Zero 2 W: cap decoded slideshow images at 1920px — larger fit sizes
+  // Pi Zero 2 W: cap decoded slideshow images at 1280px — larger fit sizes (like 1920px)
   // decode slowly and exhaust the 512 MB shared RAM on WPE WebKit.
-  const px = Math.min(Math.max(vw, vh) * (dpr || 1), 1920);
+  const px = Math.min(Math.max(vw, vh) * (dpr || 1), 1280);
   return `fit_${snapFitSize(px)}`;
 }

@@ -69,6 +69,15 @@ export WPE_BACKEND="${WPE_BACKEND:-fdo}"
 # Keep wlroots from tripping on VideoCore hardware cursors.
 export WLR_NO_HARDWARE_CURSORS="${WLR_NO_HARDWARE_CURSORS:-1}"
 
+# WebKit resource and memory optimizations for the 512 MB Pi Zero 2 W:
+# Purge image caches and GC aggressively when memory pressure exceeds 120 MB
+export WEBKIT_MEMORY_PRESSURE_LIMIT="${WEBKIT_MEMORY_PRESSURE_LIMIT:-120}"
+# Cap local network/WPE disk caches to prevent I/O disk thrashing
+export WEBKIT_DISK_CACHE_LIMIT="${WEBKIT_DISK_CACHE_LIMIT:-5242880}"
+# Force hardware decoding for video media
+export WEBKIT_GST_HARDWARE_DECODING="${WEBKIT_GST_HARDWARE_DECODING:-1}"
+export WEBKIT_FORCE_COMPOSITING_MODE=1
+
 # shellcheck disable=SC2086
 exec cage -- cog \
   --platform="${COG_PLATFORM_NAME}" \

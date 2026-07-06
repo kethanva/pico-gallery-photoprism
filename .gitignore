@@ -17,5 +17,7 @@ deploy-server/
 config.local.toml
 # Skill outputs
 graphify-out/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 scripts/build-graphify.py
