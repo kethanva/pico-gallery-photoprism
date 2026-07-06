@@ -819,54 +819,54 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         expect(close).not.toHaveBeenCalled();
       });
 
-      it("afterEnter attaches a document-level F listener that toggles fullscreen, and afterLeave removes it", () => {
+      it("afterEnter attaches a document-level F listener that toggles the kiosk surface, and afterLeave removes it", () => {
         const wrapper = mountLightbox();
-        const toggleFullscreen = vi.fn();
+        const toggleKioskSurface = vi.fn();
         const ctx = {
           $event: { publish: vi.fn() },
           $emit: vi.fn(),
           $view: { leave: vi.fn() },
           close: vi.fn(),
-          toggleFullscreen,
+          toggleKioskSurface,
         };
 
         wrapper.vm.$options.methods.afterEnter.call(ctx);
 
-        // Plain F toggles fullscreen regardless of focus.
+        // Plain F toggles the kiosk surface regardless of focus.
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
 
         // Modifier combos and typing targets are ignored.
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
-        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
 
         // afterLeave detaches it so the host-injected grid handler owns F again.
         wrapper.vm.$options.methods.afterLeave.call(ctx);
         document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
         expect(ctx.close).not.toHaveBeenCalled();
       });
 
-      it("afterEnter: double right-click toggles fullscreen; a lone right-click does not", () => {
+      it("afterEnter: double right-click toggles the kiosk surface; a lone right-click does not", () => {
         const wrapper = mountLightbox();
-        const toggleFullscreen = vi.fn();
+        const toggleKioskSurface = vi.fn();
         const ctx = {
           $event: { publish: vi.fn() },
           $emit: vi.fn(),
           $view: { leave: vi.fn() },
           close: vi.fn(),
-          toggleFullscreen,
+          toggleKioskSurface,
         };
 
         wrapper.vm.$options.methods.afterEnter.call(ctx);
 
         // First right-click: browser menu suppressed, but no toggle yet.
         document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(toggleFullscreen).not.toHaveBeenCalled();
+        expect(toggleKioskSurface).not.toHaveBeenCalled();
 
-        // Second right-click within the window: toggle fullscreen.
+        // Second right-click within the window: toggle the kiosk surface.
         document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(toggleFullscreen).toHaveBeenCalledTimes(1);
+        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
         expect(ctx.close).not.toHaveBeenCalled();
 
         wrapper.vm.$options.methods.afterLeave.call(ctx);

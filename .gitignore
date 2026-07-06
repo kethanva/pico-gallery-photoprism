@@ -21,3 +21,6 @@ graphify-out/
 !.cursor/rules/
 !.cursor/rules/**
 scripts/build-graphify.py
+*.eslintcache
+.eslintcache
+
