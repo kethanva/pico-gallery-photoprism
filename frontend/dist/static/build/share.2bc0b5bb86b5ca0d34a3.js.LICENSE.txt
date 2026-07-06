@@ -1,0 +1,18 @@
+/*!
+ * is-plain-object <https://github.com/jonschlinkert/is-plain-object>
+ *
+ * Copyright (c) 2014-2017, Jon Schlinkert.
+ * Released under the MIT License.
+ */
+
+/**
+* @vue/reactivity v3.5.39
+* (c) 2018-present Yuxi (Evan) You and Vue contributors
+* @license MIT
+**/
+
+/**
+* @vue/shared v3.5.39
+* (c) 2018-present Yuxi (Evan) You and Vue contributors
+* @license MIT
+**/

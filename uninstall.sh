@@ -162,12 +162,16 @@ if [[ -f /etc/modules.picogallery.bak ]]; then
   ok "Restored /etc/modules"
 fi
 
-# 9. Local Project Caches (node_modules + built frontend/dist)
+# 9. Local Project Caches (node_modules only).
+#    Do NOT delete frontend/dist: the built PhotoPrism UI is a *tracked* repo
+#    artifact, because the Pi appliance (512 MB) cannot run the webpack build.
+#    Deleting it here bricked reinstalls — the installer then attempted an
+#    on-device build that OOMs, leaving the host with nothing to serve (blank
+#    screen). Removing the checkout itself is the final `rm -rf` hint below.
 SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_PATH/package.json" ]]; then
-  info "Cleaning local project build caches and node_modules in $SCRIPT_PATH..."
+  info "Cleaning local node_modules in $SCRIPT_PATH..."
   run rm -rf "$SCRIPT_PATH/frontend/node_modules"
-  run rm -rf "$SCRIPT_PATH/frontend/dist"
   run rm -rf "$SCRIPT_PATH/node_modules"
 fi
 

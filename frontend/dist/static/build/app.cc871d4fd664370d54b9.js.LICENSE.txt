@@ -1,0 +1,40 @@
+/*!
+  * PhotoSwipe 5.4.4 - https://photoswipe.com
+  * (c) 2024 Dmytro Semenov
+  */
+
+/*!
+  * PhotoSwipe Lightbox 5.4.4 - https://photoswipe.com
+  * (c) 2024 Dmytro Semenov
+  */
+
+/*!
+ * is-plain-object <https://github.com/jonschlinkert/is-plain-object>
+ *
+ * Copyright (c) 2014-2017, Jon Schlinkert.
+ * Released under the MIT License.
+ */
+
+/**
+ * WCAG 3.0 APCA perceptual contrast algorithm from https://github.com/Myndex/SAPC-APCA
+ * @licence https://www.w3.org/Consortium/Legal/2015/copyright-software-and-document
+ * @see https://www.w3.org/WAI/GL/task-forces/silver/wiki/Visual_Contrast_of_Text_Subgroup
+ */
+
+/**
+* @vue/reactivity v3.5.39
+* (c) 2018-present Yuxi (Evan) You and Vue contributors
+* @license MIT
+**/
+
+/**
+* @vue/runtime-dom v3.5.39
+* (c) 2018-present Yuxi (Evan) You and Vue contributors
+* @license MIT
+**/
+
+/**
+* @vue/shared v3.5.39
+* (c) 2018-present Yuxi (Evan) You and Vue contributors
+* @license MIT
+**/

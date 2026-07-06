@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# The built PhotoPrism UI IS committed: the Pi appliance (512 MB) cannot run the
+# webpack build, so a fresh clone must already contain the servable bundle.
+!frontend/dist/
+!frontend/dist/**
 .cache/
 *.tsbuildinfo
 .env

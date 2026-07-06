@@ -403,7 +403,10 @@ step_node() {
   fi
 }
 
-# Ensure the PhotoPrism Vue UI bundle is present (build on-device when missing).
+# Ensure the PhotoPrism Vue UI bundle is present. The bundle is committed to the
+# repo (frontend/dist) because low-RAM Pis cannot run the webpack build; restore
+# it from git if a previous cleanup deleted it, and only fall back to an
+# on-device build on boards with enough memory.
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   local assets="$REPO_ROOT/frontend/dist/static/build/assets.json"
@@ -411,7 +414,25 @@ step_build() {
     ok "frontend/dist present"
     return 0
   fi
+  # The bundle is tracked — a missing dist usually means an old uninstall deleted
+  # it. Restore from git before considering a build.
+  if [[ -d "$REPO_ROOT/.git" ]] && have git; then
+    info "frontend/dist missing — restoring the committed UI bundle from git"
+    run git -C "$REPO_ROOT" checkout -- frontend/dist 2>/dev/null || true
+    if [[ -f "$assets" ]]; then
+      ok "frontend/dist restored from git"
+      return 0
+    fi
+  fi
   [[ "$DRY_RUN" -eq 1 ]] && { info "[dry-run] would build frontend/dist"; return 0; }
+  # Webpack needs ~1.5+ GB; on a 512 MB board the build OOMs (even with swap it
+  # thrashes for hours). Fail with instructions instead of half-installing.
+  if (( RAM_MB < 1800 )); then
+    die "frontend/dist missing and this board (${RAM_MB} MB RAM) cannot build it.
+      Fix: git pull (the built UI is committed), or build on a PC and copy it:
+        cd frontend && PICO_NO_SW=1 npm install && PICO_NO_SW=1 npm run build
+        scp -r frontend/dist <pi>:$REPO_ROOT/frontend/"
+  fi
   step "Building PhotoPrism UI (frontend/dist)"
   [[ -f "$REPO_ROOT/frontend/package.json" ]] || die "frontend/ missing — clone the full repo"
   (cd "$REPO_ROOT/frontend" && PICO_NO_SW=1 npm install --ignore-scripts --no-audit --no-fund --no-update-notifier && PICO_NO_SW=1 npm run build) \
