@@ -58,10 +58,16 @@ const backendAgent = backend.protocol === 'https:' ? https : http;
 // PhotoPrism instances on a LAN often use self-signed certs.
 const rejectUnauthorized = frameConfig.ignoreCertificateErrors !== true;
 
-// Re-use TCP connections (Keep-Alive) to reduce TLS/TCP handshake overhead on Pi CPU
+// Re-use TCP connections to PhotoPrism (Keep-Alive). Saves per-request TCP setup
+// on the Pi CPU; TLS handshakes only when the backend URL uses https:.
 const keepAliveAgent = backend.protocol === 'https:'
-  ? new https.Agent({ keepAlive: true, rejectUnauthorized })
-  : new http.Agent({ keepAlive: true });
+  ? new https.Agent({
+      keepAlive: true,
+      maxSockets: 4,
+      maxFreeSockets: 2,
+      rejectUnauthorized,
+    })
+  : new http.Agent({ keepAlive: true, maxSockets: 4, maxFreeSockets: 2 });
 
 let ppUser = '';
 let ppPass = '';
@@ -175,6 +181,11 @@ const servedConfig = JSON.stringify({
 
 let playlistCache = { at: 0, body: '' };
 
+// Flips on the first successful backend round-trip. /api/v1/ready reports it so
+// the kiosk launcher can hold Cog until photos can actually be served — on a
+// cold boot the Pi's Wi-Fi (and thus the backend) comes up AFTER this host.
+let backendSeen = false;
+
 function backendGet(pathname, sessionId) {
   return new Promise((resolve, reject) => {
     const target = new URL(pathname, backend);
@@ -232,6 +243,7 @@ async function getPlaylistBody() {
   if (playlistCache.body && Date.now() - playlistCache.at < PLAYLIST_TTL_MS) return playlistCache.body;
   const body = await buildPlaylistBody();
   playlistCache = { at: Date.now(), body };
+  backendSeen = true;
   console.log(`[playlist] cached ${JSON.parse(body).length} photos`);
   return body;
 }
@@ -261,11 +273,12 @@ async function proxyRequest(req, res) {
     target,
     { method: req.method, headers, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
+      backendSeen = true; // any upstream response proves reachability
       if (sessionId && (up.statusCode === 401 || up.statusCode === 403)) {
         console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);
         activeSessionId = null;
       }
-      
+
       res.writeHead(up.statusCode || 502, up.headers);
       up.pipe(res);
     }
@@ -325,9 +338,17 @@ function serveStatic(req, res) {
 
 // ── Server ───────────────────────────────────────────────────────────────────
 const server = http.createServer((req, res) => {
-  if (req.url === '/api/v1/health' || req.url === '/api/v1/ready') {
+  // Liveness: is this host process up. Used by install.sh verify.
+  if (req.url === '/api/v1/health') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok' }));
+    return;
+  }
+  // Readiness: has the PhotoPrism backend answered at least once. The kiosk
+  // launcher waits on this so Cog doesn't open a frame with no library.
+  if (req.url === '/api/v1/ready') {
+    res.writeHead(backendSeen ? 200 : 503, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ status: backendSeen ? 'ok' : 'waiting for backend' }));
     return;
   }
   const pathOnly = (req.url || '').split('?')[0];
@@ -363,6 +384,7 @@ function probeBackend() {
     target,
     { method: 'GET', headers: { host: backend.host }, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
+      backendSeen = true;
       console.log(`  probe:    GET ${target.href} → HTTP ${up.statusCode} ✓`);
       up.resume();
     }
@@ -387,7 +409,19 @@ server.listen(PORT, () => {
   console.log(`  open:     http://localhost:${PORT}/`);
   console.log('Press Ctrl+C to stop.');
   probeBackend();
+  warmPlaylist();
+});
+
+// Warm the playlist cache with backoff instead of one shot — on a cold boot the
+// backend is often unreachable for the first seconds/minutes (Wi-Fi still
+// associating), and a single failed warm used to leave the first client request
+// paying the full build (or failing outright).
+function warmPlaylist(attempt = 0) {
   getPlaylistBody()
     .then(() => console.log('[playlist] cache warmed'))
-    .catch((e) => console.warn('[playlist] warm failed:', e.message));
-});
+    .catch((e) => {
+      const delay = Math.min(5000 * 2 ** attempt, 60000);
+      console.warn(`[playlist] warm failed: ${e.message} — retrying in ${delay / 1000}s`);
+      setTimeout(() => warmPlaylist(attempt + 1), delay);
+    });
+}

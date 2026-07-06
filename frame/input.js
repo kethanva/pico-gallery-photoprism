@@ -39,6 +39,14 @@ export function bindInput(handlers) {
     }
   });
 
+  // Middle-click toggles surfaces — same contract as F and double right-click
+  // (the old kiosk honored middle-click; muscle memory expects it).
+  document.addEventListener('auxclick', (e) => {
+    if (e.button !== 1 || e.defaultPrevented) return;
+    e.preventDefault();
+    handlers.onToggle();
+  });
+
   document.addEventListener('contextmenu', (e) => {
     if (e.defaultPrevented) return;
     e.preventDefault();

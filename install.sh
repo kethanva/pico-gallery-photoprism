@@ -778,10 +778,13 @@ step_kiosk() {
 # PicoGallery kiosk runtime config. Edit and: systemctl restart picogallery-kiosk
 FRAME_URL=$target_url
 WAIT_TIMEOUT=120
+# COG_CONFIG=/etc/picogallery/cog.conf
+# COG_EXTRA=--scale=1.0
 EOF
     chmod 0644 "$CONFIG_DIR/kiosk.env"
   fi
 
+  run install -m 0644 "$KIOSK_ASSETS/cog.conf" "$CONFIG_DIR/cog.conf"
   run install -m 0755 "$KIOSK_ASSETS/picogallery-kiosk.sh"   /usr/local/bin/picogallery-kiosk
   run install -m 0644 "$KIOSK_ASSETS/picogallery-kiosk.service" /etc/systemd/system/picogallery-kiosk.service
   run install -m 0440 "$KIOSK_ASSETS/picogallery-kiosk.sudoers" /etc/sudoers.d/picogallery-kiosk

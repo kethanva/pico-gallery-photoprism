@@ -3,6 +3,9 @@ import { Slideshow } from './slideshow.js';
 import { PhotoGrid } from './grid.js';
 import { bindInput } from './input.js';
 
+const BOOT_RETRY_BASE_MS = 2000;
+const BOOT_RETRY_MAX_MS = 30000;
+
 const app = document.getElementById('app');
 const loading = document.getElementById('loading');
 
@@ -24,6 +27,13 @@ grid.onSelect = (idx) => {
   const orderIdx = slideshow.order.findIndex((p) => p.hash === photo.hash);
   showSlideshow(orderIdx >= 0 ? orderIdx : 0);
 };
+
+// Tap / left-click on the slideshow opens the photo grid. Touch frames have no
+// keyboard — without this the fullscreen slideshow ignores taps entirely and
+// the frame reads as unresponsive.
+slideshow.root.addEventListener('click', () => {
+  if (surface === 'slideshow') showGrid();
+});
 
 function showSlideshow(startIndex = 0) {
   surface = 'slideshow';
@@ -51,31 +61,51 @@ bindInput({
   onEscape: () => showGrid(),
 });
 
+async function loadBootData() {
+  const [playlist, frameCfg, ppCfg] = await Promise.all([
+    fetchPlaylist(),
+    fetch('/config.json').then((r) => r.json()).catch(() => ({})),
+    // The PhotoPrism config is required — without its previewToken every thumb
+    // URL 403s and the frame shows nothing but black slides.
+    fetch('/api/v1/config').then((r) => {
+      if (!r.ok) throw new Error(`config ${r.status}`);
+      return r.json();
+    }),
+  ]);
+  if (!playlist.length) throw new Error('playlist empty');
+  return { playlist, frameCfg, ppCfg };
+}
+
 async function boot() {
-  try {
-    const [playlist, frameCfg, ppCfg] = await Promise.all([
-      fetchPlaylist(),
-      fetch('/config.json').then((r) => r.json()).catch(() => ({})),
-      fetch('/api/v1/config').then((r) => r.json()).catch(() => ({})),
-    ]);
+  // Cold boot on the Pi: Wi-Fi and the PhotoPrism backend usually come up
+  // AFTER this page loads. A single failed fetch must not leave a dead black
+  // frame until the daily kiosk recycle — retry with backoff until the
+  // library arrives.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const { playlist, frameCfg, ppCfg } = await loadBootData();
 
-    library = playlist;
-    slideshowOrder = shuffle(playlist.slice());
+      library = playlist;
+      slideshowOrder = shuffle(playlist.slice());
 
-    const previewToken = ppCfg.previewToken || ppCfg.downloadToken || 'public';
-    slideshow.setPreviewToken(previewToken);
-    grid.setPreviewToken(previewToken);
+      const previewToken = ppCfg.previewToken || ppCfg.downloadToken || 'public';
+      slideshow.setPreviewToken(previewToken);
+      grid.setPreviewToken(previewToken);
 
-    const slideDuration = frameCfg.kioskConfig?.slideDuration || frameCfg.slideDuration || 10;
-    slideshow.setSlideDuration(slideDuration);
+      const slideDuration = frameCfg.kioskConfig?.slideDuration || frameCfg.slideDuration || 10;
+      slideshow.setSlideDuration(slideDuration);
 
-    grid.setPhotos(library);
-    slideshow.start(slideshowOrder, 0);
+      grid.setPhotos(library);
+      slideshow.start(slideshowOrder, 0);
 
-    loading.classList.add('hidden');
-  } catch (err) {
-    loading.textContent = 'Failed to load photos. Check the PhotoPrism connection.';
-    console.error(err);
+      loading.classList.add('hidden');
+      return;
+    } catch (err) {
+      console.error('[boot]', err);
+      const delay = Math.min(BOOT_RETRY_BASE_MS * 2 ** (attempt - 1), BOOT_RETRY_MAX_MS);
+      loading.textContent = `Waiting for PhotoPrism… (attempt ${attempt}, retrying in ${Math.round(delay / 1000)}s)`;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 }
 

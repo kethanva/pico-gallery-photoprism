@@ -1,9 +1,20 @@
 import { thumbUrl, slideshowSize } from './thumb.js';
 import { shuffle } from './playlist.js';
 
+// Crossfade cleanup delay — must outlast the 0.8s CSS opacity transition.
+const CROSSFADE_MS = 900;
+// A load slower than this is abandoned and the show moves on (slow Wi-Fi guard).
+const LOAD_TIMEOUT_MS = 20000;
+// A failed slide skips forward quickly instead of holding a black frame.
+const ERROR_SKIP_MS = 2000;
+
 /**
  * Two-layer crossfade slideshow. Preloads and decodes the next image before
  * swapping so transitions never block the main thread on a weak A53.
+ *
+ * Scheduling: the advance timer is armed AFTER a slide has painted (in apply),
+ * never on a fixed interval — a fixed interval would replace an in-flight
+ * `img.src` before onload on slow networks, so nothing would ever paint.
  */
 export class Slideshow {
   /** @param {HTMLElement} root */
@@ -19,6 +30,7 @@ export class Slideshow {
     this.previewToken = 'public';
     this.slideDuration = 10;
     this.timer = null;
+    this.watchdog = null;
     this.paused = false;
     this.onShowGrid = null;
     /** @type {HTMLImageElement | null} */
@@ -44,7 +56,6 @@ export class Slideshow {
     this.order = photos;
     this.index = startIndex % Math.max(photos.length, 1);
     this.show();
-    this.schedule();
   }
 
   /** @param {string} token */
@@ -59,18 +70,20 @@ export class Slideshow {
   }
 
   schedule() {
-    clearInterval(this.timer);
+    clearTimeout(this.timer);
     if (this.paused || this.order.length < 2) return;
-    this.timer = setInterval(() => this.next(), this.slideDuration * 1000);
+    this.timer = setTimeout(() => this.next(), this.slideDuration * 1000);
   }
 
   pause() {
     this.paused = true;
-    clearInterval(this.timer);
+    clearTimeout(this.timer);
+    this.root.classList.add('paused');
   }
 
   resume() {
     this.paused = false;
+    this.root.classList.remove('paused');
     this.schedule();
   }
 
@@ -109,6 +122,9 @@ export class Slideshow {
     const photo = this.order[this.index];
     if (!photo) return;
 
+    clearTimeout(this.timer);
+    clearTimeout(this.watchdog);
+
     const nextLayer = 1 - this.active;
     const { el, img } = this.layers[nextLayer];
     const size = slideshowSize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -116,15 +132,19 @@ export class Slideshow {
 
     const apply = () => {
       const prev = this.layers[this.active];
+      const prevImg = prev.img;
+      const prevSrc = prevImg.getAttribute('src');
       prev.el.classList.remove('active');
       el.classList.add('animating', 'active');
       setTimeout(() => {
         el.classList.remove('animating');
-        // Free decoded image memory on the inactive layer (critical on 512 MB Pi).
-        prev.img.removeAttribute('src');
-      }, 900);
+        // Free decoded image memory on the inactive layer (critical on 512 MB
+        // Pi) — but never clobber a load that has since started on that layer.
+        if (prevImg.getAttribute('src') === prevSrc) prevImg.removeAttribute('src');
+      }, CROSSFADE_MS);
       this.active = nextLayer;
       this.#preloadNext();
+      this.schedule();
     };
 
     if (img.getAttribute('src') === src) {
@@ -132,15 +152,24 @@ export class Slideshow {
       return;
     }
 
-    img.onload = () => {
+    const settle = (fn) => {
       img.onload = null;
-      apply();
-    };
-    img.onerror = () => {
       img.onerror = null;
-      apply();
+      clearTimeout(this.watchdog);
+      fn();
     };
+    img.onload = () => settle(apply);
+    img.onerror = () => settle(() => this.#skip());
+    this.watchdog = setTimeout(() => settle(() => this.#skip()), LOAD_TIMEOUT_MS);
     img.src = src;
+  }
+
+  // A slide that failed or timed out moves on after a short beat; a full
+  // slideDuration of black frame would read as a frozen frame.
+  #skip() {
+    clearTimeout(this.timer);
+    if (this.paused || this.order.length < 2) return;
+    this.timer = setTimeout(() => this.next(), ERROR_SKIP_MS);
   }
 
   #preloadNext() {
@@ -162,12 +191,14 @@ export class Slideshow {
   hide() {
     this.root.classList.add('hidden');
     this.pause();
+    clearTimeout(this.watchdog);
     for (const { img } of this.layers) img.removeAttribute('src');
   }
 
+  // Callers pair this with goTo()/show() — revealing alone does not reload the
+  // layers hide() just cleared.
   reveal() {
     this.root.classList.remove('hidden');
     this.resume();
-    this.show();
   }
 }
