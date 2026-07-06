@@ -32,6 +32,7 @@ const WorkboxPlugin = require("workbox-webpack-plugin");
 const webpack = require("webpack");
 const isAnalyze = process.env?.BUILD_ENV === "analyze" || process.env?.NODE_ENV === "analyze";
 const isDev = isAnalyze || process.env?.BUILD_ENV === "development" || process.env?.NODE_ENV === "development";
+const noServiceWorker = process.env?.PICO_NO_SW === "1";
 const isCustom = !!process.env.CUSTOM_SRC;
 const appName = process.env.CUSTOM_NAME ? process.env.CUSTOM_NAME : "PhotoPrism";
 const { VueLoaderPlugin } = require("vue-loader");
@@ -123,7 +124,7 @@ const config = {
     new webpack.ProgressPlugin(),
     new EmitStaticFilePlugin(swScopeCleanupPath, swScopeCleanupFile),
     new VueLoaderPlugin(),
-    !isDev &&
+    !isDev && !noServiceWorker &&
       new WorkboxPlugin.GenerateSW({
         swDest: "sw.js",
         cleanupOutdatedCaches: false,

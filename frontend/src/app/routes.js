@@ -23,11 +23,7 @@ Additional information can be found in our Developer Guide:
 
 */
 
-// Appliance perf (Pi Zero 2 W, 512 MB): the frame's kiosk path only ever reaches
-// the photo grid and the album grid, so those two pages alone are compiled into
-// the boot bundle. Every other page is a route-level lazy import — webpack emits
-// each as its own chunk that the frame never downloads (the nav rail is hidden
-// in kiosk mode and the read-only host ACL hides the controls that route there).
+// Appliance perf (Pi Zero 2 W, 512 MB): trim routes the read-only host ACL cannot reach.
 // This strips the parse/execute cost of ~15 unused pages (settings, admin,
 // people, the maplibre-backed places map, labels, discover, …) out of the boot
 // path on the weak CPU WITHOUT removing any feature: navigating to a route still

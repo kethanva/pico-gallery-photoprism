@@ -35,7 +35,7 @@ import { $lightbox } from "common/lightbox";
 import { PhotoClipboard } from "common/clipboard";
 import $event from "common/event";
 import $log from "common/log";
-import { registerServiceWorker } from "common/pwa";
+import { registerServiceWorker, unregisterAllServiceWorkers } from "common/pwa";
 import $util from "common/util";
 import * as components from "component/components";
 import icons from "component/icons";
@@ -285,5 +285,10 @@ $config.update().finally(() => {
   app.mount("#app");
 
   // Allows the application to be installed as a PWA.
-  registerServiceWorker(typeof navigator === "undefined" ? undefined : navigator, $config, $log);
+  const nav = typeof navigator === "undefined" ? undefined : navigator;
+  if (window.__CONFIG__?.disableServiceWorker) {
+    unregisterAllServiceWorkers(nav, $log);
+  } else {
+    registerServiceWorker(nav, $config, $log);
+  }
 });

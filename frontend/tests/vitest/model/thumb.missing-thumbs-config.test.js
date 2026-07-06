@@ -12,7 +12,7 @@ import { $config } from "app/session.js";
 // (reading 'length')" on the FIRST Thumb.fromPhotos() call — i.e. the kiosk boot
 // slideshow and every tap-to-open-a-photo. The grid rendered; the lightbox never
 // opened. The test suite missed it because its window.__CONFIG__ (clientConfig)
-// DOES carry thumbs. These tests drop the thumbs config to reproduce the frame.
+// DOES carry thumbs. These tests drop the thumbs config to reproduce the appliance boot path.
 describe("Thumb — resilient when the thumbs size config is absent", () => {
   let savedThumbs;
 
@@ -28,7 +28,7 @@ describe("Thumb — resilient when the thumbs size config is absent", () => {
     $config.values.thumbs = undefined;
   };
 
-  it("fromPhotos does not throw when $config has no thumbs (the frame's boot slideshow path)", () => {
+  it("fromPhotos does not throw when $config has no thumbs (the appliance boot grid path)", () => {
     clearThumbs();
     const photos = [new Photo({ UID: "pqrst000001", Hash: "abc123def456", Type: "image", Width: 800, Height: 600 })];
 

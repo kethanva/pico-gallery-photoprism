@@ -5,10 +5,10 @@
 #
 # Cage is a single-window Wayland compositor: it opens DRM/KMS directly (no X11,
 # no desktop) and forces its one client fullscreen. Cog is the WPE WebKit browser
-# launcher; run as Cage's child it inherits WAYLAND_DISPLAY and renders the frame.
+# launcher; run as Cage's child it inherits WAYLAND_DISPLAY and renders the UI.
 #
 # Configuration comes from /etc/picogallery/kiosk.env (written by install.sh):
-#   FRAME_URL       the PicoGallery frame to display (e.g. http://localhost:8190/)
+#   FRAME_URL       the PhotoPrism UI URL to display (e.g. http://localhost:8190/library/photos)
 #   WAIT_TIMEOUT    seconds to wait for the server on boot (default 120; 0 = skip)
 #   COG_CONFIG      path to cog.conf WebKit settings (default /etc/picogallery/cog.conf)
 #   COG_EXTRA       optional extra args passed to cog (appended after defaults)
@@ -36,17 +36,17 @@ fi
 command -v cage >/dev/null 2>&1 || { echo "cage not installed (apt install cage)" >&2; exit 1; }
 command -v cog  >/dev/null 2>&1 || { echo "cog not installed (apt install cog)"  >&2; exit 1; }
 
-# Block until the server is ready, so the frame doesn't open on a "network
+# Block until the server is ready, so the UI doesn't open on a "network
 # error" page when Wi-Fi or the server is still coming up at boot. Launch anyway
 # after the timeout (a reachable server later just loads normally).
 wait_for_server() {
   [ "${WAIT_TIMEOUT}" -gt 0 ] 2>/dev/null || return 0
-  # FRAME_URL may carry a path/query (e.g. /library/photos?kiosk=true for the
+  # FRAME_URL may carry a path/query (e.g. /library/photos
   # autoplaying slideshow); the health endpoints live at the origin.
   #
   # Prefer /api/v1/ready: the picogallery host answers 200 only once the
   # PhotoPrism backend has been reached, so on a cold boot Cog waits for
-  # Wi-Fi + backend instead of opening a frame with an empty library. A
+  # Wi-Fi + backend instead of opening the UI with an empty library. A
   # foreign origin without /ready (404) falls back to plain /health liveness.
   local origin ready_url health_url code waited=0 interval=3
   origin="$(printf '%s' "$FRAME_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
@@ -68,7 +68,7 @@ wait_for_server() {
 
 wait_for_server
 
-# WPE/Cog tuning for an always-on photo frame. Under a Wayland compositor (Cage)
+# WPE/Cog tuning for an always-on display. Under a Wayland compositor (Cage)
 # Cog must use the 'wl' platform so the compositor's wl_seat (keyboard/pointer) is
 # wired into the web view — the old 'fdo' platform is deprecated (Cog warns
 # "Platform module name 'fdo' is deprecated, please use 'wl' instead") and does not

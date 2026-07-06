@@ -819,114 +819,23 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         expect(close).not.toHaveBeenCalled();
       });
 
-      it("afterEnter attaches a document-level F listener that toggles the kiosk surface, and afterLeave removes it", () => {
-        const wrapper = mountLightbox();
-        const toggleKioskSurface = vi.fn();
-        const ctx = {
-          $event: { publish: vi.fn() },
-          $emit: vi.fn(),
-          $view: { leave: vi.fn() },
-          close: vi.fn(),
-          toggleKioskSurface,
-        };
-
-        wrapper.vm.$options.methods.afterEnter.call(ctx);
-
-        // Plain F toggles the kiosk surface regardless of focus.
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
-
-        // Modifier combos and typing targets are ignored.
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true }));
-        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
-
-        // afterLeave detaches it so the host-injected grid handler owns F again.
-        wrapper.vm.$options.methods.afterLeave.call(ctx);
-        document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
-        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
-        expect(ctx.close).not.toHaveBeenCalled();
-      });
-
-      it("afterEnter: double right-click toggles the kiosk surface; a lone right-click does not", () => {
-        const wrapper = mountLightbox();
-        const toggleKioskSurface = vi.fn();
-        const ctx = {
-          $event: { publish: vi.fn() },
-          $emit: vi.fn(),
-          $view: { leave: vi.fn() },
-          close: vi.fn(),
-          toggleKioskSurface,
-        };
-
-        wrapper.vm.$options.methods.afterEnter.call(ctx);
-
-        // First right-click: browser menu suppressed, but no toggle yet.
-        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(toggleKioskSurface).not.toHaveBeenCalled();
-
-        // Second right-click within the window: toggle the kiosk surface.
-        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
-        expect(toggleKioskSurface).toHaveBeenCalledTimes(1);
-        expect(ctx.close).not.toHaveBeenCalled();
-
-        wrapper.vm.$options.methods.afterLeave.call(ctx);
-      });
-
-      // getOptions() trims the PhotoSwipe preload window on the frame so one
-      // fewer full-resolution bitmap stays resident on the 512 MB Pi Zero 2 W.
-      const buildOptions = (query) => {
-        const ctx = {
-          $route: { query },
-          getLightboxElement: () => null,
-          index: 0,
-          $gettext: (s) => s,
-        };
-        return PLightbox.methods.getOptions.call(ctx);
-      };
-
-      it("getOptions preloads only the next slide in kiosk mode ([0,1])", () => {
-        expect(buildOptions({ kiosk: "true" }).preload).toEqual([0, 1]);
-        expect(buildOptions({ slideshow: "true" }).preload).toEqual([0, 1]);
-      });
-
-      it("getOptions keeps the neighbor preload window off the frame ([1,1])", () => {
-        expect(buildOptions({}).preload).toEqual([1, 1]);
-      });
-
-      it("enterFullscreenSlideshow runs playSlideshow and requestFullscreen together", () => {
-        const wrapper = mountLightbox();
-        const playSlideshow = vi.fn();
-        const requestFullscreen = vi.fn(() => Promise.resolve());
-        const ctx = {
-          playSlideshow,
-          requestFullscreen,
-          visible: true,
-        };
-
-        wrapper.vm.$options.methods.enterFullscreenSlideshow.call(ctx);
-
-        expect(playSlideshow).toHaveBeenCalledTimes(1);
-        expect(requestFullscreen).toHaveBeenCalledTimes(1);
-      });
-
       it("onLightboxOpened consumes the autoplay flag exactly once", () => {
         const wrapper = mountLightbox();
-        const enterFullscreenSlideshow = vi.fn();
+        const playSlideshow = vi.fn();
         const ctx = {
           addEventListeners: vi.fn(),
           wrapPswpNavGuards: vi.fn(),
           $event: { publish: vi.fn() },
-          enterFullscreenSlideshow,
+          playSlideshow,
           _autoplayOnOpen: true,
         };
 
         wrapper.vm.$options.methods.onLightboxOpened.call(ctx);
-        expect(enterFullscreenSlideshow).toHaveBeenCalledTimes(1);
+        expect(playSlideshow).toHaveBeenCalledTimes(1);
         expect(ctx._autoplayOnOpen).toBe(false);
 
-        // A later non-autoplay open must not start the slideshow again.
         wrapper.vm.$options.methods.onLightboxOpened.call(ctx);
-        expect(enterFullscreenSlideshow).toHaveBeenCalledTimes(1);
+        expect(playSlideshow).toHaveBeenCalledTimes(1);
         expect(ctx.$event.publish).toHaveBeenCalledWith("lightbox.opened");
       });
 

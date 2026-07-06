@@ -69,7 +69,7 @@ cmd_setup() {
 }
 
 cmd_build() {
-  (cd frontend && npm run build)
+  (cd frontend && PICO_NO_SW=1 npm run build)
   require_frontend_dist
   echo "✓ PhotoPrism UI built → frontend/dist"
 }

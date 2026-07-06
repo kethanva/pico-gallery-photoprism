@@ -11,7 +11,7 @@ import { $gettext } from "common/gettext";
 // which $config.update() loads before the app mounts. Reading the static global
 // at module load left this undefined, so fromPhoto()/fromFiles()/notFound() threw
 // "Cannot read properties of undefined (reading 'length')" on the very first
-// Thumb.fromPhotos() call — which is exactly the kiosk boot slideshow AND the
+// Thumb.fromPhotos() call — which is exactly the first grid load AND the
 // tap-to-open-a-photo path. The grid rendered but the lightbox never opened
 // (blank fullscreen on boot, dead clicks). Falls back to [] so a missing config
 // degrades to no-thumbnail-sources instead of crashing the whole surface.

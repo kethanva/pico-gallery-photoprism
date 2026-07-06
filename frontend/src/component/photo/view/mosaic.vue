@@ -32,27 +32,7 @@
             :data-uid="m.UID"
             class="media result preview placeholder"
           />
-          <!--
-            Kiosk (photos-only frame): render the bare thumbnail and nothing
-            else — no hover overlay, no open/select/favorite buttons, no live
-            <video> element. With the toolbar hidden none of them are reachable,
-            and dropping ~7 DOM nodes per live tile (and never mounting an
-            autoplaying video for live photos) is what lets the 512 MB Pi Zero
-            2 W scroll the grid without multi-second compositor stalls. Same
-            element + classes as the full tile, so the sizing CSS is unchanged.
-          -->
-          <div
-            v-else-if="kioskMode"
-            :data-id="m.ID"
-            :data-uid="m.UID"
-            :title="showTitles && m.Title ? m.Title : m.getOriginalName()"
-            :style="`background-image: url(${m.thumbnailUrl('tile_224')})`"
-            class="media result preview"
-            @touchstart.passive="input.touchStart($event, index)"
-            @touchend.stop="onClick($event, index)"
-            @mousedown.stop="input.mouseDown($event, index)"
-            @click.stop.prevent="onClick($event, index)"
-          />
+          
           <div
             v-else
             :data-id="m.ID"
@@ -201,11 +181,6 @@ export default {
     };
   },
   computed: {
-    // kioskMode = the photos-only appliance frame (?kiosk / ?slideshow). Drives
-    // the stripped-down tile in the template and the tighter prefetch margin.
-    kioskMode() {
-      return !!(this.$route?.query?.kiosk || this.$route?.query?.slideshow);
-    },
   },
   watch: {
     photos: {
@@ -218,11 +193,11 @@ export default {
     },
   },
   created() {
-    // Built in created() (not beforeCreate) so this.kioskMode / this.$route are
+    // Built in created() (not beforeCreate) so this.$route is available.
     // ready. The immediate photos watcher only calls observeItems() inside a
     // $nextTick, which runs after this, so the observer exists in time.
     //
-    // Kiosk frames use a tighter rootMargin: fewer tiles are live at once, so
+    // Appliance builds use a tighter rootMargin: fewer tiles are live at once, so
     // less peak layout/paint/decode and lower memory pressure while scrolling
     // on the 512 MB Pi Zero 2 W. Desktop keeps the roomier margin for smoother
     // pop-in where the hardware can afford it.
@@ -231,7 +206,7 @@ export default {
         this.visibilitiesChanged(entries);
       },
       {
-        rootMargin: this.kioskMode ? "20% 0px" : "50% 0px",
+        rootMargin: "50% 0px",
       }
     );
   },

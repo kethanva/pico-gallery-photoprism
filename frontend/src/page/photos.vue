@@ -1,7 +1,6 @@
 <template>
   <div ref="page" tabindex="-1" class="p-page p-page-photos not-selectable" :class="$config.aclClasses('photos')">
     <p-photo-toolbar
-      v-if="!kioskMode"
       ref="toolbar"
       :context="context"
       :filter="filter"
@@ -65,7 +64,6 @@
 <script>
 import { Photo } from "model/photo";
 import { $gettext } from "common/gettext";
-import { shuffled } from "common/kiosk";
 import Thumb from "model/thumb";
 import { ACTION_CREATED, ACTION_UPDATED, ACTION_DELETED, ACTION_ARCHIVED, ACTION_RESTORED } from "common/event";
 import * as contexts from "options/contexts";
@@ -176,10 +174,6 @@ export default {
       lastFilter: {},
       routeName: routeName,
       loading: true,
-      // True once the kiosk boot slideshow has been started for this page
-      // instance. Without it, every re-search (filter change, view change)
-      // would spontaneously re-open the slideshow while the user browses.
-      kioskBooted: false,
       lightbox: {
         results: [],
         loading: false,
@@ -191,10 +185,6 @@ export default {
     };
   },
   computed: {
-    // Kiosk mode hides the search/view toolbar so the frame shows only photos.
-    kioskMode: function () {
-      return !!(this.$route.query.kiosk || this.$route.query.slideshow);
-    },
     selectMode: function () {
       return this.selection.length > 0;
     },
@@ -339,9 +329,6 @@ export default {
         return "mosaic";
       }
 
-      if (this.$route.query.kiosk || this.$route.query.slideshow) {
-        return "mosaic";
-      }
 
       let queryParam = this.$route.query["view"] ? this.$route.query["view"] : "";
       let storedType = appStorage.getItem("photos.view");
@@ -476,22 +463,6 @@ export default {
         return false;
       }
 
-      // Kiosk: picking a photo resumes the fullscreen slideshow from that photo
-      // (autoplay=true → the lightbox enters fullscreen and auto-advances; see
-      // openLightbox/enterFullscreenSlideshow).
-      //
-      // This routes through the LAZY openView path, not openModels: openView
-      // fetches `photos/view` (the server returns Thumb-shaped rows → a cheap
-      // Thumb.wrap, no per-size URL building) asynchronously, so the tap returns
-      // immediately. The old openModels(Thumb.fromPhotos(this.results)) rebuilt a
-      // Thumb — a URL for every thumbnail size — for EVERY loaded result
-      // synchronously on the tap. Once infinite scroll had grown this.results to
-      // hundreds, that multi-hundred-ms main-thread freeze on the 512 MB Pi Zero
-      // 2 W was the "tap does nothing / no fullscreen" symptom.
-      if (this.$route.query.kiosk || this.$route.query.slideshow) {
-        this.$lightbox.openView(this, index, true);
-        return true;
-      }
 
       const selected = this.results[index];
 
@@ -510,33 +481,7 @@ export default {
 
       return true;
     },
-    // loadKioskSlideshow starts the boot slideshow from the grid page that
-    // search() has ALREADY loaded (Photo.batchSize() photos), shuffled and
-    // autoplaying. It intentionally does NOT re-fetch the whole library first:
-    // on the 512 MB Pi Zero 2 W that paged fetch pulled thousands of photos and
-    // built a Thumb (a URL per thumbnail size) for each one synchronously before
-    // the first slide — seconds of frozen main thread that swallowed taps and
-    // stalled the jump to fullscreen. A freshly shuffled page is ample variety
-    // for a frame (PhotoSwipe lazy-loads each image) and the slideshow now
-    // appears effectively instantly; the shuffle varies the order across boots.
-    loadKioskSlideshow() {
-      const source = this.results;
-      if (!source || source.length === 0) {
-        return;
-      }
-
-      this.$lightbox.openModels(shuffled(Thumb.fromPhotos(source)), 0, null, true);
-    },
     loadMore(force) {
-      // Photos-only frame: the slideshow plays the initial page and loops it
-      // (see the bounded-boot design). Never grow this.results past that page —
-      // infinite scroll appends heavy reactive Photo objects toward Photo.limit()
-      // (100,000), and the recursive viewport-fill below can spiral at boot;
-      // either is an OOM on the 512 MB Pi Zero 2 W. The grid is covered by the
-      // fullscreen slideshow and unreachable, so nothing on the frame needs more.
-      if (this.$route?.query?.kiosk || this.$route?.query?.slideshow) {
-        return;
-      }
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {
         return;
       }
@@ -654,16 +599,6 @@ export default {
 
       Object.assign(query, this.filter);
 
-      // Keep the kiosk-mode markers across filter changes. They are not part
-      // of the filter model, so rebuilding the query from it would silently
-      // drop them — ending kiosk mode (click-to-resume, boot gestures) the
-      // first time the viewer searches or switches views on the appliance.
-      if (this.$route.query.kiosk) {
-        query.kiosk = this.$route.query.kiosk;
-      }
-      if (this.$route.query.slideshow) {
-        query.slideshow = this.$route.query.slideshow;
-      }
 
       for (let key in query) {
         if (query[key] === undefined || !query[key]) {
@@ -773,12 +708,6 @@ export default {
           this.complete = response.count < response.limit;
           this.scrollDisabled = this.complete;
 
-          if (!this.kioskBooted && (this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
-            this.kioskBooted = true;
-            this.$nextTick(() => {
-              this.loadKioskSlideshow();
-            });
-          }
 
           if (this.complete) {
             if (!this.results.length) {

@@ -73,10 +73,11 @@ describe('photoprism-host — PhotoPrism UI static serving', { skip: !existsSync
     assert.match(html, /assets\.json/);
   });
 
-  it('does not serve the retired lightweight frame playlist', async () => {
-    const res = await fetch(`http://127.0.0.1:${port}/frame/playlist`);
+  it('serves sw.js as an unregister stub with no-store', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/sw.js`);
     assert.equal(res.status, 200);
-    const html = await res.text();
-    assert.match(html, /id="app"/);
+    assert.match(res.headers.get('cache-control') || '', /no-store/i);
+    const body = await res.text();
+    assert.match(body, /unregister/);
   });
 });

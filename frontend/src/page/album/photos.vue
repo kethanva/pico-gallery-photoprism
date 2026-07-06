@@ -1,7 +1,6 @@
 <template>
   <div ref="page" tabindex="-1" class="p-page p-page-album-photos" :class="$config.aclClasses('photos')">
     <p-album-toolbar
-      v-if="!kioskMode"
       ref="toolbar"
       :filter="filter"
       :album="model"
@@ -139,9 +138,6 @@ export default {
       routeName: routeName,
       collectionRoute: this.$route.meta?.collectionRoute ? this.$route.meta.collectionRoute : "albums",
       loading: true,
-      // True once the kiosk boot slideshow has been started for this page
-      // instance — otherwise every re-search would re-open the slideshow.
-      kioskBooted: false,
       lightbox: {
         results: [],
         loading: false,
@@ -153,10 +149,6 @@ export default {
     };
   },
   computed: {
-    // Kiosk mode hides the album search/view toolbar so the frame shows only photos.
-    kioskMode: function () {
-      return !!(this.$route.query.kiosk || this.$route.query.slideshow);
-    },
     selectMode: function () {
       return this.selection.length > 0;
     },
@@ -337,10 +329,6 @@ export default {
       // Thumb.wrap — instead of synchronously rebuilding a Thumb for every
       // loaded result, which froze the 512 MB Pi Zero 2 W on the tap. openView
       // derives the album collection from this.model (Album extends Collection).
-      if (this.$route.query.kiosk || this.$route.query.slideshow) {
-        this.$lightbox.openView(this, index, true);
-        return true;
-      }
 
       const selected = this.results[index];
 
@@ -359,32 +347,7 @@ export default {
 
       return true;
     },
-    // loadKioskSlideshow starts the album boot slideshow from the grid page that
-    // search() has ALREADY loaded (Photo.batchSize() photos), in the album's
-    // curated order (no shuffle — album order is deliberate), autoplaying. Like
-    // the library page it no longer re-fetches the whole album first: that paged
-    // fetch + building a Thumb per photo froze the 512 MB Pi Zero 2 W for
-    // seconds before the first slide, swallowing taps and stalling fullscreen.
-    // PhotoSwipe lazy-loads each image, so the already-loaded page is all the
-    // frame needs to start.
-    loadKioskSlideshow() {
-      const source = this.results;
-      if (!source || source.length === 0) {
-        return;
-      }
-
-      this.$lightbox.openModels(Thumb.fromPhotos(source), 0, this.model, true);
-    },
     loadMore(force) {
-      // Photos-only frame: the slideshow plays the initial page and loops it
-      // (see the bounded-boot design). Never grow this.results past that page —
-      // infinite scroll appends heavy reactive Photo objects toward Photo.limit()
-      // (100,000), and the recursive viewport-fill can spiral at boot; either is
-      // an OOM on the 512 MB Pi Zero 2 W. The grid is covered by the fullscreen
-      // slideshow and unreachable, so nothing on the frame needs more.
-      if (this.$route?.query?.kiosk || this.$route?.query?.slideshow) {
-        return;
-      }
       if (!force && (this.scrollDisabled || this.$view.isHidden(this))) {
         return;
       }
@@ -506,14 +469,6 @@ export default {
 
       Object.assign(query, this.filter);
 
-      // Keep the kiosk-mode markers across filter changes (see the matching
-      // block in page/photos.vue — dropping them would end kiosk mode).
-      if (this.$route.query.kiosk) {
-        query.kiosk = this.$route.query.kiosk;
-      }
-      if (this.$route.query.slideshow) {
-        query.slideshow = this.$route.query.slideshow;
-      }
 
       for (let key in query) {
         if (query[key] === undefined || !query[key]) {
@@ -620,12 +575,6 @@ export default {
           this.complete = response.count < this.batchSize;
           this.scrollDisabled = this.complete;
 
-          if (!this.kioskBooted && (this.$route.query.kiosk || this.$route.query.slideshow) && this.results.length > 0) {
-            this.kioskBooted = true;
-            this.$nextTick(() => {
-              this.loadKioskSlideshow();
-            });
-          }
 
           if (this.complete) {
             if (!this.results.length) {

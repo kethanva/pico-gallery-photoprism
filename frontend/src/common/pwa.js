@@ -104,6 +104,9 @@ export const cleanupLegacyRootScopeServiceWorkers = (nav, scopeBase, log = conso
 
 // shouldRegisterServiceWorker determines whether service worker registration is safe.
 export const shouldRegisterServiceWorker = (config) => {
+  if (config?.disableServiceWorker) {
+    return false;
+  }
   const scopeBase = serviceWorkerScopeBase(config?.baseUri);
 
   // Avoid root-scope service workers for the portal UI on shared domains.
@@ -111,10 +114,43 @@ export const shouldRegisterServiceWorker = (config) => {
   return !(config?.values?.portal && scopeBase === "/");
 };
 
+
+// unregisterAllServiceWorkers removes every registration (PicoGallery appliance).
+export const unregisterAllServiceWorkers = (nav, log = console) => {
+  if (!nav || !("serviceWorker" in nav) || typeof nav.serviceWorker.getRegistrations !== "function") {
+    return Promise.resolve(false);
+  }
+  return nav.serviceWorker
+    .getRegistrations()
+    .then((registrations) =>
+      Promise.all(
+        registrations.map((registration) =>
+          registration.unregister().catch((err) => {
+            if (typeof log?.warn === "function") {
+              log.warn("service worker: unregister failed", err);
+            }
+            return false;
+          })
+        )
+      )
+    )
+    .then((results) => results.some(Boolean))
+    .catch((err) => {
+      if (typeof log?.warn === "function") {
+        log.warn("service worker: cleanup failed", err);
+      }
+      return false;
+    });
+};
+
 // registerServiceWorker registers the PWA service worker when supported.
 export const registerServiceWorker = (nav, config, log = console) => {
   if (!nav || !("serviceWorker" in nav)) {
     return Promise.resolve(false);
+  }
+
+  if (config?.disableServiceWorker) {
+    return unregisterAllServiceWorkers(nav, log);
   }
 
   const scopeBase = serviceWorkerScopeBase(config?.baseUri);

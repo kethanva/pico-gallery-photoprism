@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <title>PhotoPrism</title>
@@ -16,6 +18,18 @@
   
   <script>
     (function() {
+      // PicoGallery appliance: purge stale service workers and caches left by
+      // earlier frame/SPA builds before loading hashed webpack assets.
+      if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          regs.forEach(function(r) { r.unregister(); });
+        });
+      }
+      if (typeof caches !== "undefined" && caches.keys) {
+        caches.keys().then(function(keys) {
+          keys.forEach(function(k) { caches.delete(k); });
+        });
+      }
       // Synchronously load config.json
       var configReq = new XMLHttpRequest();
       configReq.open('GET', 'config.json', false);
@@ -59,7 +73,8 @@
             zoom: true
           }
         },
-        kioskConfig: appConfig.kioskConfig
+        kioskConfig: appConfig.kioskConfig,
+        disableServiceWorker: true
       };
 
       // Synchronously load assets.json to get hashed filenames

@@ -3,10 +3,7 @@
     <p-loading-bar height="4"></p-loading-bar>
 
     <v-app :class="appClass">
-      <!-- Kiosk (?kiosk / ?slideshow): the frame is a locked photo surface, so
-           the PhotoPrism navigation rail is not rendered — v-if (not CSS) so
-           Vuetify's layout reclaims the space and v-main spans full width. -->
-      <p-navigation v-if="!kioskMode"></p-navigation>
+      <p-navigation></p-navigation>
 
       <v-main>
         <router-view></router-view>
@@ -40,18 +37,11 @@ export default {
     };
   },
   computed: {
-    // Kiosk mode: the appliance boots to /library/photos?kiosk=true and every
-    // in-frame navigation carries the kiosk flag, so the frame stays a locked,
-    // photos-only surface with no PhotoPrism chrome.
-    kioskMode: function () {
-      return !!(this.$route.query.kiosk || this.$route.query.slideshow);
-    },
     appClass: function () {
       return [
         this.$route.meta.background,
         this.$vuetify.display.smAndDown ? "small-screen" : "large-screen",
-        this.$route.meta.hideNav || this.kioskMode ? "hide-nav" : "show-nav",
-        this.kioskMode ? "kiosk-mode" : null,
+        this.$route.meta.hideNav ? "hide-nav" : "show-nav",
       ];
     },
   },

@@ -34,7 +34,6 @@ graph TD
 |------|------|
 | frontend/ | PhotoPrism Vue SPA (build → `frontend/dist`) |
 | scripts/photoprism-host.mjs | SPA static server + PhotoPrism API proxy |
-| scripts/frame-utils.mjs | Shared playlist compaction helpers |
 | install.sh | Pi kiosk + systemd units for host and Cog |
 
 ## Quick start (local)
@@ -45,7 +44,7 @@ graph TD
 PICO_CONFIG=./config.local.toml ./run.sh dev   # server :8188 + Vite :5173
 ```
 
-Open <http://localhost:5173> for the frame, `/remote` for the phone control.
+Open <http://localhost:5173> for the PhotoPrism UI during development.
 
 Minimal config — photos come from a PhotoPrism backend over the network (there is
 no local directory source; the frame never scans the device's own filesystem):
@@ -71,7 +70,7 @@ then `/etc/picogallery/config.toml`. Every key is overridable with
 
 ```bash
 docker compose -f docker/docker-compose.yml up --build
-# frame at http://localhost:8188, photos pulled from the bundled PhotoPrism service
+# PhotoPrism UI at http://localhost:8188, photos pulled from the bundled PhotoPrism service
 ```
 
 ## Raspberry Pi kiosk (Cog + Cage / WPE WebKit)
@@ -142,17 +141,14 @@ for the launcher/units/sudoers lives in [`kiosk/cog/`](kiosk/cog/); see
 
 ### Mimic the kiosk on a dev machine
 
-Cog+Cage are Linux/Wayland-only and can't run on macOS. To preview the frame as
-the kiosk would show it, use the host browser:
+Cog+Cage are Linux/Wayland-only and can't run on macOS. To preview the UI as the Pi would show it, use the host browser:
 
 ```bash
-./run.sh kiosk            # open the frame in the default browser (or real Cog+Cage on a Pi)
-./run.sh appliance        # server + frame kiosk together, end to end
+./run.sh kiosk            # open the PhotoPrism UI in the default browser (or real Cog+Cage on a Pi)
+./run.sh appliance        # host + kiosk browser together, end to end
 ```
 
-See [Kiosk input & surfaces (end-to-end)](#kiosk-input--surfaces-end-to-end) for the
-full keyboard/mouse reference, the PhotoPrism UI fullscreen-exit fix, and Pi input
-troubleshooting.
+See [docs/deployment.md](docs/deployment.md#keyboard--mouse-detection) for Pi keyboard/mouse troubleshooting.
 
 ## PhotoPrism UI on the Pi (end-to-end)
 
@@ -190,18 +186,11 @@ Build the UI before starting the host:
 ./run.sh photoprism http://<photoprism-host>:2342
 ```
 
-Optional kiosk slideshow mode (`?kiosk=true`) still exists in the SPA for manual use,
-but the installer and `./run.sh appliance` no longer enable it by default.
-
 ### Keyboard & mouse on the Pi
 
 Input reaches the page through USB → udev seat0 → Cage → Cog (`--platform=wl`).
 See [docs/deployment.md](docs/deployment.md#keyboard--mouse-detection) if keyboard or
-mouse input is dead after install.
-
-When the lightbox is open, **F** and **double right-click** toggle the kiosk surface
-only on `?kiosk` / `?slideshow` routes (not the default grid boot). **Escape** closes
-the lightbox back to the grid.
+mouse input is dead after install. In the lightbox, **F** toggles fullscreen and **Escape** closes back to the grid.
 
 ---
 
@@ -217,8 +206,8 @@ the lightbox back to the grid.
 | `./run.sh start [config]` | Build production client assets, then start Fastify server. Explicit config path optional. |
 | `./run.sh clean` | Delete all built packages (`dist`) and `node_modules` folders. |
 | `./run.sh typecheck` | Run typechecker (`tsc --noEmit`) across the monorepo. |
-| `./run.sh kiosk [url]` | Open the frame in the kiosk surface (real Cog+Cage on Linux/Pi; default-browser mimic on macOS). |
-| `./run.sh appliance [config]` | Mimic the whole appliance: build, start the server, then open the frame kiosk. |
+| `./run.sh kiosk [url]` | Open the PhotoPrism UI fullscreen (real Cog+Cage on Linux/Pi; default-browser mimic on macOS). |
+| `./run.sh appliance [config]` | Mimic the whole appliance: build, start the host, then open the UI in the kiosk browser. |
 | `./run.sh photoprism <url>` | Start the PhotoPrism Vue proxy host on `:8190` pointing to the specified backend URL. |
 
 ### `install.sh` (Pi end-to-end provisioner) Flags
@@ -228,7 +217,7 @@ Run on the device as root: `sudo ./install.sh [flags]`.
 | Flag | Parameter | Description |
 |---|---|---|
 | `--mode` | `auto\|kiosk\|server\|all` | What to install. `auto` (default) picks by board/arch. |
-| `--server-url` | `URL` | Frame/API URL the kiosk opens (required in `kiosk` mode). |
+| `--server-url` | `URL` | PhotoPrism UI URL the kiosk opens (required in `kiosk` mode). |
 | `--source` | `photoprism\|webdav` | Server photo source (server modes; default `photoprism`). |
 | `--photoprism-url/-user/-pass` | — | PhotoPrism connection (for `--source photoprism`). |
 | `--webdav-url/-user/-pass` | — | WebDAV connection (for `--source webdav`). |
@@ -355,7 +344,7 @@ Requires Node ≥ 22.13 and pnpm. HEIC/HEIF photos are decoded via `heic-convert
 ## Troubleshooting
  
 ### Kiosk stuck on white screen (old cached layout) or console boot screen
-If you are transitioning from an older PhotoPrism UI Proxy installation to the dedicated slideshow server, the browser (WPE WebKit/Cog) may have cached the previous Vue SPA offline application shell via its Service Worker. 
+If the display shows a broken layout (white screen, black blocks, missing styles), the browser (WPE WebKit/Cog) may be serving a stale Service Worker or cached assets from an older build. 
  
 To clear the cache and restart the kiosk immediately, run the following commands on the Pi:
 ```bash
@@ -373,7 +362,7 @@ sudo systemctl start picogallery-kiosk
 ### Check logs and status
 If the screen remains blank or stuck at the system terminal, check the status of the backend and kiosk services:
 ```bash
-# Check the backend slideshow server
+# Check the PhotoPrism host
 sudo systemctl status picogallery
 journalctl -u picogallery -n 50 --no-pager
  
@@ -384,7 +373,7 @@ journalctl -u picogallery-kiosk -n 50 --no-pager
  
 ## Docs
 
-- [Kiosk input & surfaces](#kiosk-input--surfaces-end-to-end) — keyboard/mouse, boot flow, fullscreen exit
+- [PhotoPrism UI on the Pi](#photoprism-ui-on-the-pi-end-to-end) — boot flow and lightbox shortcuts
 - [docs/architecture.md](docs/architecture.md) — how the pieces fit
 - [docs/api.md](docs/api.md) — HTTP + SSE contract
 - [docs/sources.md](docs/sources.md) — PhotoPrism / WebDAV

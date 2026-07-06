@@ -175,9 +175,21 @@ const servedConfig = JSON.stringify({
   serverUrl: '',
   slideDuration: slideDurationSecs,
   kioskConfig: { slideDuration: slideDurationSecs },
+  disableServiceWorker: true,
 });
 
 let backendSeen = false;
+
+const SW_UNREGISTER = `self.addEventListener('install', (e) => e.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  const keys = await caches.keys();
+  await Promise.all(keys.map((k) => caches.delete(k)));
+  await self.registration.unregister();
+  const clients = await self.clients.matchAll({ type: 'window' });
+  clients.forEach((c) => c.navigate(c.url));
+})()));
+`;
+
 
 function pickCompressedPath(filePath, acceptEncoding = '') {
   if (acceptEncoding.includes('zst') && existsSync(`${filePath}.zst`)) {
@@ -257,6 +269,15 @@ async function proxyRequest(req, res) {
 
 function serveStatic(req, res) {
   const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+
+  if (urlPath === '/sw.js' || urlPath === '/static/build/sw.js') {
+    res.writeHead(200, {
+      'content-type': 'text/javascript; charset=utf-8',
+      'cache-control': 'no-store, no-cache, must-revalidate',
+    });
+    res.end(SW_UNREGISTER);
+    return;
+  }
 
   if (urlPath === '/config.json') {
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });

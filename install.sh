@@ -401,12 +401,21 @@ step_node() {
   fi
 }
 
-# Verify the lightweight frame client is present (no webpack build step).
+# Ensure the PhotoPrism Vue UI bundle is present (build on-device when missing).
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
-  [[ "$DRY_RUN" -eq 1 ]] || [[ -d "$REPO_ROOT/frame" && -f "$REPO_ROOT/frame/index.html" ]] || \
-    die "frame/ missing — clone the repo or copy the lightweight frame client into frame/"
-  ok "frame/ present"
+  local assets="$REPO_ROOT/frontend/dist/static/build/assets.json"
+  if [[ -f "$assets" ]]; then
+    ok "frontend/dist present"
+    return 0
+  fi
+  [[ "$DRY_RUN" -eq 1 ]] && { info "[dry-run] would build frontend/dist"; return 0; }
+  step "Building PhotoPrism UI (frontend/dist)"
+  [[ -f "$REPO_ROOT/frontend/package.json" ]] || die "frontend/ missing — clone the full repo"
+  (cd "$REPO_ROOT/frontend" && PICO_NO_SW=1 npm install --ignore-scripts --no-audit --no-fund --no-update-notifier && PICO_NO_SW=1 npm run build) \
+    || die "frontend build failed — build on a larger machine and copy frontend/dist/"
+  [[ -f "$assets" ]] || die "frontend build did not produce $assets"
+  ok "frontend/dist built"
 }
 
 # Generate /etc/picogallery/config.toml from the chosen source (0640, server-readable).
@@ -575,7 +584,7 @@ WorkingDirectory=$REPO_ROOT
 ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs
 Restart=always
 RestartSec=3
-# Hardening (read-only: serves frame/ + proxies to the backend).
+# Hardening (read-only: serves PhotoPrism UI + proxies to the backend).
 NoNewPrivileges=true
 ProtectSystem=strict
 PrivateTmp=true
@@ -812,7 +821,7 @@ EOF
 
   run systemctl daemon-reload
   run systemctl enable picogallery-kiosk.service
-  ok "picogallery-kiosk.service enabled (frame: $SERVER_URL)"
+  ok "picogallery-kiosk.service enabled (PhotoPrism UI: $SERVER_URL)"
 }
 
 step_blank_schedule() {
