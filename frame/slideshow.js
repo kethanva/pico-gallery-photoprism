@@ -178,14 +178,13 @@ export class Slideshow {
     if (!next) return;
     const size = slideshowSize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
     const src = thumbUrl(next.hash, this.previewToken, size);
-    if (!this._preload) {
-      this._preload = new Image();
-      this._preload.decoding = 'async';
-    }
-    if (this._preload.src !== src) {
-      this._preload.src = src;
-      if (this._preload.decode) this._preload.decode().catch(() => {});
-    }
+    
+    // Create a fresh Image instance for every preload to prevent WPE WebKit 
+    // from accumulating decoded bitmap textures on a reused orphan node.
+    this._preload = new Image();
+    this._preload.decoding = 'async';
+    this._preload.src = src;
+    if (this._preload.decode) this._preload.decode().catch(() => {});
   }
 
   hide() {
