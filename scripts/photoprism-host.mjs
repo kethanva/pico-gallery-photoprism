@@ -243,13 +243,22 @@ async function buildPlaylistBody() {
   return JSON.stringify(out);
 }
 
+let activeBuild = null;
+
 async function getPlaylistBody() {
   if (playlistCache.body && Date.now() - playlistCache.at < PLAYLIST_TTL_MS) return playlistCache.body;
-  const body = await buildPlaylistBody();
-  playlistCache = { at: Date.now(), body };
-  backendSeen = true;
-  console.log(`[playlist] cached ${JSON.parse(body).length} photos`);
-  return body;
+  if (activeBuild) return activeBuild;
+  activeBuild = buildPlaylistBody().then(body => {
+    playlistCache = { at: Date.now(), body };
+    backendSeen = true;
+    console.log(`[playlist] cached ${JSON.parse(body).length} photos`);
+    activeBuild = null;
+    return body;
+  }).catch(e => {
+    activeBuild = null;
+    throw e;
+  });
+  return activeBuild;
 }
 
 
