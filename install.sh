@@ -20,8 +20,8 @@
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
 # never scans a local photo directory. One on-device surface:
-#   :8190 — photoprism-host.mjs: lightweight frame (static HTML/JS in frame/),
-#           reverse-proxies PhotoPrism /api/v1 (read-only). Cog opens http://localhost:8190/
+#   :8190 — photoprism-host.mjs: PhotoPrism Vue UI (frontend/dist) + /api/v1 proxy.
+#           Cog opens http://localhost:8190/library/photos (normal grid, no kiosk slideshow).
 #
 # Run `sudo ./install.sh --help` for all options.
 #
@@ -246,7 +246,7 @@ resolve_mode() {
 
   # Frame URL: local server in server modes; explicit in kiosk-only.
   if [[ "$wants_server" -eq 1 ]]; then
-    SERVER_URL="${SERVER_URL:-http://localhost:$SERVER_PORT}"
+    SERVER_URL="${SERVER_URL:-http://localhost:$SERVER_PORT/library/photos}"
   fi
   if [[ "$wants_kiosk" -eq 1 && -z "$SERVER_URL" ]]; then
     die "Kiosk mode needs --server-url (where the PicoGallery server is reachable)."
@@ -540,9 +540,9 @@ step_server_unit() {
   return 0
 }
 
-# The appliance surface: photoprism-host.mjs serves the lightweight frame (frame/)
-# on :8190 and reverse-proxies PhotoPrism /api/v1 to the real backend (read-only).
-# Cog opens http://localhost:8190/ (or --server-url). photoprism source only.
+# The appliance surface: photoprism-host.mjs serves the PhotoPrism Vue UI on :8190
+# and reverse-proxies /api/v1 to the real backend (read-only). Cog opens the normal
+# photo library grid at /library/photos — no ?kiosk fullscreen slideshow boot.
 step_photoprism_unit() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   [[ "$SOURCE_KIND" == "photoprism" ]] || return 0
@@ -552,14 +552,14 @@ step_photoprism_unit() {
   # board (Pi Zero 2 W) cap it so it can never squeeze the WebKit kiosk.
   local pp_runtime_env=""
   if (( RAM_MB < 900 )); then pp_runtime_env="Environment=NODE_OPTIONS=--max-old-space-size=96"; fi
-  [[ -d "$REPO_ROOT/frame" && -f "$REPO_ROOT/frame/index.html" ]] || \
-    warn "frame/ missing — the lightweight frame host will not start until frame/ is present"
+  [[ -f "$REPO_ROOT/frontend/dist/static/build/assets.json" ]] || \
+    warn "frontend/dist missing — build the PhotoPrism UI before starting the host"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write /etc/systemd/system/picogallery-photoprism.service\n' "$C_DIM" "$C_RESET"
   else
     cat >/etc/systemd/system/picogallery-photoprism.service <<EOF
 [Unit]
-Description=PicoGallery lightweight frame host
+Description=PicoGallery PhotoPrism UI host
 After=network-online.target
 Wants=network-online.target
 
@@ -587,7 +587,7 @@ EOF
   run systemctl daemon-reload
   run systemctl enable picogallery-photoprism.service
   run systemctl restart picogallery-photoprism.service
-  ok "picogallery-photoprism.service enabled (lightweight frame on :8190)"
+  ok "picogallery-photoprism.service enabled (PhotoPrism UI on :8190)"
 }
 
 # Ensure input devices are tagged onto seat0 so wlroots/libinput (under Cage) can
@@ -772,7 +772,7 @@ step_kiosk() {
   else
     local target_url="$SERVER_URL"
     if [[ -z "$target_url" ]]; then
-      target_url="http://localhost:8190/"
+      target_url="http://localhost:8190/library/photos"
     fi
     cat >"$CONFIG_DIR/kiosk.env" <<EOF
 # PicoGallery kiosk runtime config. Edit and: systemctl restart picogallery-kiosk

@@ -1,10 +1,10 @@
 # PicoGallery V2
 
-A lightweight digital photo frame for Raspberry Pi (especially **Pi Zero 2 W**). A static
-frame client in frame/ (plain HTML/CSS/JS) runs in the kiosk browser; a small Node
-host on port **8190** serves those files, builds a cached playlist from PhotoPrism, and
-reverse-proxies read-only GET/HEAD/OPTIONS to a **PhotoPrism backend** on your LAN. No
-webpack, no Vue SPA, no WebSocket proxy.
+A digital photo frame for Raspberry Pi (especially **Pi Zero 2 W**) built on the
+**PhotoPrism Vue UI**. A small Node host on port **8190** serves `frontend/dist`,
+reverse-proxies read-only API traffic to a **PhotoPrism backend** on your LAN, and
+auto-authenticates so the kiosk browser opens the normal photo library grid — no
+fullscreen slideshow boot (`?kiosk` is not used by default).
 
 ```mermaid
 graph TD
@@ -13,20 +13,18 @@ graph TD
     end
 
     subgraph Host8190[Node host :8190]
-        Static[frame static files]
-        Playlist[GET /frame/playlist]
+        SPA[PhotoPrism Vue UI]
         Proxy[/api/v1 proxy]
-        Static --- Playlist
-        Static --- Proxy
+        SPA --- Proxy
     end
 
     subgraph Backend
         PhotoPrism[PhotoPrism Go backend]
     end
 
-    Kiosk -->|slideshow + grid| Static
+    Kiosk -->|/library/photos| SPA
     Kiosk -->|thumbnails via API| Proxy
-    Playlist -->|pages photos| PhotoPrism
+    Proxy -->|session + API| PhotoPrism
     Proxy --> PhotoPrism
 ```
 
@@ -34,8 +32,8 @@ graph TD
 
 | Path | Role |
 |------|------|
-| frame/ | Slideshow + photo grid UI, keyboard/touch input |
-| scripts/photoprism-host.mjs | Static server, playlist cache, PhotoPrism API proxy |
+| frontend/ | PhotoPrism Vue SPA (build → `frontend/dist`) |
+| scripts/photoprism-host.mjs | SPA static server + PhotoPrism API proxy |
 | scripts/frame-utils.mjs | Shared playlist compaction helpers |
 | install.sh | Pi kiosk + systemd units for host and Cog |
 
@@ -151,6 +149,61 @@ the kiosk would show it, use the host browser:
 ./run.sh kiosk            # open the frame in the default browser (or real Cog+Cage on a Pi)
 ./run.sh appliance        # server + frame kiosk together, end to end
 ```
+
+See [Kiosk input & surfaces (end-to-end)](#kiosk-input--surfaces-end-to-end) for the
+full keyboard/mouse reference, the PhotoPrism UI fullscreen-exit fix, and Pi input
+troubleshooting.
+
+## PhotoPrism UI on the Pi (end-to-end)
+
+The appliance runs **Cog under Cage** fullscreen at the OS level, but the web app boots
+to the **normal PhotoPrism photo library** (`/library/photos`) — not an auto-playing
+fullscreen slideshow. Users browse the grid, open photos in the lightbox, and use
+standard PhotoPrism navigation.
+
+```mermaid
+flowchart TD
+    subgraph Pi["Raspberry Pi"]
+        Cog[Cog / WPE WebKit]
+    end
+    subgraph Host[":8190 photoprism-host.mjs"]
+        SPA["frontend/dist PhotoPrism UI"]
+        Proxy["/api/v1 proxy (read-only)"]
+    end
+    PP[PhotoPrism backend on LAN]
+    Cog --> SPA
+    Cog --> Proxy
+    Proxy --> PP
+```
+
+| Step | What happens |
+|------|----------------|
+| **Boot** | `picogallery-kiosk.service` waits for `/api/v1/ready`, then opens `FRAME_URL` (default `http://localhost:8190/library/photos`). |
+| **Host** | `picogallery-photoprism.service` serves the built SPA and proxies PhotoPrism with an admin session from `config.toml`. |
+| **UI** | PhotoPrism loads the library grid with full chrome (navigation, search, albums). No `?kiosk` / `?slideshow` auto-boot. |
+| **Lightbox** | Click a photo to open PhotoSwipe; Escape or the close control returns to the grid. |
+
+Build the UI before starting the host:
+
+```bash
+./run.sh build
+./run.sh photoprism http://<photoprism-host>:2342
+```
+
+Optional kiosk slideshow mode (`?kiosk=true`) still exists in the SPA for manual use,
+but the installer and `./run.sh appliance` no longer enable it by default.
+
+### Keyboard & mouse on the Pi
+
+Input reaches the page through USB → udev seat0 → Cage → Cog (`--platform=wl`).
+See [docs/deployment.md](docs/deployment.md#keyboard--mouse-detection) if keyboard or
+mouse input is dead after install.
+
+When the lightbox is open, **F** and **double right-click** toggle the kiosk surface
+only on `?kiosk` / `?slideshow` routes (not the default grid boot). **Escape** closes
+the lightbox back to the grid.
+
+---
 
 ## CLI Reference
 
@@ -330,7 +383,8 @@ journalctl -u picogallery-kiosk -n 50 --no-pager
 ```
  
 ## Docs
- 
+
+- [Kiosk input & surfaces](#kiosk-input--surfaces-end-to-end) — keyboard/mouse, boot flow, fullscreen exit
 - [docs/architecture.md](docs/architecture.md) — how the pieces fit
 - [docs/api.md](docs/api.md) — HTTP + SSE contract
 - [docs/sources.md](docs/sources.md) — PhotoPrism / WebDAV
