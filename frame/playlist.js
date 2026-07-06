@@ -5,9 +5,12 @@
  * @typedef {{ hash: string, w: number, h: number, title: string, takenAt: string }} Photo
  */
 
-/** @returns {Promise<Photo[]>} */
-export async function fetchPlaylist() {
-  const res = await fetch('/frame/playlist');
+/**
+ * @param {RequestInit} [opts] pass an AbortSignal so a hung request can't stall boot
+ * @returns {Promise<Photo[]>}
+ */
+export async function fetchPlaylist(opts = {}) {
+  const res = await fetch('/frame/playlist', opts);
   if (!res.ok) throw new Error(`playlist ${res.status}`);
   return /** @type {Photo[]} */ (await res.json());
 }

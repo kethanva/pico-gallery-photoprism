@@ -61,13 +61,23 @@ bindInput({
   onEscape: () => showGrid(),
 });
 
+// Browser fetch has no default timeout — a request the server never answers
+// (hung backend behind the proxy) would stall boot forever and the retry loop
+// below would never get a turn.
+function bootSignal(ms) {
+  const ctl = new AbortController();
+  setTimeout(() => ctl.abort(), ms);
+  return ctl.signal;
+}
+
 async function loadBootData() {
   const [playlist, frameCfg, ppCfg] = await Promise.all([
-    fetchPlaylist(),
-    fetch('/config.json').then((r) => r.json()).catch(() => ({})),
+    // First cold hit builds the whole-library playlist on the host — allow longer.
+    fetchPlaylist({ signal: bootSignal(60000) }),
+    fetch('/config.json', { signal: bootSignal(15000) }).then((r) => r.json()).catch(() => ({})),
     // The PhotoPrism config is required — without its previewToken every thumb
     // URL 403s and the frame shows nothing but black slides.
-    fetch('/api/v1/config').then((r) => {
+    fetch('/api/v1/config', { signal: bootSignal(20000) }).then((r) => {
       if (!r.ok) throw new Error(`config ${r.status}`);
       return r.json();
     }),

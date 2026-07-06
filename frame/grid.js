@@ -132,5 +132,9 @@ export class PhotoGrid {
     for (const slot of this.pool) {
       if (slot.img.src) slot.img.removeAttribute('src');
     }
+    // Invalidate the render window: with an unchanged scroll position the next
+    // show() would early-return in #layout and leave every tile blank.
+    this._first = 0;
+    this._last = -1;
   }
 }

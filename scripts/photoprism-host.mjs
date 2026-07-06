@@ -119,6 +119,10 @@ function fetchSession() {
       });
     });
     req.on('error', reject);
+    // Without a timeout a hung backend leaves isFetchingSession stuck true and
+    // every proxied request queues in sessionFetchQueue forever — the whole
+    // frame stops loading images.
+    req.setTimeout(10000, () => req.destroy(new Error('ETIMEDOUT')));
     req.write(postData);
     req.end();
   });
@@ -293,6 +297,12 @@ async function proxyRequest(req, res) {
     res.end(`Bad gateway: backend ${backend.origin} unreachable (${code})`);
   });
   upstream.setTimeout(15000, () => upstream.destroy(new Error('ETIMEDOUT')));
+  // When the browser aborts (rapid grid scroll / slide skips), kill the
+  // upstream transfer too — otherwise orphaned image downloads pile up and
+  // saturate the Pi's Wi-Fi and the keep-alive socket pool.
+  res.on('close', () => {
+    if (!res.writableEnded) upstream.destroy();
+  });
   req.pipe(upstream);
 }
 
