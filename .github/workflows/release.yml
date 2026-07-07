@@ -42,12 +42,26 @@ jobs:
 
           mkdir -p picogallery-release
           
-          cp -r frame picogallery-release/
+          # Ship only runtime frontend artifacts required by photoprism-host.
+          mkdir -p picogallery-release/frontend
+          cp frontend/index.html picogallery-release/frontend/
+          cp -r frontend/static picogallery-release/frontend/
+          cp -r frontend/dist picogallery-release/frontend/
           cp -r kiosk picogallery-release/
           
           cp package.json picogallery-release/
           cp -r scripts picogallery-release/
           cp install.sh uninstall.sh run.sh config.example.toml README.md picogallery-release/
+
+          # Validate release bundle integrity so appliance installs do not ship
+          # without a bootable UI (blank screen risk).
+          test -f picogallery-release/frontend/dist/static/build/assets.json
+          APP_JS="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(m['app.js']||'');" picogallery-release/frontend/dist/static/build/assets.json)"
+          APP_CSS="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(m['app.css']||'');" picogallery-release/frontend/dist/static/build/assets.json)"
+          test -n "$APP_JS"
+          test -n "$APP_CSS"
+          test -f "picogallery-release/frontend/dist/static/build/$APP_JS"
+          test -f "picogallery-release/frontend/dist/static/build/$APP_CSS"
           
           tar -czf picogallery-release.tar.gz -C picogallery-release .
           
