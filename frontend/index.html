@@ -14,7 +14,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="PhotoPrism">
 
-  <link rel="icon" href="static/img/favicon.ico">
+  <link rel="icon" href="/static/img/favicon.ico">
   
   <script>
     (function() {
@@ -30,9 +30,13 @@
           keys.forEach(function(k) { caches.delete(k); });
         });
       }
-      // Synchronously load config.json
+      // Synchronously load config.json. Paths MUST be absolute: the SPA is
+      // served from deep routes like /library/photos (vue-router history
+      // fallback), where a relative "config.json" resolves to
+      // /library/config.json and the host answers with index.html — parsing
+      // that HTML as JSON threw and killed this whole boot script.
       var configReq = new XMLHttpRequest();
-      configReq.open('GET', 'config.json', false);
+      configReq.open('GET', '/config.json', false);
       try {
         configReq.send(null);
       } catch (e) {
@@ -42,8 +46,12 @@
       var windowTitle = "Photo Frame";
       var appConfig = {};
       if (configReq.status === 200) {
-        appConfig = JSON.parse(configReq.responseText);
-        windowTitle = appConfig.windowTitle || windowTitle;
+        try {
+          appConfig = JSON.parse(configReq.responseText);
+          windowTitle = appConfig.windowTitle || windowTitle;
+        } catch (e) {
+          console.warn("config.json is not valid JSON, using defaults:", e);
+        }
       }
 
       document.title = windowTitle;
@@ -59,7 +67,7 @@
       // host's proxy-target fallback.
       window.__CONFIG__ = {
         baseUri: "",
-        staticUri: "static",
+        staticUri: "/static",
         apiUri: "/api/v1",
         contentUri: "/api/v1",
         videoUri: "/api/v1",
@@ -79,29 +87,36 @@
 
       // Synchronously load assets.json to get hashed filenames
       var manifestReq = new XMLHttpRequest();
-      manifestReq.open('GET', 'static/build/assets.json', false);
+      manifestReq.open('GET', '/static/build/assets.json', false);
       try {
         manifestReq.send(null);
       } catch (e) {
         console.error("Failed to load assets.json:", e);
       }
 
+      var manifest = null;
       if (manifestReq.status === 200) {
-        var manifest = JSON.parse(manifestReq.responseText);
-        
+        try {
+          manifest = JSON.parse(manifestReq.responseText);
+        } catch (e) {
+          console.error("assets.json is not valid JSON:", e);
+        }
+      }
+
+      if (manifest && manifest['app.js'] && manifest['app.css']) {
         // Append stylesheet
         var link = document.createElement('link');
         link.rel = 'stylesheet';
-        link.href = 'static/build/' + manifest['app.css'];
+        link.href = '/static/build/' + manifest['app.css'];
         document.head.appendChild(link);
-        
+
         // Append JS entry point - defer attribute handles async loading order
         var script = document.createElement('script');
-        script.src = 'static/build/' + manifest['app.js'];
+        script.src = '/static/build/' + manifest['app.js'];
         script.defer = true;
         document.head.appendChild(script);
       } else {
-        console.error("Cannot initialize app - assets.json not found.");
+        console.error("Cannot initialize app - assets.json missing app.js/app.css.");
       }
     })();
   </script>

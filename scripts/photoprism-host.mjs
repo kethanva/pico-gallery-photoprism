@@ -89,6 +89,40 @@ let activeSessionId = null;
 let isFetchingSession = false;
 let sessionFetchQueue = [];
 
+// Backend access mode, learned from the /api/v1/config probe (log/ready only).
+let backendMode = null;
+
+// When credentials are configured, the proxy authenticates upstream on behalf
+// of the display and the browser never holds a session. The SPA must therefore
+// believe it is talking to a public (no-auth) instance, or its router guards
+// bounce every /library route to the login screen. Rewrite the auth-mode
+// fields in config payloads; the real previewToken/downloadToken/settings from
+// the authenticated response pass through untouched.
+const MASQUERADE_PUBLIC = () => !!(ppUser && ppPass);
+
+function forcePublicAuthFields(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  cfg.mode = 'public';
+  cfg.public = true;
+  cfg.authMode = 'public';
+}
+
+function rewriteAuthPayload(pathname, body) {
+  const parsed = JSON.parse(body);
+  if (pathname === '/api/v1/config') {
+    forcePublicAuthFields(parsed);
+  } else if (parsed && typeof parsed === 'object' && parsed.config) {
+    // GET /api/v1/session embeds a config object that would otherwise
+    // overwrite mode/public back to auth-required mid-session.
+    forcePublicAuthFields(parsed.config);
+  }
+  return JSON.stringify(parsed);
+}
+
+function isRewritePath(pathname) {
+  return pathname === '/api/v1/config' || pathname === '/api/v1/session';
+}
+
 function fetchSession() {
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({ username: ppUser, password: ppPass });
@@ -250,8 +284,37 @@ async function proxyRequest(req, res) {
         console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);
         activeSessionId = null;
       }
-      res.writeHead(up.statusCode || 502, up.headers);
-      up.pipe(res);
+
+      const shouldRewrite =
+        MASQUERADE_PUBLIC() &&
+        req.method === 'GET' &&
+        up.statusCode === 200 &&
+        isRewritePath(target.pathname) &&
+        (up.headers['content-type'] || '').includes('json');
+
+      if (!shouldRewrite) {
+        res.writeHead(up.statusCode || 502, up.headers);
+        up.pipe(res);
+        return;
+      }
+
+      let body = '';
+      up.setEncoding('utf8');
+      up.on('data', (chunk) => { body += chunk; });
+      up.on('end', () => {
+        let out = body;
+        try {
+          out = rewriteAuthPayload(target.pathname, body);
+        } catch (e) {
+          console.warn(`[proxy] config rewrite failed for ${target.pathname}: ${e.message}`);
+        }
+        const outHeaders = { ...up.headers };
+        delete outHeaders['content-length'];
+        delete outHeaders['transfer-encoding'];
+        outHeaders['content-length'] = Buffer.byteLength(out);
+        res.writeHead(up.statusCode || 502, outHeaders);
+        res.end(out);
+      });
     },
   );
   upstream.on('error', (err) => {
@@ -293,7 +356,14 @@ function serveStatic(req, res) {
   }
 
   if (rel.startsWith('/static/')) {
-    sendFile(req, res, join(STATIC, rel.slice('/static/'.length)), 'public, max-age=86400');
+    const localPath = join(STATIC, rel.slice('/static/'.length));
+    if (existsSync(localPath) && !statSync(localPath).isDirectory()) {
+      sendFile(req, res, localPath, 'public, max-age=86400');
+    } else {
+      // Not shipped with the UI bundle (avatars, wallpapers, …) — the backend
+      // serves these under the same /static prefix.
+      proxyRequest(req, res);
+    }
     return;
   }
 
@@ -328,6 +398,8 @@ const server = http.createServer((req, res) => {
   }
 });
 
+const PROBE_RETRY_MS = 15000;
+
 function probeBackend() {
   const target = new URL('/api/v1/config', backend);
   const req = backendAgent.request(
@@ -335,12 +407,27 @@ function probeBackend() {
     { method: 'GET', headers: { host: backend.host }, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
       backendSeen = true;
-      console.log(`  probe:    GET ${target.href} → HTTP ${up.statusCode} ✓`);
-      up.resume();
+      let body = '';
+      up.on('data', (chunk) => { body += chunk; });
+      up.on('end', () => {
+        if ((up.statusCode || 0) < 200 || (up.statusCode || 0) >= 300) {
+          backendMode = null;
+          console.error(`  probe:    GET ${target.href} → HTTP ${up.statusCode} ✗ (retry in ${PROBE_RETRY_MS / 1000}s)`);
+          setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+          return;
+        }
+        try {
+          backendMode = JSON.parse(body).mode || 'unknown';
+        } catch {
+          backendMode = 'unknown';
+        }
+        console.log(`  probe:    GET ${target.href} → HTTP ${up.statusCode} (mode: ${backendMode}) ✓`);
+      });
     },
   );
   req.on('error', (err) => {
-    console.error(`  probe:    GET ${target.href} → FAILED: ${err.code || err.message} ✗`);
+    console.error(`  probe:    GET ${target.href} → FAILED: ${err.code || err.message} ✗ (retry in ${PROBE_RETRY_MS / 1000}s)`);
+    setTimeout(probeBackend, PROBE_RETRY_MS).unref();
   });
   req.setTimeout(8000, () => req.destroy(new Error('ETIMEDOUT')));
   req.end();
