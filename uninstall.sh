@@ -72,10 +72,24 @@ for unit in picogallery-kiosk.service picogallery-photoprism.service picogallery
             pico-google-photos.service photoprism-kiosk.service \
             pico-kiosk.service pico-wait-online.service; do
   run systemctl disable --now "$unit" 2>/dev/null || true
-  run rm -f "/etc/systemd/system/$unit"
+  # `systemctl disable` no-ops when the unit file is already gone (drift from a
+  # partial uninstall), leaving dangling .wants symlinks that systemd complains
+  # about — and a dangling kiosk symlink still races tty1 at boot. Remove the
+  # symlinks explicitly from every target dir we ever installed into.
+  for wants in multi-user.target.wants graphical.target.wants timers.target.wants; do
+    run rm -f "/etc/systemd/system/$wants/$unit"
+  done
+  run rm -f "/etc/systemd/system/$unit" "/run/systemd/system/$unit" "/lib/systemd/system/$unit"
   run rm -rf "/etc/systemd/system/$unit.d"
   run systemctl reset-failed "$unit" 2>/dev/null || true
 done
+
+# seatd was enabled by install.sh for the kiosk seat; nothing else on a frame
+# appliance uses it. Disable so no enabled-but-unused daemon is left behind.
+if systemctl is-enabled --quiet seatd.service 2>/dev/null; then
+  info "Disabling seatd.service (was enabled by the kiosk install)..."
+  run systemctl disable --now seatd.service 2>/dev/null || true
+fi
 
 # 2. System binaries, sudoers, and udev rules
 info "Removing binaries and udev rules..."
@@ -110,16 +124,24 @@ fi
 #    the home dir, but do it here too in case the account was already deleted or
 #    userdel fails, so no stale Service Workers / cached SPA files are left).
 info "Clearing kiosk browser cache and local storage..."
-run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" 2>/dev/null || true
+run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" "/home/$KIOSK_USER/.config" 2>/dev/null || true
 
 # 6. Configuration, cache, and install log
 info "Removing configuration, cache, and install log..."
 run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
 run rm -f "$LOG_FILE"
 
-# 7. Users
+# 7. Users. WPE WebKit child processes (WPEWebProcess/WPENetworkProcess) can
+#    outlive the stopped kiosk unit; a surviving process makes `userdel -r` fail
+#    silently and the stale home directory (browser profile) survives into the
+#    next install. Kill the user's processes first, then remove the account.
 info "Removing system users..."
-id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
+if id "$KIOSK_USER" >/dev/null 2>&1; then
+  run pkill -u "$KIOSK_USER" 2>/dev/null || true
+  sleep 1
+  run pkill -KILL -u "$KIOSK_USER" 2>/dev/null || true
+  run userdel -r "$KIOSK_USER" 2>/dev/null || warn "could not delete user $KIOSK_USER (still has processes?) — remove manually: userdel -r $KIOSK_USER"
+fi
 id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
 
 # 8. Boot Config additions and backups
@@ -175,6 +197,8 @@ if [[ -f "$SCRIPT_PATH/package.json" ]]; then
   run rm -rf "$SCRIPT_PATH/node_modules"
 fi
 
+run systemctl reset-failed 2>/dev/null || true
+
 ok "Uninstalled PicoGallery successfully."
-info "Packages (cog/cage/seatd/node) were left installed; remove with apt if desired."
+info "Packages (cog/cage/seatd/node) and the NodeSource apt repo were left installed; remove with apt if desired."
 ok "To completely remove the codebase, delete this folder: rm -rf $SCRIPT_PATH"

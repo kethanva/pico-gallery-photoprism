@@ -473,9 +473,19 @@ step_server_config() {
   step "Server configuration ($CONFIG_DIR/config.toml)"
   run install -d -m 0755 "$CONFIG_DIR"
   local cfg="$CONFIG_DIR/config.toml"
-  if [[ -f "$cfg" ]] && ! confirm "Config exists at $cfg — overwrite?"; then
-    info "Keeping existing config."
-    return 0
+  if [[ -f "$cfg" ]]; then
+    # Never clobber working credentials with empty ones: with -y and no
+    # --photoprism-pass, overwriting would write password="" — the proxy then
+    # cannot autologin, the public-mode masquerade turns off, and the kiosk
+    # lands on the SIGN IN screen after every reinstall.
+    if [[ "$SOURCE_KIND" == "photoprism" && -z "$PP_PASS" ]]; then
+      info "Config exists and no --photoprism-pass was given — keeping existing config (credentials preserved)."
+      return 0
+    fi
+    if ! confirm "Config exists at $cfg — overwrite?"; then
+      info "Keeping existing config."
+      return 0
+    fi
   fi
 
   local source_block=""
@@ -627,7 +637,6 @@ Group=$RUN_GROUP
 Environment=NODE_ENV=production
 Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
 Environment=PICO_PP_PORT=8190
-Environment=PICO_PP_BACKEND=$PP_URL
 $pp_runtime_env
 WorkingDirectory=$REPO_ROOT
 ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs
@@ -921,6 +930,40 @@ step_verify() {
       sleep 1
     done
     [[ "$up" -eq 1 ]] && ok "PhotoPrism UI host answered /health" || { err "PhotoPrism UI host did not answer /health in 30s — journalctl -u picogallery-photoprism"; failures=$((failures+1)); }
+
+    # Backend readiness: /ready answers 200 only after the PhotoPrism backend
+    # was actually reached — this is what gates the kiosk launch on boot.
+    if [[ "$up" -eq 1 ]]; then
+      info "Waiting for the PhotoPrism backend (…/api/v1/ready)…"
+      local ready=0
+      for _ in $(seq 1 30); do
+        if curl -fsS --max-time 3 "http://localhost:8190/api/v1/ready" >/dev/null 2>&1; then ready=1; break; fi
+        sleep 1
+      done
+      if [[ "$ready" -eq 1 ]]; then
+        ok "backend reachable through the proxy"
+      else
+        err "backend never became ready — check the [[sources]] url in $CONFIG_DIR/config.toml and that PhotoPrism is up"; failures=$((failures+1))
+      fi
+
+      # Appliance contract 1: with credentials configured, the proxy must
+      # masquerade the config as public or the SPA bounces to the login screen.
+      if grep -Eq 'password[[:space:]]*=[[:space:]]*"[^"]+"' "$CONFIG_DIR/config.toml" 2>/dev/null; then
+        if curl -fsS --max-time 5 "http://localhost:8190/api/v1/config" 2>/dev/null | grep -q '"mode":"public"'; then
+          ok "proxy masquerades config as public (no login screen on the kiosk)"
+        else
+          err "proxy did NOT rewrite /api/v1/config to public mode — the kiosk will show a SIGN IN page. Check credentials in $CONFIG_DIR/config.toml and journalctl -u picogallery-photoprism"; failures=$((failures+1))
+        fi
+      fi
+
+      # Appliance contract 2: the SPA must boot from the deep kiosk route —
+      # index.html with absolute asset URLs, served for /library/photos.
+      if curl -fsS --max-time 5 "http://localhost:8190/library/photos" 2>/dev/null | grep -q "'/static/build/assets.json'"; then
+        ok "SPA boot page served on /library/photos (absolute asset URLs)"
+      else
+        err "/library/photos does not serve a bootable index.html — blank screen risk. Is this checkout up to date? (git pull / re-extract the release)"; failures=$((failures+1))
+      fi
+    fi
   fi
 
   if [[ "$MODE_WANTS_KIOSK" -eq 1 ]]; then
