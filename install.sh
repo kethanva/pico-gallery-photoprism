@@ -403,6 +403,21 @@ step_node() {
   fi
 }
 
+# verify_frontend_bundle <assets_json>
+# Ensures the committed PhotoPrism UI bundle is complete enough to boot:
+# assets.json exists and declares app.js + app.css, and those files exist.
+verify_frontend_bundle() {
+  local assets="$1"
+  local app_js app_css
+  [[ -f "$assets" ]] || return 1
+  app_js="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(m['app.js']||'');" "$assets" 2>/dev/null || true)"
+  app_css="$(node -e "const fs=require('fs'); const m=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); process.stdout.write(m['app.css']||'');" "$assets" 2>/dev/null || true)"
+  [[ -n "$app_js" && -n "$app_css" ]] || return 1
+  [[ -f "$REPO_ROOT/frontend/dist/static/build/$app_js" ]] || return 1
+  [[ -f "$REPO_ROOT/frontend/dist/static/build/$app_css" ]] || return 1
+  return 0
+}
+
 # Ensure the PhotoPrism Vue UI bundle is present. The bundle is committed to the
 # repo (frontend/dist) because low-RAM Pis cannot run the webpack build; restore
 # it from git if a previous cleanup deleted it, and only fall back to an
@@ -410,19 +425,30 @@ step_node() {
 step_build() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
   local assets="$REPO_ROOT/frontend/dist/static/build/assets.json"
-  if [[ -f "$assets" ]]; then
+  if verify_frontend_bundle "$assets"; then
     ok "frontend/dist present"
     return 0
+  fi
+  if [[ -f "$assets" ]]; then
+    warn "frontend/dist exists but the bundle is incomplete/corrupt (missing app.js/app.css mapping or files)."
   fi
   # The bundle is tracked — a missing dist usually means an old uninstall deleted
   # it. Restore from git before considering a build.
   if [[ -d "$REPO_ROOT/.git" ]] && have git; then
     info "frontend/dist missing — restoring the committed UI bundle from git"
     run git -C "$REPO_ROOT" checkout -- frontend/dist 2>/dev/null || true
-    if [[ -f "$assets" ]]; then
+    if verify_frontend_bundle "$assets"; then
       ok "frontend/dist restored from git"
       return 0
     fi
+    warn "frontend/dist restore did not produce a bootable bundle."
+  fi
+  # In tarball/release installs there is no git metadata to restore from.
+  if [[ ! -d "$REPO_ROOT/.git" ]]; then
+    die "frontend/dist bundle is missing or invalid in this release package.
+      Re-download the release tarball, or copy a known-good dist/:
+        cd frontend && PICO_NO_SW=1 npm install && PICO_NO_SW=1 npm run build
+        scp -r frontend/dist <pi>:$REPO_ROOT/frontend/"
   fi
   [[ "$DRY_RUN" -eq 1 ]] && { info "[dry-run] would build frontend/dist"; return 0; }
   # Webpack needs ~1.5+ GB; on a 512 MB board the build OOMs (even with swap it

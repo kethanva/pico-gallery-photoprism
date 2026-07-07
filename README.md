@@ -101,6 +101,12 @@ rm picogallery-release.tar.gz
 sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
 ```
 
+> [!IMPORTANT]
+> The release tarball must include a valid `frontend/dist` bundle (`assets.json`, `app.js`, `app.css`).
+> The Pi appliance (especially 512 MB boards) cannot reliably run the webpack build on-device.
+> If reinstall still shows a blank screen, run:
+> `sudo ./scripts/pi-e2e-diagnose.sh /opt/picogallery`
+
 ---
 
 `install.sh` is a **one-click, end-to-end provisioner**. It detects the
@@ -363,12 +369,17 @@ sudo systemctl start picogallery-kiosk
 If the screen remains blank or stuck at the system terminal, check the status of the backend and kiosk services:
 ```bash
 # Check the PhotoPrism host
-sudo systemctl status picogallery
-journalctl -u picogallery -n 50 --no-pager
+sudo systemctl status picogallery-photoprism
+journalctl -u picogallery-photoprism -n 50 --no-pager
  
 # Check the frontend kiosk browser
 sudo systemctl status picogallery-kiosk
 journalctl -u picogallery-kiosk -n 50 --no-pager
+```
+
+For a one-shot end-to-end report (asset mapping + HTTP checks + service logs):
+```bash
+sudo ./scripts/pi-e2e-diagnose.sh /opt/picogallery
 ```
  
 ## Docs

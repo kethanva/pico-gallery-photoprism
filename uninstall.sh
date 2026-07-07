@@ -10,7 +10,7 @@
 # - Configuration + cache directories, the kiosk browser cache, and the install log
 # - The build swapfile (and fstab entry) / reverted dphys-swapfile size
 # - Boot-config additions (KMS overlay, gpu_mem) and USB host-mode backups
-# - Local node_modules and frontend/dist build artifacts
+# - Local node_modules (keeps tracked frontend/dist bundle intact)
 #
 # Usage: sudo ./uninstall.sh [-y|--yes]
 # =============================================================================
