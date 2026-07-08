@@ -818,13 +818,23 @@ step_kiosk() {
   run systemctl enable --now seatd.service
   # Cage acquires the seat through seatd's control socket, which is group-owned.
   # Debian doesn't always name that group 'seat', so also join whatever group
-  # actually owns the live socket — otherwise Cage can't open the seat and the
-  # frame stays black even though the unit reports "started".
-  if [[ "$DRY_RUN" -eq 0 && -S /run/seatd.sock ]]; then
-    local seat_sock_grp
-    seat_sock_grp="$(stat -c '%G' /run/seatd.sock 2>/dev/null || true)"
-    if [[ -n "$seat_sock_grp" && "$seat_sock_grp" != "root" ]]; then
-      getent group "$seat_sock_grp" >/dev/null 2>&1 && run usermod -aG "$seat_sock_grp" "$KIOSK_USER" || true
+  # actually owns the live socket — otherwise Cage can't open the seat and input
+  # (often the frame too) is dead even though the unit reports "started". The
+  # socket appears asynchronously after `enable --now`, so wait for it instead
+  # of silently skipping the group join on a slow boot.
+  if [[ "$DRY_RUN" -eq 0 ]]; then
+    local sock_waited=0
+    while [[ ! -S /run/seatd.sock && "$sock_waited" -lt 10 ]]; do
+      sleep 1; sock_waited=$(( sock_waited + 1 ))
+    done
+    if [[ -S /run/seatd.sock ]]; then
+      local seat_sock_grp
+      seat_sock_grp="$(stat -c '%G' /run/seatd.sock 2>/dev/null || true)"
+      if [[ -n "$seat_sock_grp" && "$seat_sock_grp" != "root" ]]; then
+        getent group "$seat_sock_grp" >/dev/null 2>&1 && run usermod -aG "$seat_sock_grp" "$KIOSK_USER" || true
+      fi
+    else
+      warn "seatd socket (/run/seatd.sock) did not appear within 10s — the kiosk may not get a seat. Check: systemctl status seatd"
     fi
   fi
 
@@ -869,6 +879,9 @@ step_kiosk() {
 # PicoGallery kiosk runtime config. Edit and: systemctl restart picogallery-kiosk
 FRAME_URL=$target_url
 WAIT_TIMEOUT=120
+# Seconds the launcher waits for a keyboard/mouse to enumerate before starting
+# the compositor (slow USB hubs/OTG adapters need a few seconds; 0 = don't wait).
+INPUT_WAIT=15
 # COG_CONFIG=/etc/picogallery/cog.conf
 # COG_EXTRA=--scale=1.0
 EOF

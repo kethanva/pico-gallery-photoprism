@@ -57,4 +57,44 @@ fi
 run ls -lah /home/picokiosk/.cache
 run ls -lah /home/picokiosk/.local
 
+# ── Input pipeline (keyboard/mouse) ──────────────────────────────────────────
+# Checked layer by layer so a dead keyboard/mouse points at the exact failing
+# stage: USB hardware → kernel enumeration → udev seat tag → seatd → compositor.
+echo "=== Input pipeline (keyboard/mouse) ==="
+
+echo "--- Layer 1: USB hardware ---"
+run lsusb
+echo "+ gadget-mode config (dwc2/g_* forces the OTG port out of host mode)"
+grep -E 'dwc2|otg_mode' /boot/firmware/config.txt /boot/config.txt 2>/dev/null || echo "  (no dwc2/otg lines — good)"
+grep -E 'modules-load' /boot/firmware/cmdline.txt /boot/cmdline.txt 2>/dev/null || echo "  (no modules-load in cmdline — good)"
+grep -E '^\s*(g_ether|g_serial|g_mass_storage|g_midi|dwc2)\s*$' /etc/modules 2>/dev/null || echo "  (no gadget modules in /etc/modules — good)"
+echo
+
+echo "--- Layer 2: kernel enumeration ---"
+run cat /proc/bus/input/devices
+echo "+ HID modules"
+lsmod 2>/dev/null | grep -E 'usbhid|hid_generic|dwc' || echo "  (usbhid/hid_generic not listed — may be built-in; check Layer 2 devices above)"
+echo
+
+echo "--- Layer 3: udev seat tag ---"
+run test -f /etc/udev/rules.d/72-picogallery-seat.rules
+for ev in /dev/input/event*; do
+  [[ -e "$ev" ]] || continue
+  echo "+ udevadm info $ev"
+  udevadm info "$ev" 2>/dev/null | grep -E 'DEVNAME|ID_INPUT_KEYBOARD|ID_INPUT_MOUSE|ID_SEAT|TAGS' || true
+  echo
+done
+
+echo "--- Layer 4: seatd + kiosk user access ---"
+run systemctl status seatd --no-pager
+run ls -la /run/seatd.sock
+run id picokiosk
+echo
+
+echo "--- Layer 5: compositor (wlroots/libinput) ---"
+run systemctl show picogallery-kiosk -p ExecStartPre -p SupplementaryGroups
+echo "+ this boot's libinput/seat journal lines"
+journalctl -u picogallery-kiosk -b --no-pager 2>/dev/null | grep -iE 'libinput|seat|input|New device|cannot open' | tail -40 || true
+echo
+
 echo "=== End diagnostics ==="

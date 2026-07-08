@@ -68,6 +68,30 @@ wait_for_server() {
 
 wait_for_server
 
+# Cold-boot USB race: the unit's `udevadm settle` only waits for *queued* udev
+# events — hardware that hasn't electrically enumerated yet (slow hubs and OTG
+# adapters take several seconds after power-on) has nothing queued, so settle
+# returns and Cage starts with zero input devices. wlroots does pick up later
+# hotplug events, but waiting briefly here means the keyboard/mouse work from
+# the very first frame instead of depending on that path. Non-fatal: a headless
+# frame with no input attached just waits INPUT_WAIT once per boot.
+INPUT_WAIT="${INPUT_WAIT:-15}"
+wait_for_input() {
+  [ "${INPUT_WAIT}" -gt 0 ] 2>/dev/null || return 0
+  local waited=0
+  while [ "${waited}" -lt "${INPUT_WAIT}" ]; do
+    if grep -qE 'Handlers=.*(kbd|mouse)' /proc/bus/input/devices 2>/dev/null; then
+      echo "[kiosk] input devices present (waited ${waited}s)"
+      return 0
+    fi
+    sleep 1
+    waited=$(( waited + 1 ))
+  done
+  echo "[kiosk] no keyboard/mouse after ${INPUT_WAIT}s; starting anyway (hotplug still works)" >&2
+}
+
+wait_for_input
+
 # WPE/Cog tuning for an always-on display. Under a Wayland compositor (Cage)
 # Cog must use the 'wl' platform so the compositor's wl_seat (keyboard/pointer) is
 # wired into the web view — the old 'fdo' platform is deprecated (Cog warns
