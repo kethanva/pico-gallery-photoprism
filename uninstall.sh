@@ -268,7 +268,13 @@ run systemctl reset-failed 2>/dev/null || true
 if [[ "$PURGE" -eq 1 ]]; then
   step "Purging appliance packages (--purge)"
   export DEBIAN_FRONTEND=noninteractive
-  run apt-get purge -y cog cage seatd 2>/dev/null || warn "cog/cage/seatd purge failed (apt busy or packages absent)"
+  # Purge one at a time: a single unknown/absent package name would fail the
+  # whole apt transaction and leave the others installed.
+  for pkg in cog cage seatd; do
+    if dpkg -s "$pkg" >/dev/null 2>&1; then
+      run apt-get purge -y "$pkg" 2>/dev/null || warn "could not purge $pkg (apt busy?)"
+    fi
+  done
   if [[ -f /etc/apt/sources.list.d/nodesource.list ]]; then
     run apt-get purge -y nodejs 2>/dev/null || true
     run rm -f /etc/apt/sources.list.d/nodesource.list \
@@ -309,6 +315,8 @@ check_gone "systemd units" \
 check_gone "enablement symlinks" \
   /etc/systemd/system/multi-user.target.wants/picogallery-kiosk.service \
   /etc/systemd/system/multi-user.target.wants/picogallery-photoprism.service \
+  /etc/systemd/system/graphical.target.wants/picogallery-kiosk.service \
+  /etc/systemd/system/graphical.target.wants/picogallery-photoprism.service \
   /etc/systemd/system/timers.target.wants/pico-display-on.timer \
   /etc/systemd/system/timers.target.wants/pico-display-off.timer
 check_gone "binaries/sudoers/udev rule" \
