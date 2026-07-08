@@ -62,9 +62,30 @@ jobs:
           test -n "$APP_CSS"
           test -f "picogallery-release/frontend/dist/static/build/$APP_JS"
           test -f "picogallery-release/frontend/dist/static/build/$APP_CSS"
-          
+
           tar -czf picogallery-release.tar.gz -C picogallery-release .
-          
+
+          # Post-package smoke test: extract the exact archive users download
+          # and verify it is complete and its entrypoints parse. Catches broken
+          # tar layout, missing files, and syntax errors before publishing.
+          mkdir -p /tmp/release-verify
+          tar -xzf picogallery-release.tar.gz -C /tmp/release-verify
+          bash -n /tmp/release-verify/install.sh
+          bash -n /tmp/release-verify/uninstall.sh
+          bash -n /tmp/release-verify/run.sh
+          node --check /tmp/release-verify/scripts/photoprism-host.mjs
+          test -f /tmp/release-verify/frontend/index.html
+          test -f "/tmp/release-verify/frontend/dist/static/build/$APP_JS"
+          test -f "/tmp/release-verify/frontend/dist/static/build/$APP_CSS"
+          test -f /tmp/release-verify/kiosk/cog/picogallery-kiosk.service
+          test -f /tmp/release-verify/kiosk/cog/picogallery-kiosk.sh
+          test -f /tmp/release-verify/kiosk/cog/picogallery-kiosk.sudoers
+          test -f /tmp/release-verify/kiosk/cog/cog.conf
+          test -f /tmp/release-verify/config.example.toml
+
+          # Checksums so installs can verify the download.
+          sha256sum picogallery-release.tar.gz install.sh uninstall.sh > SHA256SUMS
+
       - name: Upload Release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.version.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
@@ -73,4 +94,6 @@ jobs:
           files: |
             picogallery-release.tar.gz
             install.sh
+            uninstall.sh
+            SHA256SUMS
           generate_release_notes: true

@@ -9,26 +9,36 @@
 # - Users and groups created for the kiosk/server (with their home dirs)
 # - Configuration + cache directories, the kiosk browser cache, and the install log
 # - The build swapfile (and fstab entry) / reverted dphys-swapfile size
+#   (restores the exact pre-install size recorded in /var/lib/picogallery/state)
 # - Boot-config additions (KMS overlay, gpu_mem) and USB host-mode backups
+# - The install-state manifest (/var/lib/picogallery)
 # - Local node_modules (keeps tracked frontend/dist bundle intact)
+# - With --purge: the apt packages installed for the appliance (cog, cage,
+#   seatd, and NodeSource nodejs + its apt repo) as well
 #
-# Usage: sudo ./uninstall.sh [-y|--yes]
+# Ends with a verification sweep that reports anything still present.
+#
+# Usage: sudo ./uninstall.sh [-y|--yes] [--purge]
 # =============================================================================
 
 set -Eeuo pipefail
 
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
+readonly STATE_DIR="/var/lib/picogallery"
+readonly STATE_FILE="$STATE_DIR/state"
 readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
 readonly SERVER_USER="picogallery"
 readonly SEAT_UDEV_RULE="/etc/udev/rules.d/72-picogallery-seat.rules"
 
 ASSUME_YES=0
+PURGE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes) ASSUME_YES=1; shift ;;
-    -h|--help) printf 'Usage: sudo ./uninstall.sh [-y|--yes]\n'; exit 0 ;;
+    --purge)  PURGE=1; shift ;;
+    -h|--help) printf 'Usage: sudo ./uninstall.sh [-y|--yes] [--purge]\n  --purge  also remove apt packages installed for the appliance\n           (cog, cage, seatd, NodeSource nodejs + repo)\n'; exit 0 ;;
     *) printf 'Unknown option: %s (try --help)\n' "$1" >&2; exit 1 ;;
   esac
 done
@@ -57,7 +67,21 @@ confirm() {
   [[ "$ans" =~ ^[Yy] ]]
 }
 
+# state_get <key> <default> — read a fact install.sh recorded (exact original
+# swap size, whether we created the seat group, …). Missing file → default.
+state_get() {
+  local key="$1" def="${2:-}" v=""
+  if [[ -f "$STATE_FILE" ]]; then
+    v="$(grep -E "^$key=" "$STATE_FILE" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+  fi
+  printf '%s' "${v:-$def}"
+}
+
 [[ $EUID -eq 0 ]] || die "Run with sudo."
+
+# Read everything we need from the manifest BEFORE any cleanup deletes it.
+DPHYS_ORIG_SWAPSIZE="$(state_get DPHYS_ORIG_SWAPSIZE "")"
+SEAT_GROUP_CREATED="$(state_get SEAT_GROUP_CREATED 0)"
 
 step "Uninstalling PicoGallery"
 confirm "Remove PicoGallery services, users, config, cache, and all system traces?" || die "Aborted."
@@ -114,8 +138,12 @@ if [[ -f /var/swap.picogallery ]]; then
   run rm -f /var/swap.picogallery
 fi
 if [[ -f /etc/dphys-swapfile ]] && grep -q '^CONF_SWAPSIZE=1024' /etc/dphys-swapfile; then
-  info "Reverting /etc/dphys-swapfile size to 100..."
-  run sed -i 's/^CONF_SWAPSIZE=1024/CONF_SWAPSIZE=100/' /etc/dphys-swapfile
+  # Prefer the exact pre-install size the installer recorded; 100 is the
+  # Raspberry Pi OS default and only a fallback for pre-manifest installs.
+  orig_swapsize="${DPHYS_ORIG_SWAPSIZE:-100}"
+  [[ "$orig_swapsize" =~ ^[0-9]+$ ]] || orig_swapsize=100
+  info "Reverting /etc/dphys-swapfile size to $orig_swapsize..."
+  run sed -i "s/^CONF_SWAPSIZE=1024/CONF_SWAPSIZE=$orig_swapsize/" /etc/dphys-swapfile
   run dphys-swapfile setup 2>/dev/null || true
   run dphys-swapfile swapon 2>/dev/null || true
 fi
@@ -126,23 +154,57 @@ fi
 info "Clearing kiosk browser cache and local storage..."
 run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" "/home/$KIOSK_USER/.config" 2>/dev/null || true
 
-# 6. Configuration, cache, and install log
-info "Removing configuration, cache, and install log..."
-run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
-run rm -f "$LOG_FILE"
+# 6. Configuration, cache, install-state manifest, install log, and the
+#    installer's NodeSource bootstrap script if a failed run left it behind.
+info "Removing configuration, cache, state, and install log..."
+run rm -rf "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR"
+run rm -f "$LOG_FILE" /tmp/nodesource_setup.sh
 
 # 7. Users. WPE WebKit child processes (WPEWebProcess/WPENetworkProcess) can
 #    outlive the stopped kiosk unit; a surviving process makes `userdel -r` fail
 #    silently and the stale home directory (browser profile) survives into the
-#    next install. Kill the user's processes first, then remove the account.
+#    next install. Kill the user's processes (escalating, with a real wait),
+#    then remove the account — and remove the home dir ourselves if userdel
+#    can't.
 info "Removing system users..."
 if id "$KIOSK_USER" >/dev/null 2>&1; then
   run pkill -u "$KIOSK_USER" 2>/dev/null || true
-  sleep 1
-  run pkill -KILL -u "$KIOSK_USER" 2>/dev/null || true
-  run userdel -r "$KIOSK_USER" 2>/dev/null || warn "could not delete user $KIOSK_USER (still has processes?) — remove manually: userdel -r $KIOSK_USER"
+  for _ in 1 2 3 4 5; do
+    pgrep -u "$KIOSK_USER" >/dev/null 2>&1 || break
+    run pkill -KILL -u "$KIOSK_USER" 2>/dev/null || true
+    sleep 1
+  done
+  if ! userdel -r "$KIOSK_USER" 2>/dev/null; then
+    # userdel -r also exits nonzero when only the home dir was missing — the
+    # account may already be gone; retry the account removal only if it isn't.
+    if id "$KIOSK_USER" >/dev/null 2>&1; then
+      warn "userdel -r failed — removing the account and home directory separately"
+      userdel "$KIOSK_USER" 2>/dev/null || warn "could not delete user $KIOSK_USER — remove manually: userdel -r $KIOSK_USER"
+    fi
+    run rm -rf "/home/$KIOSK_USER"
+  fi
 fi
-id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true
+# Stale home from an earlier failed uninstall (account already gone, dir left).
+if [[ -d "/home/$KIOSK_USER" ]] && ! id "$KIOSK_USER" >/dev/null 2>&1; then
+  run rm -rf "/home/$KIOSK_USER"
+fi
+if id "$SERVER_USER" >/dev/null 2>&1; then
+  userdel "$SERVER_USER" 2>/dev/null || true
+  if [[ -d "/home/$SERVER_USER" ]]; then
+    run rm -rf "/home/$SERVER_USER"
+  fi
+fi
+
+# 7b. The 'seat' group — only if this installer created it (recorded in the
+#     manifest) and no user is still a member (the seatd package may rely on it).
+if [[ "$SEAT_GROUP_CREATED" == "1" ]] && getent group seat >/dev/null 2>&1; then
+  if [[ -z "$(getent group seat | cut -d: -f4)" ]]; then
+    run groupdel seat 2>/dev/null || true
+    ok "Removed 'seat' group (created by the installer, no remaining members)"
+  else
+    info "Keeping 'seat' group — it still has members."
+  fi
+fi
 
 # 8. Boot Config additions and backups
 info "Restoring boot configuration backups or reverting appended settings..."
@@ -199,6 +261,84 @@ fi
 
 run systemctl reset-failed 2>/dev/null || true
 
+# 10. Packages (opt-in). Only with --purge: cog/cage/seatd exist solely for the
+#     kiosk, and nodejs came from the NodeSource repo this installer added. The
+#     NodeSource repo files are removed too, so apt stops tracking it. nodejs is
+#     purged only when the NodeSource list is present (evidence we installed it).
+if [[ "$PURGE" -eq 1 ]]; then
+  step "Purging appliance packages (--purge)"
+  export DEBIAN_FRONTEND=noninteractive
+  run apt-get purge -y cog cage seatd 2>/dev/null || warn "cog/cage/seatd purge failed (apt busy or packages absent)"
+  if [[ -f /etc/apt/sources.list.d/nodesource.list ]]; then
+    run apt-get purge -y nodejs 2>/dev/null || true
+    run rm -f /etc/apt/sources.list.d/nodesource.list \
+              /etc/apt/keyrings/nodesource.gpg \
+              /usr/share/keyrings/nodesource.gpg
+    ok "Removed NodeSource nodejs and its apt repo"
+  fi
+  run apt-get autoremove -y 2>/dev/null || true
+  ok "Packages purged"
+fi
+
+# 11. Verification sweep — prove the cleanup instead of assuming it. Reports
+#     every artifact this project is known to create that still exists.
+step "Verifying cleanup"
+LEFTOVERS=0
+check_gone() {
+  local desc="$1"; shift
+  local found=()
+  local p
+  for p in "$@"; do
+    # -L too: a dangling .wants symlink fails -e but still breaks the next boot.
+    if [[ -e "$p" || -L "$p" ]]; then found+=("$p"); fi
+  done
+  if [[ ${#found[@]} -gt 0 ]]; then
+    warn "leftover $desc: ${found[*]}"
+    LEFTOVERS=$((LEFTOVERS+1))
+  fi
+}
+check_gone "systemd units" \
+  /etc/systemd/system/picogallery-kiosk.service \
+  /etc/systemd/system/picogallery-photoprism.service \
+  /etc/systemd/system/picogallery.service \
+  /etc/systemd/system/pico-display-on.timer /etc/systemd/system/pico-display-off.timer \
+  /etc/systemd/system/pico-display-on.service /etc/systemd/system/pico-display-off.service \
+  /etc/systemd/system/pico-google-photos.service /etc/systemd/system/photoprism-kiosk.service \
+  /etc/systemd/system/pico-kiosk.service /etc/systemd/system/pico-wait-online.service \
+  /etc/systemd/system/picogallery-kiosk.service.d
+check_gone "enablement symlinks" \
+  /etc/systemd/system/multi-user.target.wants/picogallery-kiosk.service \
+  /etc/systemd/system/multi-user.target.wants/picogallery-photoprism.service \
+  /etc/systemd/system/timers.target.wants/pico-display-on.timer \
+  /etc/systemd/system/timers.target.wants/pico-display-off.timer
+check_gone "binaries/sudoers/udev rule" \
+  /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power \
+  /etc/sudoers.d/picogallery-kiosk "$SEAT_UDEV_RULE"
+check_gone "config/cache/state/log" \
+  "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR" "$LOG_FILE"
+check_gone "swapfile" /var/swap.picogallery
+check_gone "kiosk home directory" "/home/$KIOSK_USER"
+if id "$KIOSK_USER" >/dev/null 2>&1; then
+  warn "leftover user account: $KIOSK_USER"
+  LEFTOVERS=$((LEFTOVERS+1))
+fi
+if id "$SERVER_USER" >/dev/null 2>&1; then
+  warn "leftover user account: $SERVER_USER"
+  LEFTOVERS=$((LEFTOVERS+1))
+fi
+if grep -q "PicoGallery installer" /boot/firmware/config.txt /boot/config.txt 2>/dev/null; then
+  warn "leftover PicoGallery block in boot config — check /boot*/config.txt"
+  LEFTOVERS=$((LEFTOVERS+1))
+fi
+
+if [[ "$LEFTOVERS" -eq 0 ]]; then
+  ok "Verification clean — no PicoGallery traces found."
+else
+  warn "$LEFTOVERS leftover item(s) reported above — remove them manually or re-run this script."
+fi
+
 ok "Uninstalled PicoGallery successfully."
-info "Packages (cog/cage/seatd/node) and the NodeSource apt repo were left installed; remove with apt if desired."
+if [[ "$PURGE" -eq 0 ]]; then
+  info "Packages (cog/cage/seatd/node) and the NodeSource apt repo were left installed; re-run with --purge to remove them."
+fi
 ok "To completely remove the codebase, delete this folder: rm -rf $SCRIPT_PATH"

@@ -45,6 +45,7 @@ readonly SCRIPT_VERSION
 readonly KIOSK_ASSETS="$REPO_ROOT/kiosk/cog"
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
+readonly STATE_DIR="/var/lib/picogallery"
 readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
 readonly SERVER_USER="picogallery"
@@ -109,6 +110,19 @@ run() {
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# state_set <key> <value> — record an install-time fact in $STATE_DIR/state so
+# uninstall.sh can revert *exactly* what this install changed (original swap
+# size, whether we created the seat group, …) instead of guessing.
+state_set() {
+  local key="$1" val="$2"
+  if [[ "$DRY_RUN" -eq 1 ]]; then debug "[dry-run] state: $key=$val"; return 0; fi
+  install -d -m 0755 "$STATE_DIR"
+  local f="$STATE_DIR/state"
+  { grep -v "^$key=" "$f" 2>/dev/null || true; printf '%s=%s\n' "$key" "$val"; } >"$f.tmp"
+  mv "$f.tmp" "$f"
+  chmod 0644 "$f"
+}
 
 confirm() {
   local prompt="$1"
@@ -364,6 +378,11 @@ step_swap() {
   step "Ensuring build swap (${RAM_MB} MB RAM is tight for the Node build)"
   if have dphys-swapfile; then
     if [[ -f /etc/dphys-swapfile ]]; then
+      # Remember the pre-install size so uninstall restores the user's value,
+      # not a hardcoded default.
+      local orig_size
+      orig_size="$(grep -E '^#?CONF_SWAPSIZE=' /etc/dphys-swapfile 2>/dev/null | head -1 | cut -d= -f2 || true)"
+      state_set DPHYS_ORIG_SWAPSIZE "${orig_size:-100}"
       run sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
       run dphys-swapfile setup
       run dphys-swapfile swapon
@@ -374,6 +393,7 @@ step_swap() {
       info "Creating 1 GB swapfile at $sf"
       run fallocate -l 1G "$sf" || run dd if=/dev/zero of="$sf" bs=1M count=1024
       run chmod 600 "$sf"; run mkswap "$sf"
+      state_set SWAPFILE_CREATED 1
     fi
     run swapon "$sf" || true
     # Persist it: the 512 MB runtime (Node server + WebKit kiosk) also benefits
@@ -398,6 +418,7 @@ step_node() {
     run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh"
     run bash /tmp/nodesource_setup.sh
     apt_install nodejs
+    run rm -f /tmp/nodesource_setup.sh
     have node || die "Node install failed."
     ok "Installed Node $(node -v)"
   fi
@@ -787,7 +808,10 @@ step_kiosk() {
   # a service outright (216/GROUP) if a named supplementary group is missing — a
   # silent "kiosk never starts, console frozen" failure on images where the seatd
   # package didn't create the group.
-  getent group seat >/dev/null 2>&1 || run groupadd --system seat
+  if ! getent group seat >/dev/null 2>&1; then
+    run groupadd --system seat
+    state_set SEAT_GROUP_CREATED 1
+  fi
   for grp in video render input seat tty; do
     getent group "$grp" >/dev/null 2>&1 && run usermod -aG "$grp" "$KIOSK_USER" || true
   done
@@ -870,15 +894,26 @@ EOF
 
   step_blank_schedule
 
-  # Clear the kiosk browser's cache and local storage (removes stale Service Workers and
-  # cached PhotoPrism SPA files that conflict with the new slideshow client).
+  # Clear the kiosk browser's cache and local storage (removes stale Service Workers
+  # and cached PhotoPrism SPA files that conflict with the new bundle). Stop the kiosk
+  # first: a running WPE WebKit keeps rewriting these directories, so deleting them
+  # under a live browser resurrects stale entries on its next write.
+  local kiosk_was_active=0
   if [[ "$DRY_RUN" -eq 0 && -d "/home/$KIOSK_USER" ]]; then
+    if systemctl is-active --quiet picogallery-kiosk.service; then
+      kiosk_was_active=1
+      run systemctl stop picogallery-kiosk.service || true
+    fi
     info "Clearing kiosk browser cache to remove stale files..."
-    run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" 2>/dev/null || true
+    run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" "/home/$KIOSK_USER/.config" 2>/dev/null || true
   fi
 
   run systemctl daemon-reload
   run systemctl enable picogallery-kiosk.service
+  if [[ "$kiosk_was_active" -eq 1 ]]; then
+    run systemctl restart picogallery-kiosk.service || true
+    ok "picogallery-kiosk.service restarted with a clean browser profile"
+  fi
   ok "picogallery-kiosk.service enabled (PhotoPrism UI: $SERVER_URL)"
 }
 
@@ -1137,6 +1172,8 @@ main() {
   confirm "Proceed with installation?" || die "Aborted by user."
 
   REBOOT_REQUIRED=0
+  state_set VERSION "$SCRIPT_VERSION"
+  state_set MODE "$MODE"
   step_base_packages
   step_kms_boot
   step_swap
