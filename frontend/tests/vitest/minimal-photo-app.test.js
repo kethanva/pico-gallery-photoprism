@@ -373,4 +373,45 @@ describe("minimal-photo-app boot", () => {
 
     expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length).toBe(1);
   });
+
+  it("loads the next page when the bottom sentinel stays visible", async () => {
+    const fetchMock = mockFetch(async (url) => {
+      const parsed = new URL(url, "http://localhost");
+      const offset = Number(parsed.searchParams.get("offset") || 0);
+      const count = Number(parsed.searchParams.get("count") || 12);
+      const batch = Array.from({ length: count }, (_, i) => makePhoto(offset + i + 1));
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => batch,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length >= 12);
+
+    const sentinel = document.querySelector(".pg-sentinel");
+    vi.spyOn(sentinel, "getBoundingClientRect").mockReturnValue({
+      top: window.innerHeight - 20,
+      bottom: window.innerHeight,
+      left: 0,
+      right: 100,
+      width: 100,
+      height: 1,
+      x: 0,
+      y: window.innerHeight - 20,
+    });
+
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    await vi.waitFor(
+      () => fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length >= 2,
+      { timeout: 3000 }
+    );
+    const photoCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos"));
+    expect(photoCalls.length).toBeGreaterThanOrEqual(2);
+    expect(Number(new URL(photoCalls[1][0], "http://localhost").searchParams.get("offset"))).toBe(12);
+  });
 });

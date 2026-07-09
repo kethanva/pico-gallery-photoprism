@@ -8,8 +8,10 @@ const contentUri = config.contentUri || apiUri;
 const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
+const BOTTOM_ROOT_MARGIN_PX = 200;
 
 let resolvedKiosk = null;
+let bottomLoadCheckPending = false;
 
 const scrollState = {
   active: false,
@@ -575,6 +577,7 @@ function closePreview() {
   resumeGridImages();
   stopSlideshow();
   updatePreviewMeta();
+  scheduleBottomLoadCheck();
   $fullscreen.exit().catch(() => {});
 }
 
@@ -741,11 +744,12 @@ function markScrolling() {
       scrollState.prunePending = false;
       runPruneTopRows();
     }
+    scheduleBottomLoadCheck();
   }, getKiosk().scrollIdleMs);
 }
 
 function requestLoadMore() {
-  if (state.loading || state.done) {
+  if (state.loading || state.done || isPreviewOpen()) {
     return;
   }
   if (scrollState.active) {
@@ -753,6 +757,46 @@ function requestLoadMore() {
     return;
   }
   loadMore();
+}
+
+function isBottomSentinelNearViewport() {
+  const sentinel = state.elements.sentinel;
+  if (!sentinel) {
+    return false;
+  }
+  const rect = sentinel.getBoundingClientRect();
+  return rect.top <= window.innerHeight + BOTTOM_ROOT_MARGIN_PX;
+}
+
+function refreshBottomObserver() {
+  if (!state.bottomObserver || !state.elements.sentinel) {
+    return;
+  }
+  state.bottomObserver.unobserve(state.elements.sentinel);
+  state.bottomObserver.observe(state.elements.sentinel);
+}
+
+function ensureMoreIfBottomVisible() {
+  if (state.loading || state.done || isPreviewOpen()) {
+    return;
+  }
+  if (isBottomSentinelNearViewport()) {
+    requestLoadMore();
+  }
+}
+
+function scheduleBottomLoadCheck() {
+  if (bottomLoadCheckPending) {
+    return;
+  }
+  bottomLoadCheckPending = true;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      bottomLoadCheckPending = false;
+      refreshBottomObserver();
+      ensureMoreIfBottomVisible();
+    });
+  });
 }
 
 function maybeStartKioskSlideshow() {
@@ -918,6 +962,7 @@ async function loadMore() {
       ) {
         scheduleSlideshowTick();
       }
+      scheduleBottomLoadCheck();
     }
   }
 }
@@ -946,6 +991,7 @@ function resetRuntimeState() {
     clearTimeout(scrollState.timer);
     scrollState.timer = null;
   }
+  bottomLoadCheckPending = false;
   invalidateGridMetrics();
   autoAdvanceOnLoad = false;
   kioskBootPending = true;
@@ -1216,7 +1262,7 @@ function setupInfiniteObservers() {
         requestLoadMore();
       }
     },
-    { rootMargin: "0px 0px 200px 0px" }
+    { rootMargin: `0px 0px ${BOTTOM_ROOT_MARGIN_PX}px 0px` }
   );
   state.bottomObserver.observe(state.elements.sentinel);
 }
