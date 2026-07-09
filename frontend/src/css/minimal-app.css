@@ -144,6 +144,7 @@ body,
     height: 100%;
     object-fit: cover;
     display: block;
+    pointer-events: none;
 }
 
 .pg-status {
@@ -166,12 +167,14 @@ body,
 .pg-overlay {
     position: fixed;
     inset: 0;
-    background: #000d;
+    background: #000;
     display: none;
     align-items: center;
     justify-content: center;
     z-index: 10000;
     touch-action: manipulation;
+    pointer-events: none;
+    visibility: hidden;
 }
 
 .pg-overlay:focus {
@@ -180,6 +183,16 @@ body,
 
 .pg-overlay.is-open {
     display: flex;
+    pointer-events: auto;
+    visibility: visible;
+    background: #000;
+}
+
+.pg-shell.is-suspended,
+html.pg-preview-open .pg-shell {
+    visibility: hidden;
+    pointer-events: none;
+    content-visibility: hidden;
 }
 
 .pg-overlay-chrome {
@@ -322,6 +335,12 @@ html:-webkit-full-screen .pg-shell {
 
 html.pg-preview-open {
     overflow: hidden;
+    background: #000;
+}
+
+html.pg-preview-open body,
+html.pg-preview-open #app {
+    background: #000;
 }
 
 html.is-virtual-fullscreen .pg-overlay.is-open,

@@ -6,7 +6,7 @@ const apiUri = config.apiUri || "/api/v1";
 const contentUri = config.contentUri || apiUri;
 const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
 const thumbSize = "fit_720";
-const fullSize = "fit_1280";
+const allowedPreviewSizes = new Set(["fit_720", "fit_1280", "fit_1920"]);
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
 const defaultKioskLimits = {
@@ -43,6 +43,7 @@ let pruneCooldownUntil = 0;
 let autoAdvanceOnLoad = false;
 let kioskBootPending = true;
 let backgroundFillTimer = null;
+let gridImagesSuspended = false;
 
 const state = {
   photos: [],
@@ -67,6 +68,12 @@ const slideshow = {
   active: false,
   paused: false,
   timer: null,
+};
+
+const slidePrefetch = {
+  index: -1,
+  url: "",
+  image: null,
 };
 
 const touch = {
@@ -104,7 +111,7 @@ export function mapPhoto(item) {
     title,
     hash,
     thumbSrc: thumbUrl(hash),
-    fullSrc: fullUrl(hash),
+    fullSrc: previewUrl(hash),
   };
 }
 
@@ -112,8 +119,22 @@ function thumbUrl(hash) {
   return `${contentUri}/t/${hash}/${previewToken()}/${thumbSize}`;
 }
 
-function fullUrl(hash) {
-  return `${contentUri}/t/${hash}/${previewToken()}/${fullSize}`;
+function getKioskConfig() {
+  return window.__CONFIG__?.kioskConfig || config.kioskConfig || {};
+}
+
+function getPreviewSize() {
+  const size = getKioskConfig().previewSize;
+  if (typeof size === "string" && allowedPreviewSizes.has(size)) {
+    return size;
+  }
+  // fit_720 is the smallest supported PhotoPrism fit size — much cheaper to
+  // decode on Pi Zero 2 than fit_1280 during slideshow transitions.
+  return "fit_720";
+}
+
+function previewUrl(hash) {
+  return `${contentUri}/t/${hash}/${previewToken()}/${getPreviewSize()}`;
 }
 
 function applyPreviewTokenFromResponse(response) {
@@ -238,7 +259,12 @@ function setError(text) {
 }
 
 function isPreviewOpen() {
-  return state.elements.overlay.classList.contains("is-open");
+  return state.elements.overlay?.classList.contains("is-open") ?? false;
+}
+
+function openPhotoCard(index) {
+  showPreviewAt(index);
+  $fullscreen.request().catch(() => {});
 }
 
 function getColumnCount() {
@@ -285,14 +311,7 @@ function createPhotoCard(photo, index) {
   card.type = "button";
   card.title = photo.title;
   card.dataset.photoIndex = String(index);
-  card.addEventListener(
-    "click",
-    () => {
-      showPreviewAt(index);
-      $fullscreen.request().catch(() => {});
-    },
-    { passive: true }
-  );
+  bindControlAction(card, () => openPhotoCard(index));
 
   const img = el("img", "pg-image");
   img.alt = photo.title;
@@ -490,7 +509,7 @@ function scheduleSlideshowTick() {
       }
     }
 
-    showPreviewAt(next);
+    showPreviewAt(next, { fromSlideshow: true });
     scheduleSlideshowTick();
   }, getSlideshowWait());
 }
@@ -518,14 +537,94 @@ function toggleSlideshow() {
   }
 }
 
+function suspendGridImages() {
+  if (gridImagesSuspended || !state.elements.grid) {
+    return;
+  }
+  gridImagesSuspended = true;
+  cancelBackgroundFill();
+  state.elements.shell?.classList.add("is-suspended");
+  state.elements.grid.querySelectorAll(".pg-image").forEach((img) => {
+    if (img.src) {
+      img.dataset.pgSavedSrc = img.src;
+      img.removeAttribute("src");
+      img.src = "";
+    }
+  });
+}
+
+function resumeGridImages() {
+  if (!gridImagesSuspended || !state.elements.grid) {
+    return;
+  }
+  gridImagesSuspended = false;
+  state.elements.shell?.classList.remove("is-suspended");
+  state.elements.grid.querySelectorAll(".pg-image").forEach((img) => {
+    const saved = img.dataset.pgSavedSrc;
+    if (saved) {
+      img.src = saved;
+      delete img.dataset.pgSavedSrc;
+    }
+  });
+}
+
 function closePreview() {
   state.previewIndex = -1;
   state.elements.overlay?.classList.remove("is-open");
-  state.elements.preview?.removeAttribute("src");
+  cancelSlidePrefetch();
+  if (state.elements.preview) {
+    state.elements.preview.removeAttribute("src");
+    state.elements.preview.src = "";
+  }
   document.documentElement.classList.remove("pg-preview-open");
+  resumeGridImages();
   stopSlideshow();
   updatePreviewMeta();
   $fullscreen.exit().catch(() => {});
+}
+
+function cancelSlidePrefetch() {
+  if (slidePrefetch.image) {
+    slidePrefetch.image.onload = null;
+    slidePrefetch.image.onerror = null;
+    slidePrefetch.image.src = "";
+    slidePrefetch.image = null;
+  }
+  slidePrefetch.index = -1;
+  slidePrefetch.url = "";
+}
+
+function prefetchSlideAt(index) {
+  if (index < 0 || index >= state.photos.length) {
+    return;
+  }
+  const photo = state.photos[index];
+  const url = photo.hash ? previewUrl(photo.hash) : photo.fullSrc;
+  if (!url || slidePrefetch.index === index) {
+    return;
+  }
+  cancelSlidePrefetch();
+  slidePrefetch.index = index;
+  slidePrefetch.url = url;
+  const img = new Image();
+  img.decoding = "async";
+  slidePrefetch.image = img;
+  img.src = url;
+}
+
+function scheduleSlidePrefetch() {
+  if (!isPreviewOpen() || state.previewIndex < 0) {
+    return;
+  }
+  let next = state.previewIndex + 1;
+  if (next >= state.photos.length) {
+    if (state.done && state.photos.length > 0) {
+      next = 0;
+    } else {
+      return;
+    }
+  }
+  prefetchSlideAt(next);
 }
 
 function updatePreviewMeta() {
@@ -541,23 +640,46 @@ function updatePreviewMeta() {
   }
 }
 
-function showPreviewAt(index) {
+function showPreviewAt(index, options = {}) {
   if (index < 0 || index >= state.photos.length) {
     return;
   }
   const photo = state.photos[index];
+  const src = photo.hash ? previewUrl(photo.hash) : photo.fullSrc;
+  const sameSlide = state.previewIndex === index && state.elements.preview?.src === src;
+
   state.previewIndex = index;
-  const src = photo.hash ? fullUrl(photo.hash) : photo.fullSrc;
-  state.elements.preview.src = src;
-  state.elements.preview.setAttribute("src", src);
-  state.elements.preview.alt = photo.title;
+  if (!sameSlide) {
+    state.elements.preview.src = src;
+    state.elements.preview.alt = photo.title;
+  }
   state.elements.overlay.classList.add("is-open");
   document.documentElement.classList.add("pg-preview-open");
+  suspendGridImages();
   updatePreviewMeta();
-  state.elements.overlay.focus({ preventScroll: true });
+  if (!options.fromSlideshow) {
+    state.elements.overlay.focus({ preventScroll: true });
+  }
+  scheduleSlidePrefetch();
 
-  if (index >= state.photos.length - 4 && !state.done && !state.loading) {
+  if (
+    !slideshow.active &&
+    index >= state.photos.length - 4 &&
+    !state.done &&
+    !state.loading
+  ) {
     requestLoadMore();
+  } else if (
+    slideshow.active &&
+    index >= state.photos.length - 2 &&
+    !state.done &&
+    !state.loading
+  ) {
+    setTimeout(() => {
+      if (slideshow.active && !state.loading && !state.done) {
+        loadMore();
+      }
+    }, 250);
   }
 }
 
@@ -591,17 +713,13 @@ function completeAutoAdvanceIfNeeded(loadedOk) {
   autoAdvanceOnLoad = false;
   const nextIndex = state.previewIndex + 1;
   if (nextIndex < state.photos.length) {
-    showPreviewAt(nextIndex);
+    showPreviewAt(nextIndex, { fromSlideshow: true });
     if (slideshow.active) {
       scheduleSlideshowTick();
     }
   } else if (slideshow.active) {
     scheduleSlideshowTick();
   }
-}
-
-function getKioskConfig() {
-  return window.__CONFIG__?.kioskConfig || config.kioskConfig || {};
 }
 
 function getKioskLimit(key) {
@@ -842,6 +960,8 @@ function resetRuntimeState() {
   autoAdvanceOnLoad = false;
   kioskBootPending = true;
   cancelBackgroundFill();
+  cancelSlidePrefetch();
+  gridImagesSuspended = false;
   stopSlideshow();
   resetGridWindow();
   if (state.topObserver) {
@@ -891,17 +1011,29 @@ function onKeyDown(ev) {
     return;
   }
 
-  if (isPreviewOpen()) {
-    if (ev.key === "ArrowRight") {
-      ev.preventDefault();
-      previewNext();
-    } else if (ev.key === "ArrowLeft") {
-      ev.preventDefault();
-      previewPrev();
-    } else if (ev.key === " " || ev.key === "Spacebar") {
-      ev.preventDefault();
-      toggleSlideshowPause();
+  if (!isPreviewOpen()) {
+    if (ev.key === "Enter" || ev.key === " " || ev.key === "Spacebar") {
+      const focused = document.activeElement;
+      if (focused?.classList?.contains("pg-card")) {
+        const index = Number(focused.dataset.photoIndex);
+        if (Number.isFinite(index)) {
+          ev.preventDefault();
+          openPhotoCard(index);
+        }
+      }
     }
+    return;
+  }
+
+  if (ev.key === "ArrowRight") {
+    ev.preventDefault();
+    previewNext();
+  } else if (ev.key === "ArrowLeft") {
+    ev.preventDefault();
+    previewPrev();
+  } else if (ev.key === " " || ev.key === "Spacebar") {
+    ev.preventDefault();
+    toggleSlideshowPause();
   }
 }
 
@@ -996,6 +1128,8 @@ function buildUi(root) {
   overlay.setAttribute("aria-modal", "true");
   overlay.setAttribute("aria-label", "Photo preview");
   const preview = el("img", "pg-preview");
+  preview.decoding = "async";
+  preview.loading = "eager";
   preview.addEventListener("touchstart", onTouchStart, { passive: true });
   preview.addEventListener("touchend", onTouchEnd, { passive: true });
 

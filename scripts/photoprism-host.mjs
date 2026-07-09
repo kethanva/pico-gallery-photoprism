@@ -212,6 +212,7 @@ const servedConfig = JSON.stringify({
     slideDuration: slideDurationSecs,
     autoSlideshow: true,
     virtualFullscreenOnly: true,
+    previewSize: "fit_720",
     firstPageSize: 12,
     pageSize: 16,
     maxGridRows: 12,
