@@ -86,7 +86,19 @@ export class Input {
 
     const clickDuration = ev.timeStamp - this.timeStamp;
 
-    if (clickDuration > 0 && clickDuration < 333) {
+    // Accept a zero-duration click as a short click. WebKit (WPE WebKit under
+    // Cage — the Pi frame's browser) reports integer-millisecond event
+    // timeStamps, so a quick physical mousedown+click lands in the SAME
+    // millisecond and clickDuration is exactly 0. The old `> 0` guard then
+    // classified every fast click as InputInvalid, so on the frame single
+    // clicks silently did nothing — no fullscreen open, no select/highlight.
+    // A real click always arrives here with a preceding mousedown (this.timeStamp
+    // >= 0, checked above); programmatic/keyboard clicks have no mousedown and are
+    // already rejected by the `this.timeStamp < 0` guard, so `>= 0` cannot let
+    // those through. Chromium (fractional high-res timeStamps) is unaffected —
+    // it also occasionally hit the same-millisecond case, so this fixes a latent
+    // desktop flake too.
+    if (clickDuration >= 0 && clickDuration < 333) {
       return ClickShort;
     } else if (clickDuration >= 333) {
       return ClickLong;
