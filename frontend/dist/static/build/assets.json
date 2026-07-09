@@ -1,6 +1,6 @@
 {
   "app.css": "app.1a75aa9166b5dd123f93.css",
-  "app.js": "app.cc871d4fd664370d54b9.js",
+  "app.js": "app.b2ca4d04bcc85a45b87b.js",
   "share.js": "share.2bc0b5bb86b5ca0d34a3.js",
   "splash.css": "splash.1aed92941578e5a0aa9e.css",
   "splash.js": "splash.31d6cfe0d16ae931b73c.js",
@@ -77,5 +77,7 @@
   "materialdesignicons-webfont.ttf?v=7.4.47": "1fcc36272ea3e53d0031.ttf?v=7.4.47",
   "materialdesignicons-webfont.woff?v=7.4.47": "e55a20c80650829ec5fd.woff?v=7.4.47",
   "materialdesignicons-webfont.woff2?v=7.4.47": "ec024da790d2972da002.woff2?v=7.4.47",
+  "workbox-86637ee2.js": "workbox-86637ee2.js",
+  "sw.js": "sw.js",
   "sw-scope-cleanup.js": "sw-scope-cleanup.js"
 }
