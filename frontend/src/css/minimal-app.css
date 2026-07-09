@@ -23,6 +23,28 @@ body,
   max-width: 1800px;
   margin: 0 auto;
   padding: 10px;
+  position: relative;
+}
+
+.pg-shell.is-loading::after {
+  content: "";
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #444;
+  border-top-color: #ccc;
+  border-radius: 50%;
+  animation: pg-spin 0.8s linear infinite;
+  z-index: 50;
+  pointer-events: none;
+}
+
+@keyframes pg-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .pg-header {
@@ -51,8 +73,25 @@ body,
   border: 1px solid #555;
   background: #1a1a1a;
   color: #f5f5f5;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pg-button:hover {
+  background: #252525;
+  border-color: #777;
+}
+
+.pg-button:active {
+  background: #111;
+}
+
+.pg-button:focus-visible {
+  outline: 2px solid #6af;
+  outline-offset: 2px;
 }
 
 .pg-button.is-active {
@@ -89,6 +128,18 @@ body,
   aspect-ratio: 4 / 3;
   content-visibility: auto;
   contain-intrinsic-size: 160px 120px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.pg-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px #0008;
+}
+
+.pg-card:focus-visible {
+  outline: 2px solid #6af;
+  outline-offset: 2px;
 }
 
 .pg-image {
@@ -132,7 +183,7 @@ body,
 
 .pg-preview {
   max-width: 96vw;
-  max-height: 94vh;
+  max-height: 88vh;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
@@ -140,31 +191,101 @@ body,
 
 .pg-close {
   position: fixed;
-  top: 12px;
-  right: 12px;
-  border: 1px solid #666;
-  border-radius: 8px;
-  width: 36px;
-  height: 36px;
-  background: #000a;
+  top: 16px;
+  right: 16px;
+  border: 1px solid #888;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  background: #000b;
   color: #fff;
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 28px;
+  line-height: 44px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 102;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-html.is-virtual-fullscreen .pg-header,
-html.is-virtual-fullscreen .pg-grid,
-html.is-virtual-fullscreen .pg-status,
-html.is-virtual-fullscreen .pg-error,
-html:fullscreen .pg-header,
-html:fullscreen .pg-grid,
-html:fullscreen .pg-status,
-html:fullscreen .pg-error,
-html:-webkit-full-screen .pg-header,
-html:-webkit-full-screen .pg-grid,
-html:-webkit-full-screen .pg-status,
-html:-webkit-full-screen .pg-error {
-  display: none;
+.pg-close:hover {
+  background: #222;
+  border-color: #ccc;
+}
+
+.pg-close:focus-visible {
+  outline: 2px solid #6af;
+  outline-offset: 2px;
+}
+
+.pg-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 1px solid #666;
+  border-radius: 50%;
+  width: 52px;
+  height: 52px;
+  background: #0009;
+  color: #fff;
+  font-size: 32px;
+  line-height: 48px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 101;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.pg-nav:hover {
+  opacity: 1;
+  background: #000c;
+}
+
+.pg-nav:focus-visible {
+  outline: 2px solid #6af;
+  outline-offset: 2px;
+  opacity: 1;
+}
+
+.pg-nav-prev {
+  left: 16px;
+}
+
+.pg-nav-next {
+  right: 16px;
+}
+
+.pg-overlay-counter {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: #0009;
+  color: #eee;
+  font-size: 14px;
+  z-index: 101;
+  pointer-events: none;
+}
+
+.pg-overlay-caption {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 80vw;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #0009;
+  color: #ddd;
+  font-size: 14px;
+  text-align: center;
+  z-index: 101;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 html.is-virtual-fullscreen .pg-shell,
@@ -185,4 +306,10 @@ html:fullscreen .pg-preview,
 html:-webkit-full-screen .pg-preview {
   max-width: 100vw;
   max-height: 100vh;
+}
+
+@media (hover: none) {
+  .pg-nav {
+    opacity: 0.85;
+  }
 }

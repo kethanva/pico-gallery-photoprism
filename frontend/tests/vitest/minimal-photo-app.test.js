@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { bootMinimalPhotoApp, mapPhoto, pickHash } from "../../src/minimal-photo-app.js";
 
+const fullscreenMock = vi.hoisted(() => ({
+  isEnabled: vi.fn(() => false),
+  request: vi.fn(() => Promise.resolve()),
+  exit: vi.fn(() => Promise.resolve()),
+  toggle: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("common/fullscreen", () => ({
-  default: {
-    isEnabled: () => false,
-    request: () => Promise.resolve(),
-    exit: () => Promise.resolve(),
-    toggle: () => Promise.resolve(),
-  },
+  default: fullscreenMock,
 }));
 
 const samplePhoto = {
@@ -59,8 +61,14 @@ function mockFetch(handler) {
   });
 }
 
+function makePhoto(i) {
+  return { UID: `p${i}`, Title: `Photo ${i}`, Hash: `hash${i}` };
+}
+
 describe("minimal-photo-app boot", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    fullscreenMock.isEnabled.mockReturnValue(false);
     global.IntersectionObserver = class IntersectionObserver {
       observe() {}
       unobserve() {}
@@ -88,10 +96,7 @@ describe("minimal-photo-app boot", () => {
         return {
           ok: true,
           headers: { get: () => null },
-          json: async () => [
-            { UID: "p1", Title: "One", Hash: "hash1" },
-            { UID: "p2", Title: "Two", Hash: "hash2" },
-          ],
+          json: async () => [makePhoto(1), makePhoto(2)],
         };
       })
     );
@@ -99,6 +104,7 @@ describe("minimal-photo-app boot", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
     document.body.innerHTML = "";
   });
 
@@ -115,6 +121,7 @@ describe("minimal-photo-app boot", () => {
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+    expect(document.querySelector(".pg-overlay-counter")?.textContent).toContain("1 / 2");
   });
 
   it("places top sentinel inside the grid after the spacer", async () => {
@@ -137,13 +144,13 @@ describe("minimal-photo-app boot", () => {
           return {
             ok: true,
             headers: { get: () => null },
-            json: async () => [{ UID: "p1", Title: "One", Hash: "hash1" }],
+            json: async () => [makePhoto(1)],
           };
         }
         return {
           ok: true,
           headers: { get: () => null },
-          json: async () => [{ UID: "p2", Title: "Two", Hash: "hash2" }],
+          json: async () => [makePhoto(2)],
         };
       })
     );
@@ -171,5 +178,50 @@ describe("minimal-photo-app boot", () => {
     await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelector(".pg-slideshow.is-active"));
     expect(document.querySelector(".pg-overlay.is-open")).toBeTruthy();
+  });
+
+  it("exits fullscreen when closing preview", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    document.querySelector(".pg-card")?.click();
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    document.querySelector(".pg-close")?.click();
+    await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
+    expect(fullscreenMock.exit).toHaveBeenCalled();
+  });
+
+  it("toggles fullscreen with F while preview is open", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    document.querySelector(".pg-card")?.click();
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+    expect(fullscreenMock.toggle).toHaveBeenCalled();
+  });
+
+  it("prefetches additional pages in the background", async () => {
+    vi.useFakeTimers();
+    const fetchMock = mockFetch(async (url) => {
+      const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
+      const count = Number(new URL(url, "http://localhost").searchParams.get("count") || 16);
+      const batch = Array.from({ length: count }, (_, i) => makePhoto(offset + i + 1));
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => batch,
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bootPromise = bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.runOnlyPendingTimersAsync();
+    await bootPromise;
+
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length).toBeGreaterThanOrEqual(1);
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await vi.waitFor(() => fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length >= 2);
   });
 });

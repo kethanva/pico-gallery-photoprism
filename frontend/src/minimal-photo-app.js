@@ -14,6 +14,8 @@ const SWIPE_MIN_PX = 48;
 const maxGridRows = 20;
 const restoreRowBatch = 2;
 const eagerThumbCount = 8;
+const backgroundFillTarget = 400;
+const backgroundFillDelayMs = 600;
 
 const state = {
   photos: [],
@@ -36,6 +38,7 @@ const gridWindow = {
 
 const slideshow = {
   active: false,
+  paused: false,
   timer: null,
   wait: (config.kioskConfig?.slideDuration || 12) * 1000,
 };
@@ -53,6 +56,7 @@ let restorePending = false;
 let prunePending = false;
 let autoAdvanceOnLoad = false;
 let kioskBootPending = true;
+let backgroundFillTimer = null;
 
 export function pickHash(item) {
   if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
@@ -300,6 +304,7 @@ function scheduleRestoreTopRows() {
 
 function stopSlideshow() {
   slideshow.active = false;
+  slideshow.paused = false;
   if (slideshow.timer) {
     clearTimeout(slideshow.timer);
     slideshow.timer = null;
@@ -308,16 +313,40 @@ function stopSlideshow() {
   state.elements.slideshowBtn?.setAttribute("aria-pressed", "false");
 }
 
+function pauseSlideshow() {
+  if (!slideshow.active || slideshow.paused) return;
+  slideshow.paused = true;
+  if (slideshow.timer) {
+    clearTimeout(slideshow.timer);
+    slideshow.timer = null;
+  }
+}
+
+function resumeSlideshow() {
+  if (!slideshow.active || !slideshow.paused) return;
+  slideshow.paused = false;
+  scheduleSlideshowTick();
+}
+
+function toggleSlideshowPause() {
+  if (!slideshow.active) return;
+  if (slideshow.paused) {
+    resumeSlideshow();
+  } else {
+    pauseSlideshow();
+  }
+}
+
 function scheduleSlideshowTick() {
   if (slideshow.timer) {
     clearTimeout(slideshow.timer);
     slideshow.timer = null;
   }
-  if (!slideshow.active) return;
+  if (!slideshow.active || slideshow.paused) return;
 
   slideshow.timer = setTimeout(() => {
     slideshow.timer = null;
-    if (!slideshow.active) return;
+    if (!slideshow.active || slideshow.paused) return;
 
     let next = state.previewIndex;
     if (next < 0) {
@@ -367,6 +396,20 @@ function closePreview() {
   state.elements.overlay?.classList.remove("is-open");
   state.elements.preview?.removeAttribute("src");
   stopSlideshow();
+  $fullscreen.exit().catch(() => {});
+}
+
+function updatePreviewMeta() {
+  const total = state.photos.length;
+  const idx = state.previewIndex;
+  if (state.elements.counter) {
+    const suffix = state.done ? "" : "+";
+    state.elements.counter.textContent = total > 0 && idx >= 0 ? `${idx + 1} / ${total}${suffix}` : "";
+  }
+  if (state.elements.caption) {
+    const photo = idx >= 0 ? state.photos[idx] : null;
+    state.elements.caption.textContent = photo?.title || "";
+  }
 }
 
 function showPreviewAt(index) {
@@ -378,6 +421,7 @@ function showPreviewAt(index) {
   state.elements.preview.setAttribute("src", src);
   state.elements.preview.alt = photo.title;
   state.elements.overlay.classList.add("is-open");
+  updatePreviewMeta();
 
   if (index >= state.photos.length - 4 && !state.done && !state.loading) {
     loadMore();
@@ -426,6 +470,28 @@ function maybeStartKioskSlideshow() {
   startSlideshow();
 }
 
+function cancelBackgroundFill() {
+  if (backgroundFillTimer) {
+    clearTimeout(backgroundFillTimer);
+    backgroundFillTimer = null;
+  }
+}
+
+function maybeScheduleBackgroundFill() {
+  if (state.done || state.photos.length >= backgroundFillTarget) {
+    cancelBackgroundFill();
+    return;
+  }
+  if (backgroundFillTimer || state.loading) return;
+
+  backgroundFillTimer = setTimeout(() => {
+    backgroundFillTimer = null;
+    if (!state.loading && !state.done && state.photos.length < backgroundFillTarget) {
+      loadMore();
+    }
+  }, backgroundFillDelayMs);
+}
+
 function appendPhotos(rows) {
   const baseIndex = state.photos.length;
   state.photos.push(...rows);
@@ -434,10 +500,20 @@ function appendPhotos(rows) {
 }
 
 function renderState() {
+  state.elements.shell?.classList.toggle("is-loading", state.loading);
+
+  if (isPreviewOpen()) {
+    updatePreviewMeta();
+    return;
+  }
+
   if (state.loading) {
-    setStatus("Loading...");
+    const count = state.photos.length;
+    setStatus(count > 0 ? `Loading… (${count})` : "Loading…");
   } else if (state.done && state.photos.length > 0) {
-    setStatus("End of list");
+    setStatus(`${state.photos.length} photos`);
+  } else if (state.photos.length > 0) {
+    setStatus(`${state.photos.length} photos loaded`);
   } else {
     setStatus("");
   }
@@ -512,6 +588,7 @@ async function loadMore() {
     renderState();
     completeAutoAdvanceIfNeeded(loadedOk);
     maybeStartKioskSlideshow();
+    maybeScheduleBackgroundFill();
     if (
       slideshow.active &&
       isPreviewOpen() &&
@@ -542,6 +619,7 @@ function resetRuntimeState() {
   prunePending = false;
   autoAdvanceOnLoad = false;
   kioskBootPending = true;
+  cancelBackgroundFill();
   stopSlideshow();
   resetGridWindow();
   if (state.topObserver) {
@@ -576,6 +654,12 @@ function onKeyDown(ev) {
     return;
   }
 
+  if (ev.key === "f" || ev.key === "F") {
+    ev.preventDefault();
+    $fullscreen.toggle().catch(() => {});
+    return;
+  }
+
   if (isPreviewOpen()) {
     if (ev.key === "ArrowRight") {
       ev.preventDefault();
@@ -583,13 +667,17 @@ function onKeyDown(ev) {
     } else if (ev.key === "ArrowLeft") {
       ev.preventDefault();
       previewPrev();
+    } else if (ev.key === " " || ev.key === "Spacebar") {
+      ev.preventDefault();
+      toggleSlideshowPause();
     }
-    return;
   }
+}
 
-  if (ev.key === "f" || ev.key === "F") {
-    $fullscreen.toggle().catch(() => {});
-  }
+function onAuxClick(ev) {
+  if (ev.button !== 1) return;
+  ev.preventDefault();
+  $fullscreen.toggle().catch(() => {});
 }
 
 function onContextMenu(ev) {
@@ -660,21 +748,43 @@ function buildUi(root) {
   const status = el("p", "pg-status");
   const overlay = el("div", "pg-overlay");
   const preview = el("img", "pg-preview");
-  const close = el("button", "pg-close", "x");
+  const prevBtn = el("button", "pg-nav pg-nav-prev", "‹");
+  prevBtn.type = "button";
+  prevBtn.setAttribute("aria-label", "Previous photo");
+  prevBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    previewPrev();
+  });
+
+  const nextBtn = el("button", "pg-nav pg-nav-next", "›");
+  nextBtn.type = "button";
+  nextBtn.setAttribute("aria-label", "Next photo");
+  nextBtn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    previewNext();
+  });
+
+  const counter = el("div", "pg-overlay-counter");
+  const caption = el("div", "pg-overlay-caption");
+  const close = el("button", "pg-close", "×");
   close.type = "button";
   close.setAttribute("aria-label", "Close preview");
-  close.addEventListener("click", closePreview, { passive: true });
+  close.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    closePreview();
+  });
   overlay.addEventListener("click", (ev) => {
     if (ev.target === overlay) closePreview();
   });
   overlay.addEventListener("touchstart", onTouchStart, { passive: true });
   overlay.addEventListener("touchend", onTouchEnd, { passive: true });
-  overlay.append(preview, close);
+  overlay.append(prevBtn, preview, nextBtn, counter, caption, close);
 
   shell.append(header, error, grid, sentinel, status, overlay);
   root.appendChild(shell);
 
   state.elements = {
+    shell,
     error,
     topSentinel,
     grid,
@@ -683,6 +793,10 @@ function buildUi(root) {
     status,
     overlay,
     preview,
+    prevBtn,
+    nextBtn,
+    counter,
+    caption,
     slideshowBtn,
   };
 }
@@ -692,6 +806,7 @@ function bindListeners() {
   listenersBound = true;
   window.addEventListener("keydown", onKeyDown);
   document.addEventListener("contextmenu", onContextMenu, { capture: true });
+  document.addEventListener("auxclick", onAuxClick, { capture: true });
 }
 
 export async function bootMinimalPhotoApp(root) {
@@ -722,4 +837,5 @@ export async function bootMinimalPhotoApp(root) {
   );
   state.bottomObserver.observe(state.elements.sentinel);
   await loadMore();
+  maybeScheduleBackgroundFill();
 }
