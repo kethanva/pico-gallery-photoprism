@@ -24,6 +24,8 @@ graphify-out/
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/**
+# claude-mem auto-injects session context here; local only
+.cursor/rules/claude-mem-context.mdc
 scripts/build-graphify.py
 *.eslintcache
 .eslintcache
