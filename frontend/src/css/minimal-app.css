@@ -1,347 +1,346 @@
 html,
 body,
 #app {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  min-height: 100%;
-  background: #0a0a0a;
-  color: #f5f5f5;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: touch;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Noto Sans",
-    Ubuntu,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    background: #0a0a0a;
+    color: #f5f5f5;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, "Helvetica Neue", Arial, sans-serif;
 }
 
 .pg-shell {
-  max-width: 1800px;
-  margin: 0 auto;
-  padding: 10px;
-  position: relative;
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 10px;
+    position: relative;
 }
 
 .pg-shell.is-loading::after {
-  content: "";
-  position: fixed;
-  top: 14px;
-  right: 14px;
-  width: 22px;
-  height: 22px;
-  border: 2px solid #444;
-  border-top-color: #ccc;
-  border-radius: 50%;
-  animation: pg-spin 0.8s linear infinite;
-  z-index: 50;
-  pointer-events: none;
+    content: "";
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    width: 22px;
+    height: 22px;
+    border: 2px solid #444;
+    border-top-color: #ccc;
+    border-radius: 50%;
+    animation: pg-spin 0.8s linear infinite;
+    z-index: 50;
+    pointer-events: none;
 }
 
 @keyframes pg-spin {
-  to {
-    transform: rotate(360deg);
-  }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .pg-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 4;
-  background: #0a0a0a;
-  padding: 6px 2px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: #0a0a0a;
+    padding: 6px 2px 10px;
 }
 
 .pg-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
 }
 
 .pg-actions {
-  display: flex;
-  gap: 8px;
+    display: flex;
+    gap: 8px;
 }
 
 .pg-button {
-  border: 1px solid #555;
-  background: #1a1a1a;
-  color: #f5f5f5;
-  padding: 8px 14px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  transition: background 0.15s, border-color 0.15s;
+    border: 1px solid #555;
+    background: #1a1a1a;
+    color: #f5f5f5;
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
 }
 
 .pg-button:hover {
-  background: #252525;
-  border-color: #777;
+    background: #252525;
+    border-color: #777;
 }
 
 .pg-button:active {
-  background: #111;
+    background: #111;
 }
 
 .pg-button:focus-visible {
-  outline: 2px solid #6af;
-  outline-offset: 2px;
+    outline: 2px solid #6af;
+    outline-offset: 2px;
 }
 
 .pg-button.is-active {
-  background: #1f3a1f;
-  border-color: #6a6;
+    background: #1f3a1f;
+    border-color: #6a6;
 }
 
 .pg-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
-  contain: layout style;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    contain: layout style;
 }
 
 .pg-top-spacer {
-  grid-column: 1 / -1;
-  height: 0;
-  pointer-events: none;
+    grid-column: 1 / -1;
+    height: 0;
+    pointer-events: none;
 }
 
 .pg-top-sentinel {
-  grid-column: 1 / -1;
-  height: 0;
-  pointer-events: none;
+    grid-column: 1 / -1;
+    height: 0;
+    pointer-events: none;
 }
 
 .pg-card {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  background: #111;
-  border-radius: 8px;
-  overflow: hidden;
-  aspect-ratio: 4 / 3;
-  content-visibility: auto;
-  contain-intrinsic-size: 160px 120px;
-  cursor: pointer;
-  transition: transform 0.15s, box-shadow 0.15s;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    background: #111;
+    border-radius: 8px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    content-visibility: auto;
+    contain-intrinsic-size: 160px 120px;
+    cursor: pointer;
+    transition:
+        transform 0.15s,
+        box-shadow 0.15s;
 }
 
 .pg-card:hover {
-  transform: scale(1.02);
-  box-shadow: 0 4px 16px #0008;
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px #0008;
 }
 
 .pg-card:focus-visible {
-  outline: 2px solid #6af;
-  outline-offset: 2px;
+    outline: 2px solid #6af;
+    outline-offset: 2px;
 }
 
 .pg-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .pg-status {
-  color: #bbb;
-  text-align: center;
-  margin: 12px 0 4px;
-  font-size: 12px;
+    color: #bbb;
+    text-align: center;
+    margin: 12px 0 4px;
+    font-size: 12px;
 }
 
 .pg-error {
-  color: #ff9696;
-  margin: 0 0 10px;
-  font-size: 13px;
+    color: #ff9696;
+    margin: 0 0 10px;
+    font-size: 13px;
 }
 
 .pg-sentinel {
-  height: 2px;
+    height: 2px;
 }
 
 .pg-overlay {
-  position: fixed;
-  inset: 0;
-  background: #000d;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  touch-action: manipulation;
+    position: fixed;
+    inset: 0;
+    background: #000d;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    touch-action: manipulation;
 }
 
 .pg-overlay:focus {
-  outline: none;
+    outline: none;
 }
 
 .pg-overlay.is-open {
-  display: flex;
+    display: flex;
 }
 
 .pg-overlay-chrome {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
 }
 
 .pg-overlay-chrome .pg-close,
 .pg-overlay-chrome .pg-nav {
-  pointer-events: auto;
-  touch-action: manipulation;
+    pointer-events: auto;
+    touch-action: manipulation;
 }
 
 .pg-preview {
-  position: relative;
-  z-index: 1;
-  max-width: 96vw;
-  max-height: 88vh;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
-  touch-action: pan-y;
+    position: relative;
+    z-index: 1;
+    max-width: 96vw;
+    max-height: 88vh;
+    object-fit: contain;
+    user-select: none;
+    -webkit-user-drag: none;
+    touch-action: pan-y;
 }
 
 .pg-close {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  border: 1px solid #888;
-  border-radius: 50%;
-  width: 48px;
-  height: 48px;
-  background: #000b;
-  color: #fff;
-  font-size: 28px;
-  line-height: 44px;
-  text-align: center;
-  cursor: pointer;
-  z-index: 3;
-  transition: background 0.15s, border-color 0.15s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    border: 1px solid #888;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    background: #000b;
+    color: #fff;
+    font-size: 28px;
+    line-height: 44px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 3;
+    transition:
+        background 0.15s,
+        border-color 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .pg-close:hover {
-  background: #222;
-  border-color: #ccc;
+    background: #222;
+    border-color: #ccc;
 }
 
 .pg-close:focus-visible {
-  outline: 2px solid #6af;
-  outline-offset: 2px;
+    outline: 2px solid #6af;
+    outline-offset: 2px;
 }
 
 .pg-nav {
-  position: fixed;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 1px solid #666;
-  border-radius: 50%;
-  width: 52px;
-  height: 52px;
-  background: #0009;
-  color: #fff;
-  font-size: 32px;
-  line-height: 48px;
-  text-align: center;
-  cursor: pointer;
-  z-index: 3;
-  opacity: 0.7;
-  transition: opacity 0.15s, background 0.15s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 1px solid #666;
+    border-radius: 50%;
+    width: 52px;
+    height: 52px;
+    background: #0009;
+    color: #fff;
+    font-size: 32px;
+    line-height: 48px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 3;
+    opacity: 0.7;
+    transition:
+        opacity 0.15s,
+        background 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .pg-nav:hover {
-  opacity: 1;
-  background: #000c;
+    opacity: 1;
+    background: #000c;
 }
 
 .pg-nav:focus-visible {
-  outline: 2px solid #6af;
-  outline-offset: 2px;
-  opacity: 1;
+    outline: 2px solid #6af;
+    outline-offset: 2px;
+    opacity: 1;
 }
 
 .pg-nav-prev {
-  left: 16px;
+    left: 16px;
 }
 
 .pg-nav-next {
-  right: 16px;
+    right: 16px;
 }
 
 .pg-overlay-counter {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 6px 14px;
-  border-radius: 20px;
-  background: #0009;
-  color: #eee;
-  font-size: 14px;
-  z-index: 101;
-  pointer-events: none;
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: #0009;
+    color: #eee;
+    font-size: 14px;
+    z-index: 101;
+    pointer-events: none;
 }
 
 .pg-overlay-caption {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 80vw;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background: #0009;
-  color: #ddd;
-  font-size: 14px;
-  text-align: center;
-  z-index: 101;
-  pointer-events: none;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 80vw;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: #0009;
+    color: #ddd;
+    font-size: 14px;
+    text-align: center;
+    z-index: 101;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 html.is-virtual-fullscreen .pg-shell,
 html:fullscreen .pg-shell,
 html:-webkit-full-screen .pg-shell {
-  max-width: none;
-  padding: 0;
+    max-width: none;
+    padding: 0;
 }
 
 html.pg-preview-open {
-  overflow: hidden;
+    overflow: hidden;
 }
 
 html.is-virtual-fullscreen .pg-overlay.is-open,
 html.pg-preview-open .pg-overlay.is-open,
 html:fullscreen .pg-overlay.is-open,
 html:-webkit-full-screen .pg-overlay.is-open {
-  background: #000;
-  z-index: 2147483646;
+    background: #000;
+    z-index: 2147483646;
 }
 
 html.is-virtual-fullscreen .pg-preview,
 html:fullscreen .pg-preview,
 html:-webkit-full-screen .pg-preview {
-  max-width: 100vw;
-  max-height: 100vh;
+    max-width: 100vw;
+    max-height: 100vh;
 }
 
 @media (hover: none) {
-  .pg-nav {
-    opacity: 0.85;
-  }
+    .pg-nav {
+        opacity: 0.85;
+    }
 }

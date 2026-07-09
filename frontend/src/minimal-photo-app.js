@@ -75,10 +75,16 @@ const touch = {
 };
 
 export function pickHash(item) {
-  if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
-  if (!Array.isArray(item?.Files)) return "";
+  if (typeof item?.Hash === "string" && item.Hash) {
+    return item.Hash;
+  }
+  if (!Array.isArray(item?.Files)) {
+    return "";
+  }
   const primary = item.Files.find((f) => f?.Primary && f?.Hash);
-  if (primary?.Hash) return primary.Hash;
+  if (primary?.Hash) {
+    return primary.Hash;
+  }
   const fallback = item.Files.find((f) => !f?.Missing && f?.Hash);
   return fallback?.Hash || "";
 }
@@ -124,7 +130,9 @@ async function ensureRuntimeConfig() {
       credentials: "same-origin",
       headers: apiHeaders(),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      return;
+    }
     applyPreviewTokenFromResponse(response);
     const cfg = await response.json();
     if (cfg?.previewToken && window.__CONFIG__) {
@@ -136,7 +144,9 @@ async function ensureRuntimeConfig() {
 }
 
 function getAuthToken() {
-  if (authTokenChecked) return authToken || "";
+  if (authTokenChecked) {
+    return authToken || "";
+  }
   authTokenChecked = true;
   try {
     const direct = localStorage.getItem("session.token");
@@ -171,8 +181,12 @@ function apiHeaders() {
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
+  if (className) {
+    node.className = className;
+  }
+  if (text) {
+    node.textContent = text;
+  }
   return node;
 }
 
@@ -181,8 +195,12 @@ function el(tag, className, text) {
 function bindControlAction(node, handler) {
   let handled = false;
   const run = (ev) => {
-    if (handled) return;
-    if ("button" in ev && ev.button !== 0 && ev.type !== "touchend") return;
+    if (handled) {
+      return;
+    }
+    if ("button" in ev && ev.button !== 0 && ev.type !== "touchend") {
+      return;
+    }
     handled = true;
     setTimeout(() => {
       handled = false;
@@ -192,10 +210,14 @@ function bindControlAction(node, handler) {
     handler();
   };
   node.addEventListener("pointerdown", (ev) => {
-    if (ev.button === 0) node.dataset.pgPressed = "1";
+    if (ev.button === 0) {
+      node.dataset.pgPressed = "1";
+    }
   });
   node.addEventListener("pointerup", (ev) => {
-    if (node.dataset.pgPressed !== "1") return;
+    if (node.dataset.pgPressed !== "1") {
+      return;
+    }
     delete node.dataset.pgPressed;
     run(ev);
   });
@@ -220,7 +242,9 @@ function isPreviewOpen() {
 }
 
 function getColumnCount() {
-  if (gridMetrics.columnCount > 0) return gridMetrics.columnCount;
+  if (gridMetrics.columnCount > 0) {
+    return gridMetrics.columnCount;
+  }
   const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
   if (!template || template === "none") {
     gridMetrics.columnCount = 1;
@@ -231,16 +255,22 @@ function getColumnCount() {
 }
 
 function measureRowHeight() {
-  if (gridMetrics.rowHeight > 0) return gridMetrics.rowHeight;
+  if (gridMetrics.rowHeight > 0) {
+    return gridMetrics.rowHeight;
+  }
   const card = state.elements.grid.querySelector(".pg-card");
-  if (!card) return 128;
+  if (!card) {
+    return 128;
+  }
   const gap = parseFloat(getComputedStyle(state.elements.grid).rowGap) || 8;
   gridMetrics.rowHeight = card.getBoundingClientRect().height + gap;
   return gridMetrics.rowHeight;
 }
 
 function updateTopSpacer() {
-  if (!state.elements.topSpacer) return;
+  if (!state.elements.topSpacer) {
+    return;
+  }
   state.elements.topSpacer.style.height = `${gridWindow.topSpacerPx}px`;
 }
 
@@ -307,7 +337,9 @@ function pruneTopRowsIfNeeded() {
   const maxCards = getKioskLimit("maxGridRows") * ncol;
   const cardNodes = grid.querySelectorAll(".pg-card");
   const cardCount = cardNodes.length;
-  if (cardCount <= maxCards) return;
+  if (cardCount <= maxCards) {
+    return;
+  }
 
   const excess = cardCount - maxCards;
   const rowsToRemove = Math.ceil(excess / ncol);
@@ -316,7 +348,9 @@ function pruneTopRowsIfNeeded() {
 
   for (let i = 0; i < removeCount; i += 1) {
     const card = cardNodes[i];
-    if (!card) break;
+    if (!card) {
+      break;
+    }
     removeCardNode(card);
   }
 
@@ -329,7 +363,9 @@ function pruneTopRowsIfNeeded() {
 }
 
 function runPruneTopRows() {
-  if (prunePending) return;
+  if (prunePending) {
+    return;
+  }
   prunePending = true;
   requestAnimationFrame(() => {
     prunePending = false;
@@ -346,7 +382,9 @@ function schedulePruneTopRows() {
 }
 
 function restoreTopRowsIfNeeded() {
-  if (gridWindow.startIndex <= 0) return;
+  if (gridWindow.startIndex <= 0) {
+    return;
+  }
   const ncol = getColumnCount();
   const restoreCount = Math.min(ncol * getKioskLimit("restoreRowBatch"), gridWindow.startIndex);
   const start = gridWindow.startIndex - restoreCount;
@@ -360,8 +398,12 @@ function restoreTopRowsIfNeeded() {
 }
 
 function scheduleRestoreTopRows() {
-  if (restorePending || gridWindow.startIndex <= 0) return;
-  if (Date.now() < pruneCooldownUntil) return;
+  if (restorePending || gridWindow.startIndex <= 0) {
+    return;
+  }
+  if (Date.now() < pruneCooldownUntil) {
+    return;
+  }
   restorePending = true;
   requestAnimationFrame(() => {
     restorePending = false;
@@ -382,7 +424,9 @@ function stopSlideshow() {
 }
 
 function pauseSlideshow() {
-  if (!slideshow.active || slideshow.paused) return;
+  if (!slideshow.active || slideshow.paused) {
+    return;
+  }
   slideshow.paused = true;
   if (slideshow.timer) {
     clearTimeout(slideshow.timer);
@@ -391,13 +435,17 @@ function pauseSlideshow() {
 }
 
 function resumeSlideshow() {
-  if (!slideshow.active || !slideshow.paused) return;
+  if (!slideshow.active || !slideshow.paused) {
+    return;
+  }
   slideshow.paused = false;
   scheduleSlideshowTick();
 }
 
 function toggleSlideshowPause() {
-  if (!slideshow.active) return;
+  if (!slideshow.active) {
+    return;
+  }
   if (slideshow.paused) {
     resumeSlideshow();
   } else {
@@ -414,11 +462,15 @@ function scheduleSlideshowTick() {
     clearTimeout(slideshow.timer);
     slideshow.timer = null;
   }
-  if (!slideshow.active || slideshow.paused) return;
+  if (!slideshow.active || slideshow.paused) {
+    return;
+  }
 
   slideshow.timer = setTimeout(() => {
     slideshow.timer = null;
-    if (!slideshow.active || slideshow.paused) return;
+    if (!slideshow.active || slideshow.paused) {
+      return;
+    }
 
     let next = state.previewIndex;
     if (next < 0) {
@@ -444,7 +496,9 @@ function scheduleSlideshowTick() {
 }
 
 function startSlideshow() {
-  if (slideshow.active) return;
+  if (slideshow.active) {
+    return;
+  }
   slideshow.active = true;
   state.elements.slideshowBtn.classList.add("is-active");
   state.elements.slideshowBtn.setAttribute("aria-pressed", "true");
@@ -488,7 +542,9 @@ function updatePreviewMeta() {
 }
 
 function showPreviewAt(index) {
-  if (index < 0 || index >= state.photos.length) return;
+  if (index < 0 || index >= state.photos.length) {
+    return;
+  }
   const photo = state.photos[index];
   state.previewIndex = index;
   const src = photo.hash ? fullUrl(photo.hash) : photo.fullSrc;
@@ -508,7 +564,9 @@ function showPreviewAt(index) {
 function previewNext() {
   if (state.previewIndex < state.photos.length - 1) {
     showPreviewAt(state.previewIndex + 1);
-    if (slideshow.active) scheduleSlideshowTick();
+    if (slideshow.active) {
+      scheduleSlideshowTick();
+    }
   } else if (!state.done) {
     if (!state.loading) {
       autoAdvanceOnLoad = true;
@@ -520,17 +578,23 @@ function previewNext() {
 function previewPrev() {
   if (state.previewIndex > 0) {
     showPreviewAt(state.previewIndex - 1);
-    if (slideshow.active) scheduleSlideshowTick();
+    if (slideshow.active) {
+      scheduleSlideshowTick();
+    }
   }
 }
 
 function completeAutoAdvanceIfNeeded(loadedOk) {
-  if (!loadedOk || !autoAdvanceOnLoad) return;
+  if (!loadedOk || !autoAdvanceOnLoad) {
+    return;
+  }
   autoAdvanceOnLoad = false;
   const nextIndex = state.previewIndex + 1;
   if (nextIndex < state.photos.length) {
     showPreviewAt(nextIndex);
-    if (slideshow.active) scheduleSlideshowTick();
+    if (slideshow.active) {
+      scheduleSlideshowTick();
+    }
   } else if (slideshow.active) {
     scheduleSlideshowTick();
   }
@@ -573,7 +637,9 @@ function markScrolling() {
 }
 
 function requestLoadMore() {
-  if (state.loading || state.done) return;
+  if (state.loading || state.done) {
+    return;
+  }
   if (scrollState.active) {
     scrollState.loadPending = true;
     return;
@@ -582,8 +648,12 @@ function requestLoadMore() {
 }
 
 function maybeStartKioskSlideshow() {
-  if (!kioskBootPending || state.photos.length === 0) return;
-  if (getKioskConfig().autoSlideshow !== true) return;
+  if (!kioskBootPending || state.photos.length === 0) {
+    return;
+  }
+  if (getKioskConfig().autoSlideshow !== true) {
+    return;
+  }
   kioskBootPending = false;
   startSlideshow();
 }
@@ -605,8 +675,12 @@ function maybeScheduleBackgroundFill(loadedOk = true) {
     cancelBackgroundFill();
     return;
   }
-  if (backgroundFillTimer || state.loading || scrollState.active) return;
-  if (!loadedOk) return;
+  if (backgroundFillTimer || state.loading || scrollState.active) {
+    return;
+  }
+  if (!loadedOk) {
+    return;
+  }
 
   backgroundFillTimer = setTimeout(() => {
     backgroundFillTimer = null;
@@ -654,7 +728,9 @@ function pageBatchSize() {
 }
 
 async function loadMore() {
-  if (state.loading || state.done) return;
+  if (state.loading || state.done) {
+    return;
+  }
   state.loading = true;
   setError("");
   renderState();
@@ -717,7 +793,9 @@ async function loadMore() {
     // shared runtime flags so a stale load's finally cannot clear state.loading
     // out from under the fresh load and let a duplicate load start concurrently.
     if (generation === state.generation) {
-      if (state.controller === controller) state.controller = null;
+      if (state.controller === controller) {
+        state.controller = null;
+      }
       state.loading = false;
       renderState();
       completeAutoAdvanceIfNeeded(loadedOk);
@@ -828,7 +906,9 @@ function onKeyDown(ev) {
 }
 
 function onAuxClick(ev) {
-  if (ev.button !== 1) return;
+  if (ev.button !== 1) {
+    return;
+  }
   ev.preventDefault();
   $fullscreen.toggle().catch(() => {});
 }
@@ -849,18 +929,24 @@ function onContextMenu(ev) {
 }
 
 function onTouchStart(ev) {
-  if (!isPreviewOpen() || !ev.changedTouches?.length) return;
+  if (!isPreviewOpen() || !ev.changedTouches?.length) {
+    return;
+  }
   const t = ev.changedTouches[0];
   touch.x = t.clientX;
   touch.y = t.clientY;
 }
 
 function onTouchEnd(ev) {
-  if (!isPreviewOpen() || !ev.changedTouches?.length) return;
+  if (!isPreviewOpen() || !ev.changedTouches?.length) {
+    return;
+  }
   const t = ev.changedTouches[0];
   const dx = t.clientX - touch.x;
   const dy = t.clientY - touch.y;
-  if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy)) return;
+  if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy)) {
+    return;
+  }
   if (dx < 0) {
     previewNext();
   } else {
@@ -934,7 +1020,9 @@ function buildUi(root) {
   chrome.append(prevBtn, nextBtn, counter, caption, close);
   overlay.append(preview, chrome);
   overlay.addEventListener("pointerup", (ev) => {
-    if (ev.target === overlay) closePreview();
+    if (ev.target === overlay) {
+      closePreview();
+    }
   });
 
   shell.append(header, error, grid, sentinel, status);
@@ -961,7 +1049,9 @@ function buildUi(root) {
 }
 
 function bindListeners() {
-  if (listenersBound) return;
+  if (listenersBound) {
+    return;
+  }
   listenersBound = true;
   document.addEventListener("keydown", onKeyDown, { capture: true });
   document.addEventListener("contextmenu", onContextMenu, { capture: true });
@@ -979,7 +1069,9 @@ function bindListeners() {
 // (Re)creates the top/bottom scroll observers against the current sentinels.
 // Safe to call more than once: any existing observers are disconnected first.
 function setupInfiniteObservers() {
-  if (state.topObserver) state.topObserver.disconnect();
+  if (state.topObserver) {
+    state.topObserver.disconnect();
+  }
   state.topObserver = new IntersectionObserver(
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
@@ -990,7 +1082,9 @@ function setupInfiniteObservers() {
   );
   state.topObserver.observe(state.elements.topSentinel);
 
-  if (state.bottomObserver) state.bottomObserver.disconnect();
+  if (state.bottomObserver) {
+    state.bottomObserver.disconnect();
+  }
   state.bottomObserver = new IntersectionObserver(
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
@@ -1003,7 +1097,9 @@ function setupInfiniteObservers() {
 }
 
 export async function bootMinimalPhotoApp(root) {
-  if (!root) return;
+  if (!root) {
+    return;
+  }
   clearBootSplash();
   await ensureRuntimeConfig();
   $fullscreen.setVirtualOnly(getKioskConfig().virtualFullscreenOnly !== false);
