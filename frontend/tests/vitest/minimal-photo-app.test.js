@@ -171,6 +171,22 @@ describe("minimal-photo-app boot", () => {
     document.querySelector(".pg-slideshow")?.click();
     await vi.waitFor(() => document.querySelector(".pg-slideshow.is-active"));
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    document.querySelector(".pg-slideshow")?.click();
+    await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
+    expect(document.querySelector(".pg-slideshow.is-active")).toBeFalsy();
+    expect(fullscreenMock.exit).toHaveBeenCalled();
+  });
+
+  it("toggles slideshow with S key", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "s" }));
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "S" }));
+    await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
   });
 
   it("auto-starts slideshow on kiosk boot when configured", async () => {

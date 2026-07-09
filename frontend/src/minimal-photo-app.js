@@ -40,7 +40,6 @@ const slideshow = {
   active: false,
   paused: false,
   timer: null,
-  wait: (config.kioskConfig?.slideDuration || 12) * 1000,
 };
 
 const touch = {
@@ -337,6 +336,10 @@ function toggleSlideshowPause() {
   }
 }
 
+function getSlideshowWait() {
+  return (getKioskConfig().slideDuration || 12) * 1000;
+}
+
 function scheduleSlideshowTick() {
   if (slideshow.timer) {
     clearTimeout(slideshow.timer);
@@ -368,7 +371,7 @@ function scheduleSlideshowTick() {
 
     showPreviewAt(next);
     scheduleSlideshowTick();
-  }, slideshow.wait);
+  }, getSlideshowWait());
 }
 
 function startSlideshow() {
@@ -385,7 +388,7 @@ function startSlideshow() {
 
 function toggleSlideshow() {
   if (slideshow.active) {
-    stopSlideshow();
+    closePreview();
   } else {
     startSlideshow();
   }
@@ -396,6 +399,7 @@ function closePreview() {
   state.elements.overlay?.classList.remove("is-open");
   state.elements.preview?.removeAttribute("src");
   stopSlideshow();
+  updatePreviewMeta();
   $fullscreen.exit().catch(() => {});
 }
 
@@ -477,12 +481,13 @@ function cancelBackgroundFill() {
   }
 }
 
-function maybeScheduleBackgroundFill() {
+function maybeScheduleBackgroundFill(loadedOk = true) {
   if (state.done || state.photos.length >= backgroundFillTarget) {
     cancelBackgroundFill();
     return;
   }
   if (backgroundFillTimer || state.loading) return;
+  if (!loadedOk) return;
 
   backgroundFillTimer = setTimeout(() => {
     backgroundFillTimer = null;
@@ -588,7 +593,7 @@ async function loadMore() {
     renderState();
     completeAutoAdvanceIfNeeded(loadedOk);
     maybeStartKioskSlideshow();
-    maybeScheduleBackgroundFill();
+    maybeScheduleBackgroundFill(loadedOk);
     if (
       slideshow.active &&
       isPreviewOpen() &&
@@ -660,6 +665,12 @@ function onKeyDown(ev) {
     return;
   }
 
+  if (ev.key === "s" || ev.key === "S") {
+    ev.preventDefault();
+    toggleSlideshow();
+    return;
+  }
+
   if (isPreviewOpen()) {
     if (ev.key === "ArrowRight") {
       ev.preventDefault();
@@ -687,8 +698,11 @@ function onContextMenu(ev) {
   if (now - lastRightClickAt <= DOUBLE_CLICK_MS) {
     lastRightClickAt = 0;
     $fullscreen.toggle().catch(() => {});
-  } else {
-    lastRightClickAt = now;
+    return;
+  }
+  lastRightClickAt = now;
+  if (slideshow.active && !slideshow.paused) {
+    pauseSlideshow();
   }
 }
 
