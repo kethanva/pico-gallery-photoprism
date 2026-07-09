@@ -27,4 +27,4 @@ import { bootMinimalPhotoApp } from "./minimal-photo-app.js";
 import "css/minimal-app.css";
 
 // Deliberately boots only the minimal photo grid for low-end devices.
-bootMinimalPhotoApp(document.getElementById("app"));
+void bootMinimalPhotoApp(document.getElementById("app"));

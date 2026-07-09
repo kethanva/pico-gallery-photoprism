@@ -40,10 +40,24 @@ describe("minimal-photo-app helpers", () => {
     };
     const photo = mapPhoto(samplePhoto);
     expect(photo.title).toBe("Sunset");
-    expect(photo.thumbSrc).toBe("/api/v1/t/deadbeef/public/fit_360");
+    expect(photo.thumbSrc).toBe("/api/v1/t/deadbeef/public/fit_720");
     expect(photo.fullSrc).toBe("/api/v1/t/deadbeef/public/fit_1280");
   });
 });
+
+function mockFetch(handler) {
+  return vi.fn(async (url) => {
+    const pathname = new URL(url, "http://localhost").pathname;
+    if (pathname.endsWith("/config")) {
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => ({ previewToken: "public" }),
+      };
+    }
+    return handler(url);
+  });
+}
 
 describe("minimal-photo-app boot", () => {
   beforeEach(() => {
@@ -62,16 +76,18 @@ describe("minimal-photo-app boot", () => {
     document.body.innerHTML = '<div id="app"></div>';
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url) => {
+      mockFetch(async (url) => {
         const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
         if (offset > 0) {
           return {
             ok: true,
+            headers: { get: () => null },
             json: async () => [],
           };
         }
         return {
           ok: true,
+          headers: { get: () => null },
           json: async () => [
             { UID: "p1", Title: "One", Hash: "hash1" },
             { UID: "p2", Title: "Two", Hash: "hash2" },
@@ -87,7 +103,7 @@ describe("minimal-photo-app boot", () => {
   });
 
   it("renders photo cards after fetch", async () => {
-    bootMinimalPhotoApp(document.getElementById("app"));
+    await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => {
       expect(document.querySelectorAll(".pg-card").length).toBe(2);
     });
@@ -95,14 +111,14 @@ describe("minimal-photo-app boot", () => {
   });
 
   it("opens preview from thumbnail click", async () => {
-    bootMinimalPhotoApp(document.getElementById("app"));
+    await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
   });
 
   it("places top sentinel inside the grid after the spacer", async () => {
-    bootMinimalPhotoApp(document.getElementById("app"));
+    await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelector(".pg-grid"));
     const grid = document.querySelector(".pg-grid");
     const spacer = grid?.querySelector(".pg-top-spacer");
@@ -115,22 +131,24 @@ describe("minimal-photo-app boot", () => {
   it("auto-advances preview after loading more at end of list", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url) => {
+      mockFetch(async (url) => {
         const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
         if (offset === 0) {
           return {
             ok: true,
+            headers: { get: () => null },
             json: async () => [{ UID: "p1", Title: "One", Hash: "hash1" }],
           };
         }
         return {
           ok: true,
+          headers: { get: () => null },
           json: async () => [{ UID: "p2", Title: "Two", Hash: "hash2" }],
         };
       })
     );
 
-    bootMinimalPhotoApp(document.getElementById("app"));
+    await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 1);
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
@@ -140,7 +158,7 @@ describe("minimal-photo-app boot", () => {
   });
 
   it("toggles slideshow mode from header button", async () => {
-    bootMinimalPhotoApp(document.getElementById("app"));
+    await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
 
     document.querySelector(".pg-slideshow")?.click();

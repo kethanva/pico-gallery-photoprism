@@ -4,8 +4,8 @@ const config = window.__CONFIG__ || {};
 const staticUri = config.staticUri || "/static";
 const apiUri = config.apiUri || "/api/v1";
 const contentUri = config.contentUri || apiUri;
-const previewToken = config.previewToken || "public";
-const thumbSize = "fit_360";
+const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
+const thumbSize = "fit_720";
 const fullSize = "fit_1280";
 const firstPageSize = 16;
 const pageSize = 24;
@@ -49,7 +49,6 @@ let lastRightClickAt = 0;
 let listenersBound = false;
 let authToken = null;
 let authTokenChecked = false;
-let cardImageObserver = null;
 let restorePending = false;
 let prunePending = false;
 let autoAdvanceOnLoad = false;
@@ -69,15 +68,50 @@ export function mapPhoto(item) {
   if (!hash) {
     return {
       title,
+      hash: "",
       thumbSrc: `${staticUri}/img/404.jpg`,
       fullSrc: `${staticUri}/img/404.jpg`,
     };
   }
   return {
     title,
-    thumbSrc: `${contentUri}/t/${hash}/${previewToken}/${thumbSize}`,
-    fullSrc: `${contentUri}/t/${hash}/${previewToken}/${fullSize}`,
+    hash,
+    thumbSrc: thumbUrl(hash),
+    fullSrc: fullUrl(hash),
   };
+}
+
+function thumbUrl(hash) {
+  return `${contentUri}/t/${hash}/${previewToken()}/${thumbSize}`;
+}
+
+function fullUrl(hash) {
+  return `${contentUri}/t/${hash}/${previewToken()}/${fullSize}`;
+}
+
+function applyPreviewTokenFromResponse(response) {
+  const token = response.headers.get("x-preview-token");
+  if (token && window.__CONFIG__) {
+    window.__CONFIG__.previewToken = token;
+  }
+}
+
+async function ensureRuntimeConfig() {
+  try {
+    const response = await fetch(`${apiUri.replace(/\/+$/, "")}/config`, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return;
+    applyPreviewTokenFromResponse(response);
+    const cfg = await response.json();
+    if (cfg?.previewToken && window.__CONFIG__) {
+      window.__CONFIG__.previewToken = cfg.previewToken;
+    }
+  } catch {
+    // Fall back to boot-time __CONFIG__ defaults.
+  }
 }
 
 function getAuthToken() {
@@ -134,28 +168,6 @@ function isPreviewOpen() {
   return state.elements.overlay.classList.contains("is-open");
 }
 
-function ensureCardImageObserver() {
-  if (cardImageObserver) return cardImageObserver;
-  cardImageObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        const img = entry.target;
-        const src = img.dataset.src;
-        if (!src) return;
-        if (entry.isIntersecting) {
-          if (img.getAttribute("src") !== src) {
-            img.src = src;
-          }
-        } else if (img.hasAttribute("src")) {
-          img.removeAttribute("src");
-        }
-      });
-    },
-    { rootMargin: "200px 0px" }
-  );
-  return cardImageObserver;
-}
-
 function getColumnCount() {
   const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
   if (!template || template === "none") return 1;
@@ -197,14 +209,11 @@ function createPhotoCard(photo, index) {
   const img = el("img", "pg-image");
   img.alt = photo.title;
   img.decoding = "async";
-  img.dataset.src = photo.thumbSrc;
-  if (index < eagerThumbCount) {
-    img.src = photo.thumbSrc;
-  }
+  img.loading = "lazy";
+  img.src = photo.hash ? thumbUrl(photo.hash) : photo.thumbSrc;
   if (index >= eagerThumbCount) {
     img.fetchPriority = "low";
   }
-  ensureCardImageObserver().observe(img);
   card.appendChild(img);
   return card;
 }
@@ -227,10 +236,6 @@ function insertPhotoCards(photos, startIndex, atEnd) {
 }
 
 function removeCardNode(card) {
-  const img = card.querySelector("img");
-  if (img && cardImageObserver) {
-    cardImageObserver.unobserve(img);
-  }
   card.remove();
 }
 
@@ -367,8 +372,9 @@ function showPreviewAt(index) {
   if (index < 0 || index >= state.photos.length) return;
   const photo = state.photos[index];
   state.previewIndex = index;
-  state.elements.preview.src = photo.fullSrc;
-  state.elements.preview.setAttribute("src", photo.fullSrc);
+  const src = photo.hash ? fullUrl(photo.hash) : photo.fullSrc;
+  state.elements.preview.src = src;
+  state.elements.preview.setAttribute("src", src);
   state.elements.preview.alt = photo.title;
   state.elements.overlay.classList.add("is-open");
 
@@ -464,6 +470,8 @@ async function loadMore() {
       throw new Error(`HTTP ${response.status}`);
     }
 
+    applyPreviewTokenFromResponse(response);
+
     const data = await response.json();
     if (generation !== state.generation) {
       autoAdvanceOnLoad = false;
@@ -522,10 +530,6 @@ function resetRuntimeState() {
   autoAdvanceOnLoad = false;
   stopSlideshow();
   resetGridWindow();
-  if (cardImageObserver) {
-    cardImageObserver.disconnect();
-    cardImageObserver = null;
-  }
   if (state.topObserver) {
     state.topObserver.disconnect();
     state.topObserver = null;
@@ -675,9 +679,10 @@ function bindListeners() {
   document.addEventListener("contextmenu", onContextMenu, { capture: true });
 }
 
-export function bootMinimalPhotoApp(root) {
+export async function bootMinimalPhotoApp(root) {
   if (!root) return;
   clearBootSplash();
+  await ensureRuntimeConfig();
   resetRuntimeState();
   buildUi(root);
   bindListeners();
