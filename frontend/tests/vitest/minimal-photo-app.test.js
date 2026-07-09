@@ -101,6 +101,44 @@ describe("minimal-photo-app boot", () => {
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
   });
 
+  it("places top sentinel inside the grid after the spacer", async () => {
+    bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelector(".pg-grid"));
+    const grid = document.querySelector(".pg-grid");
+    const spacer = grid?.querySelector(".pg-top-spacer");
+    const sentinel = grid?.querySelector(".pg-top-sentinel");
+    expect(spacer).toBeTruthy();
+    expect(sentinel).toBeTruthy();
+    expect(spacer?.nextElementSibling).toBe(sentinel);
+  });
+
+  it("auto-advances preview after loading more at end of list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
+        if (offset === 0) {
+          return {
+            ok: true,
+            json: async () => [{ UID: "p1", Title: "One", Hash: "hash1" }],
+          };
+        }
+        return {
+          ok: true,
+          json: async () => [{ UID: "p2", Title: "Two", Hash: "hash2" }],
+        };
+      })
+    );
+
+    bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 1);
+    document.querySelector(".pg-card")?.click();
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    await vi.waitFor(() => document.querySelector(".pg-preview")?.getAttribute("src")?.includes("hash2"));
+  });
+
   it("toggles slideshow mode from header button", async () => {
     bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);

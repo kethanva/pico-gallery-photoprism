@@ -52,6 +52,7 @@ let authTokenChecked = false;
 let cardImageObserver = null;
 let restorePending = false;
 let prunePending = false;
+let autoAdvanceOnLoad = false;
 
 export function pickHash(item) {
   if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
@@ -221,33 +222,42 @@ function insertPhotoCards(photos, startIndex, atEnd) {
   if (firstCard) {
     state.elements.grid.insertBefore(frag, firstCard);
   } else {
-    state.elements.grid.appendChild(frag);
+    state.elements.topSentinel.after(frag);
   }
+}
+
+function removeCardNode(card) {
+  const img = card.querySelector("img");
+  if (img && cardImageObserver) {
+    cardImageObserver.unobserve(img);
+  }
+  card.remove();
 }
 
 function pruneTopRowsIfNeeded() {
   const grid = state.elements.grid;
   const ncol = getColumnCount();
   const maxCards = maxGridRows * ncol;
-  let cardCount = grid.querySelectorAll(".pg-card").length;
-  while (cardCount > maxCards) {
-    const rowHeight = measureRowHeight();
-    const removeCount = Math.min(ncol, cardCount);
-    for (let i = 0; i < removeCount; i += 1) {
-      const first = grid.querySelector(".pg-card");
-      if (!first) break;
-      const img = first.querySelector("img");
-      if (img && cardImageObserver) {
-        cardImageObserver.unobserve(img);
-      }
-      grid.removeChild(first);
-    }
-    gridWindow.startIndex += removeCount;
-    gridWindow.topSpacerPx += rowHeight;
-    updateTopSpacer();
-    window.scrollBy(0, -rowHeight);
-    cardCount = grid.querySelectorAll(".pg-card").length;
+  const cardNodes = grid.querySelectorAll(".pg-card");
+  const cardCount = cardNodes.length;
+  if (cardCount <= maxCards) return;
+
+  const excess = cardCount - maxCards;
+  const rowsToRemove = Math.ceil(excess / ncol);
+  const removeCount = rowsToRemove * ncol;
+  const rowHeight = measureRowHeight();
+
+  for (let i = 0; i < removeCount; i += 1) {
+    const card = cardNodes[i];
+    if (!card) break;
+    removeCardNode(card);
   }
+
+  gridWindow.startIndex += removeCount;
+  const spacerDelta = rowsToRemove * rowHeight;
+  gridWindow.topSpacerPx += spacerDelta;
+  updateTopSpacer();
+  window.scrollBy(0, -spacerDelta);
 }
 
 function schedulePruneTopRows() {
@@ -314,6 +324,7 @@ function scheduleSlideshowTick() {
       if (state.done) {
         next = 0;
       } else {
+        autoAdvanceOnLoad = true;
         loadMore();
         scheduleSlideshowTick();
         return;
@@ -370,8 +381,11 @@ function previewNext() {
   if (state.previewIndex < state.photos.length - 1) {
     showPreviewAt(state.previewIndex + 1);
     if (slideshow.active) scheduleSlideshowTick();
-  } else if (!state.done && !state.loading) {
-    loadMore();
+  } else if (!state.done) {
+    if (!state.loading) {
+      autoAdvanceOnLoad = true;
+      loadMore();
+    }
   }
 }
 
@@ -379,6 +393,18 @@ function previewPrev() {
   if (state.previewIndex > 0) {
     showPreviewAt(state.previewIndex - 1);
     if (slideshow.active) scheduleSlideshowTick();
+  }
+}
+
+function completeAutoAdvanceIfNeeded(loadedOk) {
+  if (!loadedOk || !autoAdvanceOnLoad) return;
+  autoAdvanceOnLoad = false;
+  const nextIndex = state.previewIndex + 1;
+  if (nextIndex < state.photos.length) {
+    showPreviewAt(nextIndex);
+    if (slideshow.active) scheduleSlideshowTick();
+  } else if (slideshow.active) {
+    scheduleSlideshowTick();
   }
 }
 
@@ -439,7 +465,10 @@ async function loadMore() {
     }
 
     const data = await response.json();
-    if (generation !== state.generation) return;
+    if (generation !== state.generation) {
+      autoAdvanceOnLoad = false;
+      return;
+    }
 
     const rows = Array.isArray(data) ? data.map(mapPhoto) : [];
     state.offset += rows.length;
@@ -450,6 +479,7 @@ async function loadMore() {
     }
     loadedOk = true;
   } catch (err) {
+    autoAdvanceOnLoad = false;
     if (timedOut) {
       setError("Network timeout - retrying when you scroll.");
     } else if (err?.name !== "AbortError") {
@@ -460,7 +490,14 @@ async function loadMore() {
     if (state.controller === controller) state.controller = null;
     state.loading = false;
     renderState();
-    if (slideshow.active && isPreviewOpen() && state.previewIndex >= state.photos.length - 1 && loadedOk) {
+    completeAutoAdvanceIfNeeded(loadedOk);
+    if (
+      slideshow.active &&
+      isPreviewOpen() &&
+      state.previewIndex >= state.photos.length - 1 &&
+      loadedOk &&
+      !autoAdvanceOnLoad
+    ) {
       scheduleSlideshowTick();
     }
   }
@@ -482,6 +519,7 @@ function resetRuntimeState() {
   authToken = null;
   restorePending = false;
   prunePending = false;
+  autoAdvanceOnLoad = false;
   stopSlideshow();
   resetGridWindow();
   if (cardImageObserver) {
@@ -594,10 +632,10 @@ function buildUi(root) {
   header.append(title, actions);
 
   const error = el("p", "pg-error");
-  const topSentinel = el("div", "pg-top-sentinel");
   const grid = el("section", "pg-grid");
   const topSpacer = el("div", "pg-top-spacer");
-  grid.appendChild(topSpacer);
+  const topSentinel = el("div", "pg-top-sentinel");
+  grid.append(topSpacer, topSentinel);
 
   const sentinel = el("div", "pg-sentinel");
   const status = el("p", "pg-status");
@@ -614,7 +652,7 @@ function buildUi(root) {
   overlay.addEventListener("touchend", onTouchEnd, { passive: true });
   overlay.append(preview, close);
 
-  shell.append(header, error, topSentinel, grid, sentinel, status, overlay);
+  shell.append(header, error, grid, sentinel, status, overlay);
   root.appendChild(shell);
 
   state.elements = {
