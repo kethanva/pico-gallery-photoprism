@@ -3,13 +3,13 @@ class Fullscreen {
   // Returns true if the browser supports the fullscreen API.
   isSupported() {
     // see https://developer.mozilla.org/en-US/docs/Web/API/Document/fullscreenEnabled
-    return !!document.fullscreenEnabled;
+    return !!document.fullscreenEnabled || !!document.webkitFullscreenEnabled;
   }
 
   // Returns true if fullscreen mode is enabled.
   isEnabled() {
     // see https://developer.mozilla.org/en-US/docs/Web/API/Document/fullscreenElement
-    return !!document.fullscreenElement || !!document.mozFullScreenElement;
+    return !!document.fullscreenElement || !!document.mozFullScreenElement || !!document.webkitFullscreenElement;
   }
 
   // Toggles fullscreen mode and returns a Promise.
@@ -27,6 +27,8 @@ class Fullscreen {
       // see https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
       if (typeof document.documentElement.requestFullscreen === "function") {
         return document.documentElement.requestFullscreen({ navigationUI: "hide" });
+      } else if (typeof document.documentElement.webkitRequestFullscreen === "function") {
+        return document.documentElement.webkitRequestFullscreen();
       } else {
         return Promise.reject(new Error("Fullscreen API not supported"));
       }
@@ -41,6 +43,8 @@ class Fullscreen {
       // see https://developer.mozilla.org/en-US/docs/Web/API/Document/exitFullscreen
       if (typeof document.exitFullscreen === "function") {
         return document.exitFullscreen();
+      } else if (typeof document.webkitExitFullscreen === "function") {
+        return document.webkitExitFullscreen();
       } else {
         return Promise.reject(new Error("Fullscreen API not supported"));
       }
