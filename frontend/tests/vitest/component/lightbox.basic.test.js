@@ -789,7 +789,7 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
         });
       }
 
-      it("onKeyDown no longer handles KeyF (surface toggle moved to the document-level listener in afterEnter)", () => {
+      it("onKeyDown does not handle KeyF (fullscreen toggle is owned by the document-level listener in afterEnter)", () => {
         const wrapper = mountLightbox();
         const toggleFullscreen = vi.fn();
         const close = vi.fn();
@@ -1716,6 +1716,105 @@ describe("PLightbox (low-mock, jsdom-friendly)", () => {
       const ev = makeEv(arrow);
       makeCtx(true).onLightboxPointerEvent(ev);
       expect(ev.preventDefault).not.toHaveBeenCalled();
+    });
+  });
+
+  // Pins the document-level fullscreen-toggle contract restored after the frame
+  // client / SPA-kiosk removal (294096b) accidentally dropped it. On the Pi frame
+  // the lightbox opens over /library/photos and Vuetify teleports the overlay, so
+  // component-scoped @keydown / @contextmenu never fire and the $view.onShortCut
+  // forwarder only relays Ctrl/⌘ + Escape — bare "F" and double-right-click MUST be
+  // caught by the document-level capture listeners in afterEnter, or fullscreen is
+  // dead on the appliance (only middle-click would work).
+  describe("document-level fullscreen toggle (F / double-right-click)", () => {
+    const M = PLightbox.methods;
+
+    const makeToggleCtx = () => ({
+      $event: { publish: vi.fn() },
+      $emit: vi.fn(),
+      $view: { leave: vi.fn() },
+      visible: true,
+      busy: false,
+      closing: false,
+      toggleFullscreen: vi.fn(),
+    });
+
+    let activeCtx = null;
+    const enter = () => {
+      const ctx = makeToggleCtx();
+      activeCtx = ctx;
+      M.afterEnter.call(ctx);
+      return ctx;
+    };
+
+    afterEach(() => {
+      // Always tear down the module-scoped document listeners so a test cannot
+      // leak them into the next one.
+      if (activeCtx) {
+        M.afterLeave.call(activeCtx);
+        activeCtx = null;
+      }
+    });
+
+    it("bare F toggles fullscreen via the document-level listener", () => {
+      const ctx = enter();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+      expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    it("uppercase F also toggles fullscreen", () => {
+      const ctx = enter();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "F" }));
+      expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    it("Ctrl+F and Meta+F are left to native handling (no toggle)", () => {
+      const ctx = enter();
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", ctrlKey: true }));
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", metaKey: true }));
+      expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
+    });
+
+    it("does not hijack F typed into an input field", () => {
+      const ctx = enter();
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      try {
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
+        expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
+      } finally {
+        input.remove();
+      }
+    });
+
+    it("a single right-click does not toggle; a second within 400ms does", () => {
+      const ctx = enter();
+      document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+      expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
+      document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+      expect(ctx.toggleFullscreen).toHaveBeenCalledTimes(1);
+    });
+
+    it("two right-clicks more than 400ms apart do not toggle", () => {
+      const ctx = enter();
+      const nowSpy = vi.spyOn(Date, "now");
+      try {
+        nowSpy.mockReturnValue(1000);
+        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+        nowSpy.mockReturnValue(1500);
+        document.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+        expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
+    it("removes the listeners on afterLeave so F no longer toggles after close", () => {
+      const ctx = enter();
+      M.afterLeave.call(ctx);
+      activeCtx = null; // already torn down
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+      expect(ctx.toggleFullscreen).not.toHaveBeenCalled();
     });
   });
 });

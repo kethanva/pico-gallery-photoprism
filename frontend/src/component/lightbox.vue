@@ -223,7 +223,21 @@ const shouldHideCaption = () => {
 // collapses the press's duplicate dispatch (see onEscapeKey) into one unwind.
 // Module-scoped rather than instance state — PLightbox is mounted once per session.
 let _lastEscapeEvent = null;
+// document-level auxclick (middle mouse) listener for single-middle-click fullscreen toggle.
 let _auxClickListener = null;
+// document-level contextmenu capture listener for double-right-click fullscreen toggle;
+// attached on dialog open, removed on close.
+let _contextMenuListener = null;
+// document-level keydown capture listener for the bare "F" fullscreen toggle; attached on
+// dialog open, removed on close. Bound on document (not via the template @keydown.f) so it
+// fires regardless of where focus sits, because Vuetify teleports the dialog overlay outside
+// this component's DOM tree and the $view.onShortCut forwarder only relays Ctrl/⌘ + Escape.
+// See afterEnter for the full rationale.
+let _fKeyListener = null;
+// Max gap (ms) between two right-clicks to count as a double right-click for the toggle.
+const DOUBLE_CLICK_MS = 400;
+// Timestamp of the previous right-click, for double right-click detection.
+let _lastContextMenuTs = 0;
 
 export default {
   name: "PLightbox",
@@ -452,6 +466,57 @@ export default {
     afterEnter() {
       this.$event.publish("lightbox.enter");
       this.$emit("enter");
+      // Fullscreen toggle — F, double-right-click, and middle-click all flip the
+      // immersive layout (hide/show the lightbox chrome). These are bound at the
+      // document level in the capture phase because the native onShortCut KeyF
+      // path can't reach the event once the lightbox is open:
+      //   1. Vuetify teleports the dialog overlay outside this component's DOM
+      //      tree, so @contextmenu / @keydown bound on the v-dialog never fire.
+      //   2. While viewing (controls hidden, or focus on document.body), a
+      //      component-scoped @keydown.f would never fire.
+      //   3. The $view.onShortCut forwarder only relays events where ctrlKey/
+      //      metaKey is set or Escape is pressed, so a bare "F" never arrives.
+      // On the Pi frame (WPE WebKit under Cage) the browser is already
+      // fullscreen, so toggleFullscreen() falls back to virtualFullscreen and
+      // just hides/reveals the chrome — which is the effect users want there.
+      // Fresh double-click window per session — a right-click from a previous
+      // session must not pair with the first one here.
+      _lastContextMenuTs = 0;
+      if (!_contextMenuListener) {
+        _contextMenuListener = (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          // Double right-click toggles fullscreen; a lone right-click only
+          // suppresses the browser menu (and pauses the slideshow via the
+          // pointerdown capture).
+          const now = Date.now();
+          if (now - _lastContextMenuTs <= DOUBLE_CLICK_MS) {
+            _lastContextMenuTs = 0;
+            this.toggleFullscreen();
+          } else {
+            _lastContextMenuTs = now;
+          }
+        };
+        document.addEventListener("contextmenu", _contextMenuListener, { capture: true });
+      }
+      if (!_fKeyListener) {
+        _fKeyListener = (ev) => {
+          if (ev.key !== "f" && ev.key !== "F") {
+            return;
+          }
+          if (ev.altKey || ev.ctrlKey || ev.metaKey) {
+            return; // leave Ctrl/⌘/Alt+F to native handling (find, etc.)
+          }
+          const t = ev.target;
+          if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+            return; // don't hijack "f" typed into an editable field
+          }
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.toggleFullscreen();
+        };
+        document.addEventListener("keydown", _fKeyListener, { capture: true });
+      }
       // Attach a document-level auxclick listener for single middle-click fullscreen toggle.
       if (!_auxClickListener) {
         _auxClickListener = (ev) => {
@@ -466,6 +531,16 @@ export default {
     },
     // Triggered when the dialog has closed.
     afterLeave() {
+      // Remove the document-level contextmenu (double-right-click) listener.
+      if (_contextMenuListener) {
+        document.removeEventListener("contextmenu", _contextMenuListener, { capture: true });
+        _contextMenuListener = null;
+      }
+      // Remove the document-level F fullscreen-toggle listener.
+      if (_fKeyListener) {
+        document.removeEventListener("keydown", _fKeyListener, { capture: true });
+        _fKeyListener = null;
+      }
       // Remove the document-level auxclick listener.
       if (_auxClickListener) {
         document.removeEventListener("auxclick", _auxClickListener, { capture: true });
@@ -2488,8 +2563,10 @@ export default {
       }
     },
     // Capture contextmenu (right-click) events on the dialog component.
-    // Double-click detection is handled by the document-level listener in afterEnter();
-    // this handler only suppresses the browser context menu as an additional fallback.
+    // Double-right-click fullscreen toggling is owned by the document-level
+    // capture listener registered in afterEnter (it stops propagation, so this
+    // template handler is normally not reached while the lightbox is open); this
+    // handler only suppresses the browser context menu as an additional fallback.
     captureDialogContextMenu(ev) {
       if (!ev) {
         return;
