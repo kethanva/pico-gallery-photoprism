@@ -165,4 +165,11 @@ describe("minimal-photo-app boot", () => {
     await vi.waitFor(() => document.querySelector(".pg-slideshow.is-active"));
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
   });
+
+  it("auto-starts slideshow on kiosk boot when configured", async () => {
+    window.__CONFIG__.kioskConfig = { slideDuration: 5, autoSlideshow: true };
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelector(".pg-slideshow.is-active"));
+    expect(document.querySelector(".pg-overlay.is-open")).toBeTruthy();
+  });
 });

@@ -208,7 +208,10 @@ const MIME = {
 const servedConfig = JSON.stringify({
   serverUrl: '',
   slideDuration: slideDurationSecs,
-  kioskConfig: { slideDuration: slideDurationSecs },
+  kioskConfig: {
+    slideDuration: slideDurationSecs,
+    autoSlideshow: true,
+  },
   disableServiceWorker: true,
 });
 

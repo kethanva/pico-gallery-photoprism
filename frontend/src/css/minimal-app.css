@@ -151,3 +151,38 @@ body,
   font-size: 24px;
   line-height: 30px;
 }
+
+html.is-virtual-fullscreen .pg-header,
+html.is-virtual-fullscreen .pg-grid,
+html.is-virtual-fullscreen .pg-status,
+html.is-virtual-fullscreen .pg-error,
+html:fullscreen .pg-header,
+html:fullscreen .pg-grid,
+html:fullscreen .pg-status,
+html:fullscreen .pg-error,
+html:-webkit-full-screen .pg-header,
+html:-webkit-full-screen .pg-grid,
+html:-webkit-full-screen .pg-status,
+html:-webkit-full-screen .pg-error {
+  display: none;
+}
+
+html.is-virtual-fullscreen .pg-shell,
+html:fullscreen .pg-shell,
+html:-webkit-full-screen .pg-shell {
+  max-width: none;
+  padding: 0;
+}
+
+html.is-virtual-fullscreen .pg-overlay.is-open,
+html:fullscreen .pg-overlay.is-open,
+html:-webkit-full-screen .pg-overlay.is-open {
+  background: #000;
+}
+
+html.is-virtual-fullscreen .pg-preview,
+html:fullscreen .pg-preview,
+html:-webkit-full-screen .pg-preview {
+  max-width: 100vw;
+  max-height: 100vh;
+}

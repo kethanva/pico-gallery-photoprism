@@ -52,6 +52,7 @@ let authTokenChecked = false;
 let restorePending = false;
 let prunePending = false;
 let autoAdvanceOnLoad = false;
+let kioskBootPending = true;
 
 export function pickHash(item) {
   if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
@@ -414,6 +415,17 @@ function completeAutoAdvanceIfNeeded(loadedOk) {
   }
 }
 
+function getKioskConfig() {
+  return window.__CONFIG__?.kioskConfig || config.kioskConfig || {};
+}
+
+function maybeStartKioskSlideshow() {
+  if (!kioskBootPending || state.photos.length === 0) return;
+  if (getKioskConfig().autoSlideshow !== true) return;
+  kioskBootPending = false;
+  startSlideshow();
+}
+
 function appendPhotos(rows) {
   const baseIndex = state.photos.length;
   state.photos.push(...rows);
@@ -499,6 +511,7 @@ async function loadMore() {
     state.loading = false;
     renderState();
     completeAutoAdvanceIfNeeded(loadedOk);
+    maybeStartKioskSlideshow();
     if (
       slideshow.active &&
       isPreviewOpen() &&
@@ -528,6 +541,7 @@ function resetRuntimeState() {
   restorePending = false;
   prunePending = false;
   autoAdvanceOnLoad = false;
+  kioskBootPending = true;
   stopSlideshow();
   resetGridWindow();
   if (state.topObserver) {
@@ -542,6 +556,7 @@ function resetRuntimeState() {
 
 function resetAndReload() {
   resetRuntimeState();
+  kioskBootPending = false;
   if (state.elements.grid) {
     state.elements.grid.querySelectorAll(".pg-card").forEach((node) => node.remove());
   }
@@ -706,5 +721,5 @@ export async function bootMinimalPhotoApp(root) {
     { rootMargin: "0px 0px 400px 0px" }
   );
   state.bottomObserver.observe(state.elements.sentinel);
-  loadMore();
+  await loadMore();
 }
