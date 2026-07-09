@@ -5,13 +5,15 @@ const staticUri = config.staticUri || "/static";
 const apiUri = config.apiUri || "/api/v1";
 const contentUri = config.contentUri || apiUri;
 const previewToken = config.previewToken || "public";
-const thumbSize = "fit_720";
-const fullSize = "fit_1920";
-const pageSize = 64;
+const thumbSize = "fit_360";
+const fullSize = "fit_1280";
+const firstPageSize = 16;
+const pageSize = 24;
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
-const maxGridRows = 48;
-const restoreRowBatch = 3;
+const maxGridRows = 20;
+const restoreRowBatch = 2;
+const eagerThumbCount = 8;
 
 const state = {
   photos: [],
@@ -45,6 +47,11 @@ const touch = {
 
 let lastRightClickAt = 0;
 let listenersBound = false;
+let authToken = null;
+let authTokenChecked = false;
+let cardImageObserver = null;
+let restorePending = false;
+let prunePending = false;
 
 export function pickHash(item) {
   if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
@@ -73,24 +80,28 @@ export function mapPhoto(item) {
 }
 
 function getAuthToken() {
+  if (authTokenChecked) return authToken || "";
+  authTokenChecked = true;
   try {
     const direct = localStorage.getItem("session.token");
     if (direct) {
-      return direct;
+      authToken = direct;
+      return authToken;
     }
     for (let i = 0; i < localStorage.length; i += 1) {
       const key = localStorage.key(i);
       if (key && key.endsWith(":session.token")) {
         const value = localStorage.getItem(key);
         if (value) {
-          return value;
+          authToken = value;
+          return authToken;
         }
       }
     }
   } catch {
-    return "";
+    authToken = "";
   }
-  return "";
+  return authToken || "";
 }
 
 function apiHeaders() {
@@ -122,6 +133,28 @@ function isPreviewOpen() {
   return state.elements.overlay.classList.contains("is-open");
 }
 
+function ensureCardImageObserver() {
+  if (cardImageObserver) return cardImageObserver;
+  cardImageObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const img = entry.target;
+        const src = img.dataset.src;
+        if (!src) return;
+        if (entry.isIntersecting) {
+          if (img.getAttribute("src") !== src) {
+            img.src = src;
+          }
+        } else if (img.hasAttribute("src")) {
+          img.removeAttribute("src");
+        }
+      });
+    },
+    { rootMargin: "200px 0px" }
+  );
+  return cardImageObserver;
+}
+
 function getColumnCount() {
   const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
   if (!template || template === "none") return 1;
@@ -151,19 +184,26 @@ function createPhotoCard(photo, index) {
   card.type = "button";
   card.title = photo.title;
   card.dataset.photoIndex = String(index);
-  card.addEventListener("click", () => {
-    showPreviewAt(index);
-    $fullscreen.request().catch(() => {});
-  }, { passive: true });
+  card.addEventListener(
+    "click",
+    () => {
+      showPreviewAt(index);
+      $fullscreen.request().catch(() => {});
+    },
+    { passive: true }
+  );
 
   const img = el("img", "pg-image");
-  img.src = photo.thumbSrc;
   img.alt = photo.title;
-  img.loading = "lazy";
   img.decoding = "async";
-  if (index >= 12) {
+  img.dataset.src = photo.thumbSrc;
+  if (index < eagerThumbCount) {
+    img.src = photo.thumbSrc;
+  }
+  if (index >= eagerThumbCount) {
     img.fetchPriority = "low";
   }
+  ensureCardImageObserver().observe(img);
   card.appendChild(img);
   return card;
 }
@@ -196,6 +236,10 @@ function pruneTopRowsIfNeeded() {
     for (let i = 0; i < removeCount; i += 1) {
       const first = grid.querySelector(".pg-card");
       if (!first) break;
+      const img = first.querySelector("img");
+      if (img && cardImageObserver) {
+        cardImageObserver.unobserve(img);
+      }
       grid.removeChild(first);
     }
     gridWindow.startIndex += removeCount;
@@ -204,6 +248,15 @@ function pruneTopRowsIfNeeded() {
     window.scrollBy(0, -rowHeight);
     cardCount = grid.querySelectorAll(".pg-card").length;
   }
+}
+
+function schedulePruneTopRows() {
+  if (prunePending) return;
+  prunePending = true;
+  requestAnimationFrame(() => {
+    prunePending = false;
+    pruneTopRowsIfNeeded();
+  });
 }
 
 function restoreTopRowsIfNeeded() {
@@ -218,6 +271,15 @@ function restoreTopRowsIfNeeded() {
   gridWindow.topSpacerPx = Math.max(0, gridWindow.topSpacerPx - rowsRestored * rowHeight);
   updateTopSpacer();
   window.scrollBy(0, rowsRestored * rowHeight);
+}
+
+function scheduleRestoreTopRows() {
+  if (restorePending || gridWindow.startIndex <= 0) return;
+  restorePending = true;
+  requestAnimationFrame(() => {
+    restorePending = false;
+    restoreTopRowsIfNeeded();
+  });
 }
 
 function stopSlideshow() {
@@ -299,7 +361,7 @@ function showPreviewAt(index) {
   state.elements.preview.alt = photo.title;
   state.elements.overlay.classList.add("is-open");
 
-  if (index >= state.photos.length - 8 && !state.done && !state.loading) {
+  if (index >= state.photos.length - 4 && !state.done && !state.loading) {
     loadMore();
   }
 }
@@ -324,7 +386,7 @@ function appendPhotos(rows) {
   const baseIndex = state.photos.length;
   state.photos.push(...rows);
   insertPhotoCards(rows, baseIndex, true);
-  pruneTopRowsIfNeeded();
+  schedulePruneTopRows();
 }
 
 function renderState() {
@@ -337,12 +399,8 @@ function renderState() {
   }
 }
 
-function maybeFill() {
-  if (state.loading || state.done) return;
-  const rect = state.elements.sentinel.getBoundingClientRect();
-  if (rect.top <= window.innerHeight + 1200) {
-    loadMore();
-  }
+function pageBatchSize() {
+  return state.offset === 0 ? firstPageSize : pageSize;
 }
 
 async function loadMore() {
@@ -354,6 +412,7 @@ async function loadMore() {
   const generation = state.generation;
   const controller = new AbortController();
   state.controller = controller;
+  const batchSize = pageBatchSize();
   let loadedOk = false;
   let timedOut = false;
   const timeout = setTimeout(() => {
@@ -363,7 +422,7 @@ async function loadMore() {
 
   try {
     const url = new URL(`${apiUri.replace(/\/+$/, "")}/photos`, window.location.origin);
-    url.searchParams.set("count", String(pageSize));
+    url.searchParams.set("count", String(batchSize));
     url.searchParams.set("offset", String(state.offset));
     url.searchParams.set("merged", "true");
     url.searchParams.set("quality", "0");
@@ -386,7 +445,7 @@ async function loadMore() {
     state.offset += rows.length;
     appendPhotos(rows);
 
-    if (rows.length < pageSize) {
+    if (rows.length < batchSize) {
       state.done = true;
     }
     loadedOk = true;
@@ -401,10 +460,7 @@ async function loadMore() {
     if (state.controller === controller) state.controller = null;
     state.loading = false;
     renderState();
-    if (loadedOk && !state.done) {
-      requestAnimationFrame(maybeFill);
-    }
-    if (slideshow.active && isPreviewOpen() && state.previewIndex >= state.photos.length - 1) {
+    if (slideshow.active && isPreviewOpen() && state.previewIndex >= state.photos.length - 1 && loadedOk) {
       scheduleSlideshowTick();
     }
   }
@@ -422,8 +478,16 @@ function resetRuntimeState() {
   state.done = false;
   state.error = "";
   state.previewIndex = -1;
+  authTokenChecked = false;
+  authToken = null;
+  restorePending = false;
+  prunePending = false;
   stopSlideshow();
   resetGridWindow();
+  if (cardImageObserver) {
+    cardImageObserver.disconnect();
+    cardImageObserver = null;
+  }
   if (state.topObserver) {
     state.topObserver.disconnect();
     state.topObserver = null;
@@ -503,6 +567,13 @@ function onTouchEnd(ev) {
   }
 }
 
+function clearBootSplash() {
+  document.body?.classList.remove("nojs");
+  document.documentElement?.classList.remove("loading");
+  document.getElementById("photoprism")?.remove();
+  document.getElementById("busy-overlay")?.remove();
+}
+
 function buildUi(root) {
   root.textContent = "";
   const shell = el("main", "pg-shell");
@@ -568,6 +639,7 @@ function bindListeners() {
 
 export function bootMinimalPhotoApp(root) {
   if (!root) return;
+  clearBootSplash();
   resetRuntimeState();
   buildUi(root);
   bindListeners();
@@ -575,10 +647,10 @@ export function bootMinimalPhotoApp(root) {
   state.topObserver = new IntersectionObserver(
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
-        restoreTopRowsIfNeeded();
+        scheduleRestoreTopRows();
       }
     },
-    { rootMargin: "800px 0px 0px 0px" }
+    { rootMargin: "400px 0px 0px 0px" }
   );
   state.topObserver.observe(state.elements.topSentinel);
 
@@ -588,7 +660,7 @@ export function bootMinimalPhotoApp(root) {
         loadMore();
       }
     },
-    { rootMargin: "0px 0px 1200px 0px" }
+    { rootMargin: "0px 0px 400px 0px" }
   );
   state.bottomObserver.observe(state.elements.sentinel);
   loadMore();

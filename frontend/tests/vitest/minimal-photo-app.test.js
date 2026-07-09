@@ -40,8 +40,8 @@ describe("minimal-photo-app helpers", () => {
     };
     const photo = mapPhoto(samplePhoto);
     expect(photo.title).toBe("Sunset");
-    expect(photo.thumbSrc).toBe("/api/v1/t/deadbeef/public/fit_720");
-    expect(photo.fullSrc).toBe("/api/v1/t/deadbeef/public/fit_1920");
+    expect(photo.thumbSrc).toBe("/api/v1/t/deadbeef/public/fit_360");
+    expect(photo.fullSrc).toBe("/api/v1/t/deadbeef/public/fit_1280");
   });
 });
 

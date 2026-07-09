@@ -1,6 +1,6 @@
 {
-  "app.css": "app.b89368ca06f369cd4e29.css",
-  "app.js": "app.c0e9cc955a05822fb343.js",
+  "app.css": "app.7bce115fe973fcdd9e11.css",
+  "app.js": "app.c13993cb5ce9c4028199.js",
   "share.js": "share.98936c6ca4fb8345d9b9.js",
   "splash.css": "splash.1aed92941578e5a0aa9e.css",
   "splash.js": "splash.31d6cfe0d16ae931b73c.js",
@@ -49,7 +49,5 @@
   "vi-json.js": "chunk/vi-json.21e2c719e4e8faf99fec.js",
   "zh-json.js": "chunk/zh-json.bc10b7557c2720806753.js",
   "zh_TW-json.js": "chunk/zh_TW-json.b4458696afbd4ca0dff9.js",
-  "workbox-86637ee2.js": "workbox-86637ee2.js",
-  "sw.js": "sw.js",
   "sw-scope-cleanup.js": "sw-scope-cleanup.js"
 }

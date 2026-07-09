@@ -18,17 +18,22 @@
   
   <script>
     (function() {
-      // PicoGallery appliance: purge stale service workers and caches left by
-      // earlier frame/SPA builds before loading hashed webpack assets.
-      if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          regs.forEach(function(r) { r.unregister(); });
-        });
-      }
-      if (typeof caches !== "undefined" && caches.keys) {
-        caches.keys().then(function(keys) {
-          keys.forEach(function(k) { caches.delete(k); });
-        });
+      // Purge legacy service workers once per browser session. Doing this on
+      // every cold load was blocking Pi Zero 2 boot while caches.keys() ran.
+      var bootKey = "pico.sw.purged";
+      var shouldPurgeSw = !sessionStorage.getItem(bootKey);
+      if (shouldPurgeSw) {
+        sessionStorage.setItem(bootKey, "1");
+        if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
+          navigator.serviceWorker.getRegistrations().then(function(regs) {
+            regs.forEach(function(r) { r.unregister(); });
+          });
+        }
+        if (typeof caches !== "undefined" && caches.keys) {
+          caches.keys().then(function(keys) {
+            keys.forEach(function(k) { caches.delete(k); });
+          });
+        }
       }
       // Synchronously load config.json. Paths MUST be absolute: the SPA is
       // served from deep routes like /library/photos (vue-router history
