@@ -8,6 +8,8 @@ describe("kiosk-config", () => {
     expect(cfg.previewSize).toBe("fit_720");
     expect(cfg.thumbSize).toBe("fit_720");
     expect(cfg.maxGridRows).toBe(10);
+    expect(cfg.firstPageSize).toBe(16);
+    expect(cfg.thumbLoadConcurrency).toBe(4);
   });
 
   it("clamps unsafe overrides instead of breaking the UI", () => {

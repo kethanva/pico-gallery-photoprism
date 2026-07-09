@@ -121,8 +121,7 @@ body,
     border-radius: 8px;
     overflow: hidden;
     aspect-ratio: 4 / 3;
-    content-visibility: auto;
-    contain-intrinsic-size: 160px 120px;
+    contain: layout style paint;
     cursor: pointer;
     transition:
         transform 0.15s,

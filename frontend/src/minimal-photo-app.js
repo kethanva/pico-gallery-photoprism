@@ -12,6 +12,7 @@ const BOTTOM_ROOT_MARGIN_PX = 200;
 
 let resolvedKiosk = null;
 let bottomLoadCheckPending = false;
+let thumbPrefetchGeneration = 0;
 
 const scrollState = {
   active: false,
@@ -109,6 +110,49 @@ export function mapPhoto(item) {
 
 function thumbUrl(hash) {
   return `${contentUri}/t/${hash}/${previewToken()}/${getKiosk().thumbSize}`;
+}
+
+function photoThumbSrc(photo) {
+  return photo.hash ? thumbUrl(photo.hash) : photo.thumbSrc;
+}
+
+function prefetchThumbUrls(urls) {
+  const concurrency = getKiosk().thumbLoadConcurrency;
+  if (!concurrency || urls.length === 0) {
+    return;
+  }
+  const generation = ++thumbPrefetchGeneration;
+  let next = 0;
+  const runWorker = async () => {
+    while (next < urls.length) {
+      if (generation !== thumbPrefetchGeneration) {
+        return;
+      }
+      const url = urls[next++];
+      await new Promise((resolve) => {
+        const img = new Image();
+        img.decoding = "async";
+        const finish = () => {
+          img.onload = null;
+          img.onerror = null;
+          resolve();
+        };
+        img.onload = finish;
+        img.onerror = finish;
+        img.src = url;
+      });
+    }
+  };
+  const workers = Math.min(concurrency, urls.length);
+  void Promise.all(Array.from({ length: workers }, runWorker));
+}
+
+function assignThumbPriority(img, index) {
+  if (index < 4) {
+    img.fetchPriority = "high";
+  } else if (index >= getKiosk().eagerThumbCount) {
+    img.fetchPriority = "low";
+  }
 }
 
 function getKioskConfig() {
@@ -313,11 +357,11 @@ function createPhotoCard(photo, index) {
   const img = el("img", "pg-image");
   img.alt = photo.title;
   img.decoding = "async";
-  img.loading = "lazy";
-  img.src = photo.hash ? thumbUrl(photo.hash) : photo.thumbSrc;
-  if (index >= getKiosk().eagerThumbCount) {
-    img.fetchPriority = "low";
-  }
+  // The grid is a capped virtual window (~maxGridRows); lazy + content-visibility
+  // made WPE load thumbs one-by-one as each card entered view.
+  img.loading = "eager";
+  img.src = photoThumbSrc(photo);
+  assignThumbPriority(img, index);
   card.appendChild(img);
   return card;
 }
@@ -329,14 +373,15 @@ function insertPhotoCards(photos, startIndex, atEnd) {
   });
   if (atEnd) {
     state.elements.grid.appendChild(frag);
-    return;
-  }
-  const firstCard = state.elements.grid.querySelector(".pg-card");
-  if (firstCard) {
-    state.elements.grid.insertBefore(frag, firstCard);
   } else {
-    state.elements.topSentinel.after(frag);
+    const firstCard = state.elements.grid.querySelector(".pg-card");
+    if (firstCard) {
+      state.elements.grid.insertBefore(frag, firstCard);
+    } else {
+      state.elements.topSentinel.after(frag);
+    }
   }
+  prefetchThumbUrls(photos.map(photoThumbSrc));
 }
 
 function removeCardNode(card) {
@@ -992,6 +1037,7 @@ function resetRuntimeState() {
     scrollState.timer = null;
   }
   bottomLoadCheckPending = false;
+  thumbPrefetchGeneration += 1;
   invalidateGridMetrics();
   autoAdvanceOnLoad = false;
   kioskBootPending = true;

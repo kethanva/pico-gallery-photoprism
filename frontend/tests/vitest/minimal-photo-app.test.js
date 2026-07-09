@@ -378,7 +378,7 @@ describe("minimal-photo-app boot", () => {
     const fetchMock = mockFetch(async (url) => {
       const parsed = new URL(url, "http://localhost");
       const offset = Number(parsed.searchParams.get("offset") || 0);
-      const count = Number(parsed.searchParams.get("count") || 12);
+      const count = Number(parsed.searchParams.get("count") || 16);
       const batch = Array.from({ length: count }, (_, i) => makePhoto(offset + i + 1));
       return {
         ok: true,
@@ -389,7 +389,7 @@ describe("minimal-photo-app boot", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await bootMinimalPhotoApp(document.getElementById("app"));
-    await vi.waitFor(() => document.querySelectorAll(".pg-card").length >= 12);
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length >= 16);
 
     const sentinel = document.querySelector(".pg-sentinel");
     vi.spyOn(sentinel, "getBoundingClientRect").mockReturnValue({
@@ -412,6 +412,13 @@ describe("minimal-photo-app boot", () => {
     );
     const photoCalls = fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos"));
     expect(photoCalls.length).toBeGreaterThanOrEqual(2);
-    expect(Number(new URL(photoCalls[1][0], "http://localhost").searchParams.get("offset"))).toBe(12);
+    expect(Number(new URL(photoCalls[1][0], "http://localhost").searchParams.get("offset"))).toBe(16);
+  });
+
+  it("uses eager loading for grid thumbnails", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    const img = document.querySelector(".pg-image");
+    expect(img?.loading).toBe("eager");
   });
 });

@@ -37,5 +37,6 @@ background_fill_target = 0
     assert.equal(cfg.previewSize, 'fit_720');
     assert.equal(cfg.maxGridRows, 10);
     assert.equal(cfg.slideDuration, 12);
+    assert.equal(cfg.thumbLoadConcurrency, 4);
   });
 });
