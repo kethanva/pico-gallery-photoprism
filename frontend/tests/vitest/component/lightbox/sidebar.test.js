@@ -1424,6 +1424,7 @@ describe("PLightboxSidebar component", () => {
   });
 
   it("should respect the 200ms debounce guard on blur", async () => {
+    vi.useFakeTimers();
     const update = vi.fn().mockResolvedValue(undefined);
     const photo = {
       ...mockPhoto,
@@ -1437,10 +1438,13 @@ describe("PLightboxSidebar component", () => {
     });
     w.vm.startEditing("title");
     await w.vm.$nextTick();
+    // Advance time by 50ms, which is less than the 200ms debounce guard.
+    vi.advanceTimersByTime(50);
     // _editStartedAt was just set by startEditing; blur should be a no-op.
     w.vm.onInlineFieldBlur();
     expect(update).not.toHaveBeenCalled();
     expect(w.vm.editingField).toBe("title");
+    vi.useRealTimers();
   });
 
   // onInlineEnter — Enter commits on single-line fields (commitOnEnter:
