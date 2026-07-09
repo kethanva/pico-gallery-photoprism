@@ -44,15 +44,17 @@ class Fullscreen {
 
   // Requests to enter fullscreen mode if not already enabled and returns a Promise.
   request() {
+    if (this.virtualOnly) {
+      // WPE can drop the CSS class while internal state drifts; always re-apply.
+      this.setVirtual(true);
+      return Promise.resolve();
+    }
+
     if (this.isEnabled()) {
       return Promise.resolve();
     }
 
     this.setVirtual(true);
-
-    if (this.virtualOnly) {
-      return Promise.resolve();
-    }
 
     // see https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
     if (typeof document.documentElement.requestFullscreen === "function") {

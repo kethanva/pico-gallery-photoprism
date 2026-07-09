@@ -304,8 +304,49 @@ function isPreviewOpen() {
 }
 
 function openPhotoCard(index) {
+  enterPreviewFromGrid(index);
+}
+
+function beginSlideshowAt(index) {
+  slideshow.active = true;
+  slideshow.paused = false;
+  if (slideshow.timer) {
+    clearTimeout(slideshow.timer);
+    slideshow.timer = null;
+  }
+  state.elements.slideshowBtn?.classList.add("is-active");
+  state.elements.slideshowBtn?.setAttribute("aria-pressed", "true");
+  scheduleSlideshowTick();
+  maybeScheduleBackgroundFill(true);
+}
+
+function enterPreviewFromGrid(index) {
   showPreviewAt(index);
   $fullscreen.request().catch(() => {});
+  if (getKioskConfig().autoSlideshow === true) {
+    beginSlideshowAt(index);
+  }
+}
+
+function toggleFullscreen() {
+  if ($fullscreen.isEnabled()) {
+    $fullscreen.exit().catch(() => {});
+    if (slideshow.active) {
+      pauseSlideshow();
+    }
+    return;
+  }
+  $fullscreen.request().catch(() => {});
+  if (!isPreviewOpen()) {
+    return;
+  }
+  if (slideshow.active && slideshow.paused) {
+    resumeSlideshow();
+    return;
+  }
+  if (getKioskConfig().autoSlideshow === true && !slideshow.active) {
+    beginSlideshowAt(state.previewIndex >= 0 ? state.previewIndex : 0);
+  }
 }
 
 function getColumnCount() {
@@ -560,15 +601,12 @@ function startSlideshow() {
   if (slideshow.active) {
     return;
   }
-  slideshow.active = true;
-  state.elements.slideshowBtn.classList.add("is-active");
-  state.elements.slideshowBtn.setAttribute("aria-pressed", "true");
+  const index = state.previewIndex >= 0 ? state.previewIndex : 0;
   if (!isPreviewOpen() && state.photos.length > 0) {
-    showPreviewAt(0);
+    showPreviewAt(index);
     $fullscreen.request().catch(() => {});
   }
-  scheduleSlideshowTick();
-  maybeScheduleBackgroundFill(true);
+  beginSlideshowAt(index);
 }
 
 function toggleSlideshow() {
@@ -1084,7 +1122,7 @@ function onKeyDown(ev) {
 
   if (ev.key === "f" || ev.key === "F") {
     ev.preventDefault();
-    $fullscreen.toggle().catch(() => {});
+    toggleFullscreen();
     return;
   }
 
@@ -1125,7 +1163,7 @@ function onAuxClick(ev) {
     return;
   }
   ev.preventDefault();
-  $fullscreen.toggle().catch(() => {});
+  toggleFullscreen();
 }
 
 function onContextMenu(ev) {
@@ -1134,7 +1172,7 @@ function onContextMenu(ev) {
   const now = Date.now();
   if (now - lastRightClickAt <= DOUBLE_CLICK_MS) {
     lastRightClickAt = 0;
-    $fullscreen.toggle().catch(() => {});
+    toggleFullscreen();
     return;
   }
   lastRightClickAt = now;

@@ -32,4 +32,15 @@ describe("fullscreen utility", () => {
     expect($fullscreen.isEnabled()).toBe(false);
     expect(document.documentElement.classList.contains("is-virtual-fullscreen")).toBe(false);
   });
+
+  it("re-applies virtual fullscreen class on repeat request in virtualOnly mode", async () => {
+    $fullscreen.setVirtualOnly(true);
+    await $fullscreen.request();
+    document.documentElement.classList.remove("is-virtual-fullscreen");
+
+    await $fullscreen.request();
+
+    expect($fullscreen.isEnabled()).toBe(true);
+    expect(document.documentElement.classList.contains("is-virtual-fullscreen")).toBe(true);
+  });
 });

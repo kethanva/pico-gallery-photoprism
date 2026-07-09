@@ -295,8 +295,31 @@ describe("minimal-photo-app boot", () => {
     tapControl(document.querySelector(".pg-card"));
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
+    fullscreenMock.isEnabled.mockReturnValue(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true }));
-    expect(fullscreenMock.toggle).toHaveBeenCalled();
+    expect(fullscreenMock.exit).toHaveBeenCalled();
+  });
+
+  it("re-enters fullscreen and slideshow from a new grid photo after exit", async () => {
+    window.__CONFIG__.kioskConfig = { slideDuration: 5, autoSlideshow: true };
+    fullscreenMock.isEnabled.mockReturnValue(false);
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    fullscreenMock.isEnabled.mockReturnValue(true);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true }));
+    expect(fullscreenMock.exit).toHaveBeenCalled();
+
+    tapControl(document.querySelector(".pg-close"));
+    await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
+
+    fullscreenMock.isEnabled.mockReturnValue(false);
+    fullscreenMock.request.mockClear();
+    tapControl(document.querySelectorAll(".pg-card")[1]);
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+    expect(fullscreenMock.request).toHaveBeenCalled();
+    expect(document.querySelector(".pg-slideshow.is-active")).toBeTruthy();
+    expect(document.querySelector(".pg-overlay-counter")?.textContent).toContain("2 /");
   });
 
   it("re-arms scroll observers after Reload", async () => {
