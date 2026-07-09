@@ -7,15 +7,42 @@ const contentUri = config.contentUri || apiUri;
 const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
 const thumbSize = "fit_720";
 const fullSize = "fit_1280";
-const firstPageSize = 16;
-const pageSize = 24;
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
-const maxGridRows = 20;
-const restoreRowBatch = 2;
-const eagerThumbCount = 8;
-const backgroundFillTarget = 400;
-const backgroundFillDelayMs = 600;
+const defaultKioskLimits = {
+  firstPageSize: 12,
+  pageSize: 16,
+  maxGridRows: 12,
+  restoreRowBatch: 2,
+  eagerThumbCount: 6,
+  backgroundFillTarget: 48,
+  backgroundFillDelayMs: 1500,
+  scrollIdleMs: 200,
+  pruneCooldownMs: 350,
+};
+
+const scrollState = {
+  active: false,
+  timer: null,
+  loadPending: false,
+  prunePending: false,
+};
+
+const gridMetrics = {
+  rowHeight: 0,
+  columnCount: 0,
+};
+
+let lastRightClickAt = 0;
+let listenersBound = false;
+let authToken = null;
+let authTokenChecked = false;
+let restorePending = false;
+let prunePending = false;
+let pruneCooldownUntil = 0;
+let autoAdvanceOnLoad = false;
+let kioskBootPending = true;
+let backgroundFillTimer = null;
 
 const state = {
   photos: [],
@@ -46,16 +73,6 @@ const touch = {
   x: 0,
   y: 0,
 };
-
-let lastRightClickAt = 0;
-let listenersBound = false;
-let authToken = null;
-let authTokenChecked = false;
-let restorePending = false;
-let prunePending = false;
-let autoAdvanceOnLoad = false;
-let kioskBootPending = true;
-let backgroundFillTimer = null;
 
 export function pickHash(item) {
   if (typeof item?.Hash === "string" && item.Hash) return item.Hash;
@@ -203,16 +220,23 @@ function isPreviewOpen() {
 }
 
 function getColumnCount() {
+  if (gridMetrics.columnCount > 0) return gridMetrics.columnCount;
   const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
-  if (!template || template === "none") return 1;
-  return template.split(" ").filter(Boolean).length;
+  if (!template || template === "none") {
+    gridMetrics.columnCount = 1;
+    return 1;
+  }
+  gridMetrics.columnCount = template.split(" ").filter(Boolean).length;
+  return gridMetrics.columnCount;
 }
 
 function measureRowHeight() {
+  if (gridMetrics.rowHeight > 0) return gridMetrics.rowHeight;
   const card = state.elements.grid.querySelector(".pg-card");
   if (!card) return 128;
   const gap = parseFloat(getComputedStyle(state.elements.grid).rowGap) || 8;
-  return card.getBoundingClientRect().height + gap;
+  gridMetrics.rowHeight = card.getBoundingClientRect().height + gap;
+  return gridMetrics.rowHeight;
 }
 
 function updateTopSpacer() {
@@ -245,7 +269,7 @@ function createPhotoCard(photo, index) {
   img.decoding = "async";
   img.loading = "lazy";
   img.src = photo.hash ? thumbUrl(photo.hash) : photo.thumbSrc;
-  if (index >= eagerThumbCount) {
+  if (index >= getKioskLimit("eagerThumbCount")) {
     img.fetchPriority = "low";
   }
   card.appendChild(img);
@@ -270,13 +294,17 @@ function insertPhotoCards(photos, startIndex, atEnd) {
 }
 
 function removeCardNode(card) {
+  card.querySelectorAll("img").forEach((img) => {
+    img.removeAttribute("src");
+    img.src = "";
+  });
   card.remove();
 }
 
 function pruneTopRowsIfNeeded() {
   const grid = state.elements.grid;
   const ncol = getColumnCount();
-  const maxCards = maxGridRows * ncol;
+  const maxCards = getKioskLimit("maxGridRows") * ncol;
   const cardNodes = grid.querySelectorAll(".pg-card");
   const cardCount = cardNodes.length;
   if (cardCount <= maxCards) return;
@@ -297,9 +325,10 @@ function pruneTopRowsIfNeeded() {
   gridWindow.topSpacerPx += spacerDelta;
   updateTopSpacer();
   window.scrollBy(0, -spacerDelta);
+  pruneCooldownUntil = Date.now() + getKioskLimit("pruneCooldownMs");
 }
 
-function schedulePruneTopRows() {
+function runPruneTopRows() {
   if (prunePending) return;
   prunePending = true;
   requestAnimationFrame(() => {
@@ -308,10 +337,18 @@ function schedulePruneTopRows() {
   });
 }
 
+function schedulePruneTopRows() {
+  if (scrollState.active) {
+    scrollState.prunePending = true;
+    return;
+  }
+  runPruneTopRows();
+}
+
 function restoreTopRowsIfNeeded() {
   if (gridWindow.startIndex <= 0) return;
   const ncol = getColumnCount();
-  const restoreCount = Math.min(ncol * restoreRowBatch, gridWindow.startIndex);
+  const restoreCount = Math.min(ncol * getKioskLimit("restoreRowBatch"), gridWindow.startIndex);
   const start = gridWindow.startIndex - restoreCount;
   const rowHeight = measureRowHeight();
   const rowsRestored = Math.ceil(restoreCount / ncol);
@@ -324,6 +361,7 @@ function restoreTopRowsIfNeeded() {
 
 function scheduleRestoreTopRows() {
   if (restorePending || gridWindow.startIndex <= 0) return;
+  if (Date.now() < pruneCooldownUntil) return;
   restorePending = true;
   requestAnimationFrame(() => {
     restorePending = false;
@@ -338,6 +376,7 @@ function stopSlideshow() {
     clearTimeout(slideshow.timer);
     slideshow.timer = null;
   }
+  cancelBackgroundFill();
   state.elements.slideshowBtn?.classList.remove("is-active");
   state.elements.slideshowBtn?.setAttribute("aria-pressed", "false");
 }
@@ -414,6 +453,7 @@ function startSlideshow() {
     $fullscreen.request().catch(() => {});
   }
   scheduleSlideshowTick();
+  maybeScheduleBackgroundFill(true);
 }
 
 function toggleSlideshow() {
@@ -461,7 +501,7 @@ function showPreviewAt(index) {
   state.elements.overlay.focus({ preventScroll: true });
 
   if (index >= state.photos.length - 4 && !state.done && !state.loading) {
-    loadMore();
+    requestLoadMore();
   }
 }
 
@@ -500,6 +540,47 @@ function getKioskConfig() {
   return window.__CONFIG__?.kioskConfig || config.kioskConfig || {};
 }
 
+function getKioskLimit(key) {
+  const value = getKioskConfig()[key];
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return defaultKioskLimits[key];
+}
+
+function invalidateGridMetrics() {
+  gridMetrics.rowHeight = 0;
+  gridMetrics.columnCount = 0;
+}
+
+function markScrolling() {
+  scrollState.active = true;
+  if (scrollState.timer) {
+    clearTimeout(scrollState.timer);
+  }
+  scrollState.timer = setTimeout(() => {
+    scrollState.timer = null;
+    scrollState.active = false;
+    if (scrollState.loadPending) {
+      scrollState.loadPending = false;
+      requestLoadMore();
+    }
+    if (scrollState.prunePending) {
+      scrollState.prunePending = false;
+      runPruneTopRows();
+    }
+  }, getKioskLimit("scrollIdleMs"));
+}
+
+function requestLoadMore() {
+  if (state.loading || state.done) return;
+  if (scrollState.active) {
+    scrollState.loadPending = true;
+    return;
+  }
+  loadMore();
+}
+
 function maybeStartKioskSlideshow() {
   if (!kioskBootPending || state.photos.length === 0) return;
   if (getKioskConfig().autoSlideshow !== true) return;
@@ -515,19 +596,30 @@ function cancelBackgroundFill() {
 }
 
 function maybeScheduleBackgroundFill(loadedOk = true) {
-  if (state.done || state.photos.length >= backgroundFillTarget) {
+  if (!slideshow.active) {
     cancelBackgroundFill();
     return;
   }
-  if (backgroundFillTimer || state.loading) return;
+  const fillTarget = getKioskLimit("backgroundFillTarget");
+  if (state.done || state.photos.length >= fillTarget) {
+    cancelBackgroundFill();
+    return;
+  }
+  if (backgroundFillTimer || state.loading || scrollState.active) return;
   if (!loadedOk) return;
 
   backgroundFillTimer = setTimeout(() => {
     backgroundFillTimer = null;
-    if (!state.loading && !state.done && state.photos.length < backgroundFillTarget) {
+    if (
+      slideshow.active &&
+      !state.loading &&
+      !state.done &&
+      !scrollState.active &&
+      state.photos.length < fillTarget
+    ) {
       loadMore();
     }
-  }, backgroundFillDelayMs);
+  }, getKioskLimit("backgroundFillDelayMs"));
 }
 
 function appendPhotos(rows) {
@@ -558,7 +650,7 @@ function renderState() {
 }
 
 function pageBatchSize() {
-  return state.offset === 0 ? firstPageSize : pageSize;
+  return state.offset === 0 ? getKioskLimit("firstPageSize") : getKioskLimit("pageSize");
 }
 
 async function loadMore() {
@@ -655,6 +747,15 @@ function resetRuntimeState() {
   authToken = null;
   restorePending = false;
   prunePending = false;
+  pruneCooldownUntil = 0;
+  scrollState.active = false;
+  scrollState.loadPending = false;
+  scrollState.prunePending = false;
+  if (scrollState.timer) {
+    clearTimeout(scrollState.timer);
+    scrollState.timer = null;
+  }
+  invalidateGridMetrics();
   autoAdvanceOnLoad = false;
   kioskBootPending = true;
   cancelBackgroundFill();
@@ -679,6 +780,9 @@ function resetAndReload() {
   closePreview();
   setError("");
   renderState();
+  // resetRuntimeState() disconnected the scroll observers; re-arm them so the
+  // Reload button does not permanently break infinite scroll / top restore.
+  setupInfiniteObservers();
   loadMore();
 }
 
@@ -857,6 +961,40 @@ function bindListeners() {
   document.addEventListener("keydown", onKeyDown, { capture: true });
   document.addEventListener("contextmenu", onContextMenu, { capture: true });
   document.addEventListener("auxclick", onAuxClick, { capture: true });
+  window.addEventListener("scroll", markScrolling, { passive: true });
+  window.addEventListener(
+    "resize",
+    () => {
+      invalidateGridMetrics();
+    },
+    { passive: true }
+  );
+}
+
+// (Re)creates the top/bottom scroll observers against the current sentinels.
+// Safe to call more than once: any existing observers are disconnected first.
+function setupInfiniteObservers() {
+  if (state.topObserver) state.topObserver.disconnect();
+  state.topObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        scheduleRestoreTopRows();
+      }
+    },
+    { rootMargin: "120px 0px 0px 0px" }
+  );
+  state.topObserver.observe(state.elements.topSentinel);
+
+  if (state.bottomObserver) state.bottomObserver.disconnect();
+  state.bottomObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        requestLoadMore();
+      }
+    },
+    { rootMargin: "0px 0px 200px 0px" }
+  );
+  state.bottomObserver.observe(state.elements.sentinel);
 }
 
 export async function bootMinimalPhotoApp(root) {
@@ -867,26 +1005,6 @@ export async function bootMinimalPhotoApp(root) {
   resetRuntimeState();
   buildUi(root);
   bindListeners();
-
-  state.topObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        scheduleRestoreTopRows();
-      }
-    },
-    { rootMargin: "400px 0px 0px 0px" }
-  );
-  state.topObserver.observe(state.elements.topSentinel);
-
-  state.bottomObserver = new IntersectionObserver(
-    (entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        loadMore();
-      }
-    },
-    { rootMargin: "0px 0px 400px 0px" }
-  );
-  state.bottomObserver.observe(state.elements.sentinel);
+  setupInfiniteObservers();
   await loadMore();
-  maybeScheduleBackgroundFill();
 }

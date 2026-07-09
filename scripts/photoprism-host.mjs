@@ -212,6 +212,12 @@ const servedConfig = JSON.stringify({
     slideDuration: slideDurationSecs,
     autoSlideshow: true,
     virtualFullscreenOnly: true,
+    firstPageSize: 12,
+    pageSize: 16,
+    maxGridRows: 12,
+    backgroundFillTarget: 48,
+    backgroundFillDelayMs: 1500,
+    scrollIdleMs: 200,
   },
   disableServiceWorker: true,
 });

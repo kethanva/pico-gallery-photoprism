@@ -265,11 +265,38 @@ describe("minimal-photo-app boot", () => {
     expect(fullscreenMock.toggle).toHaveBeenCalled();
   });
 
-  it("prefetches additional pages in the background", async () => {
+  it("re-arms scroll observers after Reload", async () => {
+    let instances = 0;
+    const observedNodes = [];
+    global.IntersectionObserver = class {
+      constructor() {
+        instances += 1;
+      }
+      observe(node) {
+        observedNodes.push(node);
+      }
+      unobserve() {}
+      disconnect() {}
+    };
+
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    expect(instances).toBe(2);
+
+    const reloadBtn = [...document.querySelectorAll(".pg-button")].find((b) => b.textContent === "Reload");
+    reloadBtn?.click();
+    await vi.waitFor(() => instances === 4);
+    // The bottom sentinel is observed again by a fresh observer.
+    const sentinel = document.querySelector(".pg-sentinel");
+    expect(observedNodes.filter((n) => n === sentinel).length).toBe(2);
+  });
+
+  it("prefetches additional pages only while slideshow is active", async () => {
     vi.useFakeTimers();
+    window.__CONFIG__.kioskConfig = { slideDuration: 5, autoSlideshow: true };
     const fetchMock = mockFetch(async (url) => {
       const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
-      const count = Number(new URL(url, "http://localhost").searchParams.get("count") || 16);
+      const count = Number(new URL(url, "http://localhost").searchParams.get("count") || 12);
       const batch = Array.from({ length: count }, (_, i) => makePhoto(offset + i + 1));
       return {
         ok: true,
@@ -285,7 +312,31 @@ describe("minimal-photo-app boot", () => {
 
     expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length).toBeGreaterThanOrEqual(1);
 
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3000);
     await vi.waitFor(() => fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length >= 2);
+  });
+
+  it("does not background-prefetch on grid-only boot", async () => {
+    vi.useFakeTimers();
+    window.__CONFIG__.kioskConfig = { slideDuration: 5, autoSlideshow: false };
+    const fetchMock = mockFetch(async (url) => {
+      const offset = Number(new URL(url, "http://localhost").searchParams.get("offset") || 0);
+      if (offset > 0) {
+        return { ok: true, headers: { get: () => null }, json: async () => [] };
+      }
+      return {
+        ok: true,
+        headers: { get: () => null },
+        json: async () => [makePhoto(1), makePhoto(2)],
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const bootPromise = bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.runOnlyPendingTimersAsync();
+    await bootPromise;
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("/photos")).length).toBe(1);
   });
 });
