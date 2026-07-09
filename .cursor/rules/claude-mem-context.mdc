@@ -7,38 +7,77 @@ description: "Claude-mem context from past sessions (auto-updated)"
 
 The following context is from claude-mem, a persistent memory system that tracks your coding sessions.
 
-# [pico-gallery-photoprism] recent context, 2026-07-09 2:54pm GMT+5:30
+# [pico-gallery-photoprism] recent context, 2026-07-09 6:44pm GMT+5:30
 
 Legend: ◎session ●bugfix ◆feature ↻refactor ✓change ○discovery ⚖decision ⚠security_alert ⚷security_note
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 12 obs (3,098t read) | 15,933t work | 81% savings
+Stats: 50 obs (14,517t read) | 98,484t work | 85% savings
 
 ### Jul 9, 2026
-1 2:24p ✓ claude-mem worker service initialized for pico-gallery-photoprism project
-2 " ✓ claude-mem Cursor hooks installed at project level with auto-context injection
-4 2:29p ○ Codebase knowledge graph generated for pico-gallery-photoprism
-6 2:32p ● Restored fullscreen toggle (F / double-right-click) on lightbox
-7 " ◆ Added webkit-prefixed Fullscreen API support
-8 " ● Fixed click classifier to accept zero-duration clicks
-9 2:36p ● Lightbox fullscreen toggle functionality restored
-10 " ✓ Diagnostic script relocated to project root
-11 2:42p ○ Branch 2026-07-09 fast-forward mergeable to main
-12 2:43p ● Lightbox fullscreen toggle fix merged to main
-13 " ○ CI run queued for lightbox fix; previous run failure on input component
-14 2:53p ○ CI Run Failed Due to GitHub Actions Runner Acquisition
 S3 Diagnose and monitor CI/CD pipeline failures in pico-gallery-photoprism repository (Jul 9 at 2:54 PM)
-**Investigated**: Examined GitHub Actions run 29001180482 which failed approximately 2 hours ago; inspected run logs and annotations for failure reasons; monitoring current run 29007398445 to completion
+59 5:37p ✓ Slideshow pause state enforcement in automatic transitions
+60 5:38p ✓ Added comprehensive tests for fullscreen, keyboard controls, and background photo prefetching
+62 " ○ Test hoisting issue: fullscreenMock referenced before initialization
+63 " ● Fixed test hoisting issue by wrapping fullscreenMock in vi.hoisted()
+65 " ○ All minimal-photo-app tests passing after hoisting fix
+66 5:39p ○ Frontend builds successfully after photo viewer enhancements
+67 " ○ Work-in-progress changes ready for commit on feature branch
+68 5:40p ✓ Photo viewer enhancements committed and pushed to feature branch
+69 5:42p ✓ Slideshow duration made configurable from kiosk settings
+70 " ✓ Error handling and preview lifecycle refinements in photo viewer
+71 " ✓ Connected loadedOk error handling and added S key slideshow toggle
+72 " ✓ Right-click now pauses active slideshow
+73 5:43p ↻ Removed redundant slideshow.wait static initialization
+75 " ✓ Added test coverage for S key slideshow toggle and slideshow close behavior
+77 " ○ Extended test suite passes with new S key slideshow toggle test
+78 " ○ Extended test suite passes: frontend build and photoprism-host tests all green
+79 5:44p ○ Uncommitted changes after latest build: new bundle and updated sources
+80 " ✓ Second commit: slideshow refinements and runtime configuration deployed
+81 5:49p ● WPE WebKit click event handling fixed with pointerup/touchend fallback
+83 5:50p ✓ Overlay backdrop click handling refined to use explicit pointerup with target check
+85 " ✓ CSS styling added for overlay chrome container with pointer-events layering
+89 " ✓ Tests updated to validate overlay chrome structure and use pointerup events
+91 " ○ Test file transformation error prevents minimal-photo-app.test.js from loading
+92 5:51p ● Test file syntax error fixed by restoring displaced test case
+93 5:52p ○ All 14 tests pass; photo app build succeeds with WPE WebKit event handling fixes
+94 " ✓ Build artifacts regenerated with new hashes reflecting source changes
+95 " ✓ WPE WebKit click event fix committed and pushed to remote
+96 6:05p ○ All test suites passing on 2026-07-09-revampui branch
+97 " ○ Kiosk close button fix deployed for WPE WebKit/Cog
+98 6:31p ◆ Virtual fullscreen mode for overlay compatibility
+100 " ✓ Improved pointer event handling for photo preview
+101 " ✓ CSS class state management for preview overlay
+103 6:32p ✓ Accessibility improvements for photo preview overlay
+104 " ✓ Overlay DOM hierarchy restructured to body level
+105 " ✓ Keydown event listener switched to capture phase
+107 " ✓ Virtual fullscreen mode configuration integration
+108 6:33p ✓ Defensive overlay cleanup in teardown
+109 " ✓ Overlay z-index elevation and focus styling
+113 " ✓ Extreme z-index for modal overlay stacking guarantee
+114 " ✓ Test mock and helper for fullscreen and pointer event handling
+115 6:34p ✓ Test coverage for overlay placement and virtual fullscreen
+116 " ✓ Keyboard navigation and event handling tests for preview overlay
+118 " ✓ Comprehensive test suite for virtual fullscreen utility
+120 " ✓ Fullscreen test refinement to use API methods for setup/teardown
+123 " ✓ Consistent keyboard event dispatch target across all tests
+127 6:36p ✓ Virtual fullscreen and overlay UX improvements - complete changeset summary
+128 6:43p ○ graphify CLI installed and generating codebase analysis artifacts
+129 " ○ graphify 0.7.16 installed with completed build state
+130 " ○ Build lock removed; graphify update attempt blocked by missing timeout command
+131 " ○ graphify update successfully rebuilt code graph for pico-gallery-photoprism
+S13 Verify graphify CLI installation health and fix any blocking issues in pico-gallery-photoprism project (Jul 9 at 6:44 PM)
+**Investigated**: Installation state of graphify (CLI binary, skill definition, output artifacts); build lock and root configuration; graphify process status; system version; presence of wiki/index.md; macOS environment compatibility (timeout command availability)
 
-**Learned**: Run 29001180482 failed due to GitHub Actions infrastructure issue: "The job was not acquired by Runner of type hosted even after multiple attempts." This indicates the hosted runner pool was unavailable or exhausted, not a code or test failure. The ci-and-release job ran for 15 minutes before timing out waiting for runner acquisition.
+**Learned**: graphify 0.7.16 installed at ~/.local/bin/graphify with matching skill definition at ~/.claude/skills/graphify/SKILL.md; stale .rebuild.lock file (177-digit state hash) was blocking future updates and is a common artifact of crashed rebuilds; graphify update operates in AST-only extraction mode when no Gemini API key configured; graph community detection identifies structural clusters in code; macOS does not include GNU timeout utility by default
 
-**Completed**: Identified root cause of prior CI failure as runner acquisition failure, not application code or test issues
+**Completed**: Removed stale .rebuild.lock that was blocking updates; ran graphify update . and verified successful rebuild with 4502 nodes, 8229 edges, 272 communities detected; confirmed all output artifacts refreshed (graph.json, graph.html, GRAPH_REPORT.md); graphify operational and healthy
 
-**Next Steps**: Waiting for run 29007398445 to complete to determine if current CI pipeline succeeds or encounters the same runner acquisition issue. Background watch task is running; will receive results when it exits.
+**Next Steps**: Decision pending on release-tarball handling: build and publish locally vs. wait on CI vs. leave as-is. Lightbox fix already merged to main, so appliances cloning main have the fix.
 
 
-Access 16k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 98k tokens of past work via get_observations([IDs]) or mem-search skill.
 
 ---
 *Updated after last session. Use claude-mem's MCP search tools for more detailed queries.*

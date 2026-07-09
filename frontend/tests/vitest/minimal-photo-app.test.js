@@ -6,6 +6,7 @@ const fullscreenMock = vi.hoisted(() => ({
   request: vi.fn(() => Promise.resolve()),
   exit: vi.fn(() => Promise.resolve()),
   toggle: vi.fn(() => Promise.resolve()),
+  setVirtualOnly: vi.fn(),
 }));
 
 vi.mock("common/fullscreen", () => ({
@@ -63,6 +64,11 @@ function mockFetch(handler) {
 
 function makePhoto(i) {
   return { UID: `p${i}`, Title: `Photo ${i}`, Hash: `hash${i}` };
+}
+
+function tapControl(node) {
+  node.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0 }));
+  node.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, button: 0 }));
 }
 
 describe("minimal-photo-app boot", () => {
@@ -160,7 +166,7 @@ describe("minimal-photo-app boot", () => {
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
     await vi.waitFor(() => document.querySelector(".pg-preview")?.getAttribute("src")?.includes("hash2"));
   });
 
@@ -182,11 +188,24 @@ describe("minimal-photo-app boot", () => {
     await bootMinimalPhotoApp(document.getElementById("app"));
     await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "s" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "s", bubbles: true, cancelable: true }));
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "S" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "S", bubbles: true, cancelable: true }));
     await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
+  });
+
+  it("places overlay on document.body outside the app shell", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelector(".pg-overlay"));
+    const overlay = document.querySelector(".pg-overlay");
+    expect(overlay?.parentElement).toBe(document.body);
+    expect(document.getElementById("app")?.contains(overlay)).toBe(false);
+  });
+
+  it("enables virtual-only fullscreen for kiosk boot", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    expect(fullscreenMock.setVirtualOnly).toHaveBeenCalledWith(true);
   });
 
   it("places overlay controls in a chrome layer above the preview", async () => {
@@ -209,9 +228,31 @@ describe("minimal-photo-app boot", () => {
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
     const closeBtn = document.querySelector(".pg-close");
-    closeBtn?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, button: 0 }));
+    tapControl(closeBtn);
     await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
     expect(fullscreenMock.exit).toHaveBeenCalled();
+  });
+
+  it("closes preview with Escape via capture-phase keydown", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    document.querySelector(".pg-card")?.click();
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
+    expect(fullscreenMock.exit).toHaveBeenCalled();
+  });
+
+  it("navigates preview with arrow keys", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelectorAll(".pg-card").length === 2);
+    document.querySelector(".pg-card")?.click();
+    await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
+    expect(document.querySelector(".pg-overlay-counter")?.textContent).toContain("1 / 2");
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => document.querySelector(".pg-overlay-counter")?.textContent?.includes("2 / 2"));
   });
 
   it("toggles fullscreen with F while preview is open", async () => {
@@ -220,7 +261,7 @@ describe("minimal-photo-app boot", () => {
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "f" }));
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true, cancelable: true }));
     expect(fullscreenMock.toggle).toHaveBeenCalled();
   });
 

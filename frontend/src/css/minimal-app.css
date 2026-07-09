@@ -173,8 +173,12 @@ body,
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 100;
+  z-index: 10000;
   touch-action: manipulation;
+}
+
+.pg-overlay:focus {
+  outline: none;
 }
 
 .pg-overlay.is-open {
@@ -316,9 +320,11 @@ html:-webkit-full-screen .pg-shell {
 }
 
 html.is-virtual-fullscreen .pg-overlay.is-open,
+html.pg-preview-open .pg-overlay.is-open,
 html:fullscreen .pg-overlay.is-open,
 html:-webkit-full-screen .pg-overlay.is-open {
   background: #000;
+  z-index: 2147483646;
 }
 
 html.is-virtual-fullscreen .pg-preview,

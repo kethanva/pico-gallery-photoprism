@@ -4,6 +4,12 @@ class Fullscreen {
     // WPE WebKit in the Cog kiosk often lacks a working Fullscreen API; keep a
     // CSS fallback so F / double-right-click still hide chrome and fill the frame.
     this.virtual = false;
+    // Native fullscreen on WPE/Cog breaks mouse/keyboard on overlay controls.
+    this.virtualOnly = false;
+  }
+
+  setVirtualOnly(enabled) {
+    this.virtualOnly = !!enabled;
   }
 
   // Returns true if the browser supports the fullscreen API.
@@ -44,6 +50,10 @@ class Fullscreen {
 
     this.setVirtual(true);
 
+    if (this.virtualOnly) {
+      return Promise.resolve();
+    }
+
     // see https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
     if (typeof document.documentElement.requestFullscreen === "function") {
       return document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => Promise.resolve());
@@ -58,6 +68,10 @@ class Fullscreen {
   // Exits fullscreen mode if enabled and returns a Promise.
   exit() {
     this.setVirtual(false);
+
+    if (this.virtualOnly) {
+      return Promise.resolve();
+    }
 
     if (!document.fullscreenElement && !document.mozFullScreenElement && !document.webkitFullscreenElement) {
       return Promise.resolve();

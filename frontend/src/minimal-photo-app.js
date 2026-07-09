@@ -174,7 +174,17 @@ function bindControlAction(node, handler) {
     ev.stopPropagation();
     handler();
   };
-  node.addEventListener("pointerup", run);
+  node.addEventListener("pointerdown", (ev) => {
+    if (ev.button === 0) node.dataset.pgPressed = "1";
+  });
+  node.addEventListener("pointerup", (ev) => {
+    if (node.dataset.pgPressed !== "1") return;
+    delete node.dataset.pgPressed;
+    run(ev);
+  });
+  node.addEventListener("pointercancel", () => {
+    delete node.dataset.pgPressed;
+  });
   node.addEventListener("touchend", run, { passive: false });
   node.addEventListener("click", run);
 }
@@ -418,6 +428,7 @@ function closePreview() {
   state.previewIndex = -1;
   state.elements.overlay?.classList.remove("is-open");
   state.elements.preview?.removeAttribute("src");
+  document.documentElement.classList.remove("pg-preview-open");
   stopSlideshow();
   updatePreviewMeta();
   $fullscreen.exit().catch(() => {});
@@ -445,7 +456,9 @@ function showPreviewAt(index) {
   state.elements.preview.setAttribute("src", src);
   state.elements.preview.alt = photo.title;
   state.elements.overlay.classList.add("is-open");
+  document.documentElement.classList.add("pg-preview-open");
   updatePreviewMeta();
+  state.elements.overlay.focus({ preventScroll: true });
 
   if (index >= state.photos.length - 4 && !state.done && !state.loading) {
     loadMore();
@@ -754,6 +767,8 @@ function clearBootSplash() {
 }
 
 function buildUi(root) {
+  state.elements.overlay?.remove();
+  document.querySelector(".pg-overlay")?.remove();
   root.textContent = "";
   const shell = el("main", "pg-shell");
   const header = el("header", "pg-header");
@@ -781,6 +796,10 @@ function buildUi(root) {
   const sentinel = el("div", "pg-sentinel");
   const status = el("p", "pg-status");
   const overlay = el("div", "pg-overlay");
+  overlay.tabIndex = -1;
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", "Photo preview");
   const preview = el("img", "pg-preview");
   preview.addEventListener("touchstart", onTouchStart, { passive: true });
   preview.addEventListener("touchend", onTouchEnd, { passive: true });
@@ -809,8 +828,9 @@ function buildUi(root) {
     if (ev.target === overlay) closePreview();
   });
 
-  shell.append(header, error, grid, sentinel, status, overlay);
+  shell.append(header, error, grid, sentinel, status);
   root.appendChild(shell);
+  document.body.appendChild(overlay);
 
   state.elements = {
     shell,
@@ -834,7 +854,7 @@ function buildUi(root) {
 function bindListeners() {
   if (listenersBound) return;
   listenersBound = true;
-  window.addEventListener("keydown", onKeyDown);
+  document.addEventListener("keydown", onKeyDown, { capture: true });
   document.addEventListener("contextmenu", onContextMenu, { capture: true });
   document.addEventListener("auxclick", onAuxClick, { capture: true });
 }
@@ -843,6 +863,7 @@ export async function bootMinimalPhotoApp(root) {
   if (!root) return;
   clearBootSplash();
   await ensureRuntimeConfig();
+  $fullscreen.setVirtualOnly(getKioskConfig().virtualFullscreenOnly !== false);
   resetRuntimeState();
   buildUi(root);
   bindListeners();

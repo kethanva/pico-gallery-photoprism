@@ -211,6 +211,7 @@ const servedConfig = JSON.stringify({
   kioskConfig: {
     slideDuration: slideDurationSecs,
     autoSlideshow: true,
+    virtualFullscreenOnly: true,
   },
   disableServiceWorker: true,
 });

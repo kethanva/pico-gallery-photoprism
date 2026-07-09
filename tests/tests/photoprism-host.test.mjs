@@ -56,6 +56,7 @@ describe('photoprism-host — PhotoPrism UI static serving', { skip: !existsSync
     const body = await res.json();
     assert.equal(body.serverUrl, '');
     assert.ok(body.kioskConfig);
+    assert.equal(body.kioskConfig.virtualFullscreenOnly, true);
   });
 
   it('serves webpack assets.json', async () => {
