@@ -1,0 +1,44 @@
+---
+alwaysApply: true
+description: "Claude-mem context from past sessions (auto-updated)"
+---
+
+# Memory Context from Past Sessions
+
+The following context is from claude-mem, a persistent memory system that tracks your coding sessions.
+
+# [pico-gallery-photoprism] recent context, 2026-07-09 2:54pm GMT+5:30
+
+Legend: ◎session ●bugfix ◆feature ↻refactor ✓change ○discovery ⚖decision ⚠security_alert ⚷security_note
+Format: ID TIME TYPE TITLE
+Fetch details: get_observations([IDs]) | Search: mem-search skill
+
+Stats: 12 obs (3,098t read) | 15,933t work | 81% savings
+
+### Jul 9, 2026
+1 2:24p ✓ claude-mem worker service initialized for pico-gallery-photoprism project
+2 " ✓ claude-mem Cursor hooks installed at project level with auto-context injection
+4 2:29p ○ Codebase knowledge graph generated for pico-gallery-photoprism
+6 2:32p ● Restored fullscreen toggle (F / double-right-click) on lightbox
+7 " ◆ Added webkit-prefixed Fullscreen API support
+8 " ● Fixed click classifier to accept zero-duration clicks
+9 2:36p ● Lightbox fullscreen toggle functionality restored
+10 " ✓ Diagnostic script relocated to project root
+11 2:42p ○ Branch 2026-07-09 fast-forward mergeable to main
+12 2:43p ● Lightbox fullscreen toggle fix merged to main
+13 " ○ CI run queued for lightbox fix; previous run failure on input component
+14 2:53p ○ CI Run Failed Due to GitHub Actions Runner Acquisition
+S3 Diagnose and monitor CI/CD pipeline failures in pico-gallery-photoprism repository (Jul 9 at 2:54 PM)
+**Investigated**: Examined GitHub Actions run 29001180482 which failed approximately 2 hours ago; inspected run logs and annotations for failure reasons; monitoring current run 29007398445 to completion
+
+**Learned**: Run 29001180482 failed due to GitHub Actions infrastructure issue: "The job was not acquired by Runner of type hosted even after multiple attempts." This indicates the hosted runner pool was unavailable or exhausted, not a code or test failure. The ci-and-release job ran for 15 minutes before timing out waiting for runner acquisition.
+
+**Completed**: Identified root cause of prior CI failure as runner acquisition failure, not application code or test issues
+
+**Next Steps**: Waiting for run 29007398445 to complete to determine if current CI pipeline succeeds or encounters the same runner acquisition issue. Background watch task is running; will receive results when it exits.
+
+
+Access 16k tokens of past work via get_observations([IDs]) or mem-search skill.
+
+---
+*Updated after last session. Use claude-mem's MCP search tools for more detailed queries.*
