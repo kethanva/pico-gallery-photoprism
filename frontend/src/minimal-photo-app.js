@@ -122,7 +122,7 @@ async function ensureRuntimeConfig() {
     const response = await fetch(`${apiUri.replace(/\/+$/, "")}/config`, {
       method: "GET",
       credentials: "same-origin",
-      headers: { Accept: "application/json" },
+      headers: apiHeaders(),
     });
     if (!response.ok) return;
     applyPreviewTokenFromResponse(response);
@@ -713,20 +713,25 @@ async function loadMore() {
     }
   } finally {
     clearTimeout(timeout);
-    if (state.controller === controller) state.controller = null;
-    state.loading = false;
-    renderState();
-    completeAutoAdvanceIfNeeded(loadedOk);
-    maybeStartKioskSlideshow();
-    maybeScheduleBackgroundFill(loadedOk);
-    if (
-      slideshow.active &&
-      isPreviewOpen() &&
-      state.previewIndex >= state.photos.length - 1 &&
-      loadedOk &&
-      !autoAdvanceOnLoad
-    ) {
-      scheduleSlideshowTick();
+    // A reset (Reload) bumps the generation and aborts this request. Guard the
+    // shared runtime flags so a stale load's finally cannot clear state.loading
+    // out from under the fresh load and let a duplicate load start concurrently.
+    if (generation === state.generation) {
+      if (state.controller === controller) state.controller = null;
+      state.loading = false;
+      renderState();
+      completeAutoAdvanceIfNeeded(loadedOk);
+      maybeStartKioskSlideshow();
+      maybeScheduleBackgroundFill(loadedOk);
+      if (
+        slideshow.active &&
+        isPreviewOpen() &&
+        state.previewIndex >= state.photos.length - 1 &&
+        loadedOk &&
+        !autoAdvanceOnLoad
+      ) {
+        scheduleSlideshowTick();
+      }
     }
   }
 }

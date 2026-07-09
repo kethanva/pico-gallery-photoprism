@@ -321,6 +321,10 @@ html:-webkit-full-screen .pg-shell {
   padding: 0;
 }
 
+html.pg-preview-open {
+  overflow: hidden;
+}
+
 html.is-virtual-fullscreen .pg-overlay.is-open,
 html.pg-preview-open .pg-overlay.is-open,
 html:fullscreen .pg-overlay.is-open,
