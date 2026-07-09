@@ -189,6 +189,12 @@ describe("minimal-photo-app boot", () => {
     await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
   });
 
+  it("places overlay controls in a chrome layer above the preview", async () => {
+    await bootMinimalPhotoApp(document.getElementById("app"));
+    await vi.waitFor(() => document.querySelector(".pg-overlay-chrome"));
+    expect(document.querySelector(".pg-overlay-chrome .pg-close")).toBeTruthy();
+  });
+
   it("auto-starts slideshow on kiosk boot when configured", async () => {
     window.__CONFIG__.kioskConfig = { slideDuration: 5, autoSlideshow: true };
     await bootMinimalPhotoApp(document.getElementById("app"));
@@ -202,7 +208,8 @@ describe("minimal-photo-app boot", () => {
     document.querySelector(".pg-card")?.click();
     await vi.waitFor(() => document.querySelector(".pg-overlay.is-open"));
 
-    document.querySelector(".pg-close")?.click();
+    const closeBtn = document.querySelector(".pg-close");
+    closeBtn?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, button: 0 }));
     await vi.waitFor(() => !document.querySelector(".pg-overlay.is-open"));
     expect(fullscreenMock.exit).toHaveBeenCalled();
   });

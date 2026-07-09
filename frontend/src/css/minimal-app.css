@@ -174,19 +174,35 @@ body,
   align-items: center;
   justify-content: center;
   z-index: 100;
-  touch-action: pan-y;
+  touch-action: manipulation;
 }
 
 .pg-overlay.is-open {
   display: flex;
 }
 
+.pg-overlay-chrome {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.pg-overlay-chrome .pg-close,
+.pg-overlay-chrome .pg-nav {
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
 .pg-preview {
+  position: relative;
+  z-index: 1;
   max-width: 96vw;
   max-height: 88vh;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
+  touch-action: pan-y;
 }
 
 .pg-close {
@@ -203,8 +219,10 @@ body,
   line-height: 44px;
   text-align: center;
   cursor: pointer;
-  z-index: 102;
+  z-index: 3;
   transition: background 0.15s, border-color 0.15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .pg-close:hover {
@@ -231,9 +249,11 @@ body,
   line-height: 48px;
   text-align: center;
   cursor: pointer;
-  z-index: 101;
+  z-index: 3;
   opacity: 0.7;
   transition: opacity 0.15s, background 0.15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .pg-nav:hover {

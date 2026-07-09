@@ -159,6 +159,26 @@ function el(tag, className, text) {
   return node;
 }
 
+// WPE WebKit under Cog often drops click on overlay controls; pointerup/touchend
+// are more reliable on the Pi frame. Dedupe guards against double invocation.
+function bindControlAction(node, handler) {
+  let handled = false;
+  const run = (ev) => {
+    if (handled) return;
+    if ("button" in ev && ev.button !== 0 && ev.type !== "touchend") return;
+    handled = true;
+    setTimeout(() => {
+      handled = false;
+    }, 400);
+    ev.preventDefault();
+    ev.stopPropagation();
+    handler();
+  };
+  node.addEventListener("pointerup", run);
+  node.addEventListener("touchend", run, { passive: false });
+  node.addEventListener("click", run);
+}
+
 function setStatus(text) {
   state.elements.status.textContent = text || "";
 }
@@ -762,37 +782,32 @@ function buildUi(root) {
   const status = el("p", "pg-status");
   const overlay = el("div", "pg-overlay");
   const preview = el("img", "pg-preview");
+  preview.addEventListener("touchstart", onTouchStart, { passive: true });
+  preview.addEventListener("touchend", onTouchEnd, { passive: true });
+
+  const chrome = el("div", "pg-overlay-chrome");
   const prevBtn = el("button", "pg-nav pg-nav-prev", "‹");
   prevBtn.type = "button";
   prevBtn.setAttribute("aria-label", "Previous photo");
-  prevBtn.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    previewPrev();
-  });
+  bindControlAction(prevBtn, previewPrev);
 
   const nextBtn = el("button", "pg-nav pg-nav-next", "›");
   nextBtn.type = "button";
   nextBtn.setAttribute("aria-label", "Next photo");
-  nextBtn.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    previewNext();
-  });
+  bindControlAction(nextBtn, previewNext);
 
   const counter = el("div", "pg-overlay-counter");
   const caption = el("div", "pg-overlay-caption");
   const close = el("button", "pg-close", "×");
   close.type = "button";
   close.setAttribute("aria-label", "Close preview");
-  close.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    closePreview();
-  });
-  overlay.addEventListener("click", (ev) => {
+  bindControlAction(close, closePreview);
+
+  chrome.append(prevBtn, nextBtn, counter, caption, close);
+  overlay.append(preview, chrome);
+  overlay.addEventListener("pointerup", (ev) => {
     if (ev.target === overlay) closePreview();
   });
-  overlay.addEventListener("touchstart", onTouchStart, { passive: true });
-  overlay.addEventListener("touchend", onTouchEnd, { passive: true });
-  overlay.append(prevBtn, preview, nextBtn, counter, caption, close);
 
   shell.append(header, error, grid, sentinel, status, overlay);
   root.appendChild(shell);
@@ -811,6 +826,7 @@ function buildUi(root) {
     nextBtn,
     counter,
     caption,
+    close,
     slideshowBtn,
   };
 }
