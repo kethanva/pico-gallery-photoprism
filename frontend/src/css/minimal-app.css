@@ -42,6 +42,11 @@ body,
   font-weight: 600;
 }
 
+.pg-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .pg-button {
   border: 1px solid #555;
   background: #1a1a1a;
@@ -50,10 +55,25 @@ body,
   border-radius: 6px;
 }
 
+.pg-button.is-active {
+  background: #1f3a1f;
+  border-color: #6a6;
+}
+
 .pg-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 8px;
+}
+
+.pg-top-spacer {
+  grid-column: 1 / -1;
+  height: 0;
+  pointer-events: none;
+}
+
+.pg-top-sentinel {
+  height: 1px;
 }
 
 .pg-card {
@@ -64,6 +84,8 @@ body,
   border-radius: 8px;
   overflow: hidden;
   aspect-ratio: 4 / 3;
+  content-visibility: auto;
+  contain-intrinsic-size: 160px 120px;
 }
 
 .pg-image {
@@ -98,6 +120,7 @@ body,
   align-items: center;
   justify-content: center;
   z-index: 100;
+  touch-action: pan-y;
 }
 
 .pg-overlay.is-open {
@@ -108,6 +131,8 @@ body,
   max-width: 96vw;
   max-height: 94vh;
   object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .pg-close {

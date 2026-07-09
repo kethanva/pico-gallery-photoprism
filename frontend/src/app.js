@@ -23,7 +23,7 @@ Additional information can be found in our Developer Guide:
 
 */
 
-import { bootMinimalPhotoApp } from "minimal-photo-app";
+import { bootMinimalPhotoApp } from "./minimal-photo-app.js";
 import "css/minimal-app.css";
 
 // Deliberately boots only the minimal photo grid for low-end devices.
