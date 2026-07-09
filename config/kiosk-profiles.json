@@ -1,0 +1,62 @@
+{
+  "defaultProfile": "pi_zero_2",
+  "profiles": {
+    "pi_zero_2": {
+      "profile": "pi_zero_2",
+      "previewSize": "fit_720",
+      "thumbSize": "fit_720",
+      "firstPageSize": 12,
+      "pageSize": 16,
+      "maxGridRows": 10,
+      "restoreRowBatch": 2,
+      "eagerThumbCount": 6,
+      "backgroundFillTarget": 32,
+      "backgroundFillDelayMs": 2000,
+      "scrollIdleMs": 250,
+      "pruneCooldownMs": 350,
+      "slideDuration": 12,
+      "autoSlideshow": true,
+      "virtualFullscreenOnly": true,
+      "suspendGridInPreview": true,
+      "prefetchNextSlide": true
+    },
+    "balanced": {
+      "profile": "balanced",
+      "previewSize": "fit_720",
+      "thumbSize": "fit_720",
+      "firstPageSize": 16,
+      "pageSize": 20,
+      "maxGridRows": 14,
+      "restoreRowBatch": 2,
+      "eagerThumbCount": 8,
+      "backgroundFillTarget": 64,
+      "backgroundFillDelayMs": 1500,
+      "scrollIdleMs": 200,
+      "pruneCooldownMs": 350,
+      "slideDuration": 10,
+      "autoSlideshow": true,
+      "virtualFullscreenOnly": true,
+      "suspendGridInPreview": true,
+      "prefetchNextSlide": true
+    },
+    "quality": {
+      "profile": "quality",
+      "previewSize": "fit_1280",
+      "thumbSize": "fit_720",
+      "firstPageSize": 20,
+      "pageSize": 24,
+      "maxGridRows": 16,
+      "restoreRowBatch": 2,
+      "eagerThumbCount": 10,
+      "backgroundFillTarget": 96,
+      "backgroundFillDelayMs": 1200,
+      "scrollIdleMs": 150,
+      "pruneCooldownMs": 300,
+      "slideDuration": 8,
+      "autoSlideshow": false,
+      "virtualFullscreenOnly": true,
+      "suspendGridInPreview": true,
+      "prefetchNextSlide": true
+    }
+  }
+}

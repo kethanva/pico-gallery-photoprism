@@ -5,6 +5,7 @@
 //
 // Backend resolution: CLI arg > PICO_PP_BACKEND > PICO_CONFIG [[sources]] url.
 
+import { buildKioskConfig } from './kiosk-config.mjs';
 import http from 'node:http';
 import https from 'node:https';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
@@ -68,22 +69,25 @@ const keepAliveAgent = backend.protocol === 'https:'
 
 let ppUser = '';
 let ppPass = '';
-let slideDurationSecs = 10;
+let slideDurationSecs;
+let configToml = '';
 try {
   const configPath = process.env.PICO_CONFIG || '/etc/picogallery/config.toml';
-  const toml = readFileSync(configPath, 'utf8');
-  const userMatch = toml.match(/username\s*=\s*"([^"]+)"/);
-  const passMatch = toml.match(/password\s*=\s*"([^"]+)"/);
+  configToml = readFileSync(configPath, 'utf8');
+  const userMatch = configToml.match(/username\s*=\s*"([^"]+)"/);
+  const passMatch = configToml.match(/password\s*=\s*"([^"]+)"/);
   if (userMatch) ppUser = userMatch[1];
   if (passMatch) ppPass = passMatch[1];
 
-  const durationMatch = toml.match(/slide_duration_secs\s*=\s*([0-9]+)/);
+  const durationMatch = configToml.match(/slide_duration_secs\s*=\s*([0-9]+)/);
   if (durationMatch) {
     slideDurationSecs = parseInt(durationMatch[1], 10);
   }
 } catch {
   // Ignore missing config
 }
+
+const kioskConfig = buildKioskConfig({ toml: configToml, slideDurationSecs });
 
 let activeSessionId = null;
 let isFetchingSession = false;
@@ -207,19 +211,8 @@ const MIME = {
 
 const servedConfig = JSON.stringify({
   serverUrl: '',
-  slideDuration: slideDurationSecs,
-  kioskConfig: {
-    slideDuration: slideDurationSecs,
-    autoSlideshow: true,
-    virtualFullscreenOnly: true,
-    previewSize: "fit_720",
-    firstPageSize: 12,
-    pageSize: 16,
-    maxGridRows: 12,
-    backgroundFillTarget: 48,
-    backgroundFillDelayMs: 1500,
-    scrollIdleMs: 200,
-  },
+  slideDuration: kioskConfig.slideDuration,
+  kioskConfig,
   disableServiceWorker: true,
 });
 

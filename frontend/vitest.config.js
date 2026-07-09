@@ -16,6 +16,7 @@ export default defineConfig({
       "model.js": path.resolve(__dirname, "./src/model/model.js"),
       "link.js": path.resolve(__dirname, "./src/model/link.js"),
       "websocket.js": path.resolve(__dirname, "./src/common/websocket.js"),
+      "kiosk-config": path.resolve(__dirname, "./src/kiosk-config.js"),
     },
   },
 

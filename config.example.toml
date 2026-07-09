@@ -29,6 +29,24 @@ max_megapixels      = 24
 # dim_percent = 25
 # warmth      = 30
 
+# Minimal PhotoPrism UI performance (Pi Zero 2 / kiosk browser).
+# Profiles: pi_zero_2 (default, safest) | balanced | quality
+# Override any key below; invalid values are clamped to safe ranges.
+[kiosk]
+profile = "pi_zero_2"
+# preview_size = "fit_720"          # fit_720 | fit_1280 (slideshow decode cost)
+# thumb_size = "fit_720"            # PhotoPrism minimum; do not lower
+# first_page_size = 12
+# page_size = 16
+# max_grid_rows = 10                # DOM window cap while scrolling
+# background_fill_target = 32       # 0 = disable slideshow prefetch
+# background_fill_delay_ms = 2000
+# scroll_idle_ms = 250
+# suspend_grid_in_preview = true    # unload grid thumbs during fullscreen
+# prefetch_next_slide = true
+# auto_slideshow = true
+# virtual_fullscreen_only = true
+
 # Optional display schedule (turn HDMI off overnight)
 # [display.schedule]
 # on  = "07:00"

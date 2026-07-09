@@ -1,25 +1,15 @@
 import $fullscreen from "common/fullscreen";
+import { resolveKioskConfig } from "kiosk-config";
 
 const config = window.__CONFIG__ || {};
 const staticUri = config.staticUri || "/static";
 const apiUri = config.apiUri || "/api/v1";
 const contentUri = config.contentUri || apiUri;
 const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
-const thumbSize = "fit_720";
-const allowedPreviewSizes = new Set(["fit_720", "fit_1280", "fit_1920"]);
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
-const defaultKioskLimits = {
-  firstPageSize: 12,
-  pageSize: 16,
-  maxGridRows: 12,
-  restoreRowBatch: 2,
-  eagerThumbCount: 6,
-  backgroundFillTarget: 48,
-  backgroundFillDelayMs: 1500,
-  scrollIdleMs: 200,
-  pruneCooldownMs: 350,
-};
+
+let resolvedKiosk = null;
 
 const scrollState = {
   active: false,
@@ -116,21 +106,26 @@ export function mapPhoto(item) {
 }
 
 function thumbUrl(hash) {
-  return `${contentUri}/t/${hash}/${previewToken()}/${thumbSize}`;
+  return `${contentUri}/t/${hash}/${previewToken()}/${getKiosk().thumbSize}`;
 }
 
 function getKioskConfig() {
   return window.__CONFIG__?.kioskConfig || config.kioskConfig || {};
 }
 
-function getPreviewSize() {
-  const size = getKioskConfig().previewSize;
-  if (typeof size === "string" && allowedPreviewSizes.has(size)) {
-    return size;
+function getKiosk() {
+  if (!resolvedKiosk) {
+    resolvedKiosk = resolveKioskConfig(getKioskConfig());
   }
-  // fit_720 is the smallest supported PhotoPrism fit size — much cheaper to
-  // decode on Pi Zero 2 than fit_1280 during slideshow transitions.
-  return "fit_720";
+  return resolvedKiosk;
+}
+
+function resetKioskConfig() {
+  resolvedKiosk = null;
+}
+
+function getPreviewSize() {
+  return getKiosk().previewSize;
 }
 
 function previewUrl(hash) {
@@ -318,7 +313,7 @@ function createPhotoCard(photo, index) {
   img.decoding = "async";
   img.loading = "lazy";
   img.src = photo.hash ? thumbUrl(photo.hash) : photo.thumbSrc;
-  if (index >= getKioskLimit("eagerThumbCount")) {
+  if (index >= getKiosk().eagerThumbCount) {
     img.fetchPriority = "low";
   }
   card.appendChild(img);
@@ -353,7 +348,7 @@ function removeCardNode(card) {
 function pruneTopRowsIfNeeded() {
   const grid = state.elements.grid;
   const ncol = getColumnCount();
-  const maxCards = getKioskLimit("maxGridRows") * ncol;
+  const maxCards = getKiosk().maxGridRows * ncol;
   const cardNodes = grid.querySelectorAll(".pg-card");
   const cardCount = cardNodes.length;
   if (cardCount <= maxCards) {
@@ -378,7 +373,7 @@ function pruneTopRowsIfNeeded() {
   gridWindow.topSpacerPx += spacerDelta;
   updateTopSpacer();
   window.scrollBy(0, -spacerDelta);
-  pruneCooldownUntil = Date.now() + getKioskLimit("pruneCooldownMs");
+  pruneCooldownUntil = Date.now() + getKiosk().pruneCooldownMs;
 }
 
 function runPruneTopRows() {
@@ -405,7 +400,7 @@ function restoreTopRowsIfNeeded() {
     return;
   }
   const ncol = getColumnCount();
-  const restoreCount = Math.min(ncol * getKioskLimit("restoreRowBatch"), gridWindow.startIndex);
+  const restoreCount = Math.min(ncol * getKiosk().restoreRowBatch, gridWindow.startIndex);
   const start = gridWindow.startIndex - restoreCount;
   const rowHeight = measureRowHeight();
   const rowsRestored = Math.ceil(restoreCount / ncol);
@@ -473,7 +468,7 @@ function toggleSlideshowPause() {
 }
 
 function getSlideshowWait() {
-  return (getKioskConfig().slideDuration || 12) * 1000;
+  return getKiosk().slideDuration * 1000;
 }
 
 function scheduleSlideshowTick() {
@@ -538,7 +533,7 @@ function toggleSlideshow() {
 }
 
 function suspendGridImages() {
-  if (gridImagesSuspended || !state.elements.grid) {
+  if (gridImagesSuspended || !state.elements.grid || !getKiosk().suspendGridInPreview) {
     return;
   }
   gridImagesSuspended = true;
@@ -613,6 +608,9 @@ function prefetchSlideAt(index) {
 }
 
 function scheduleSlidePrefetch() {
+  if (!getKiosk().prefetchNextSlide) {
+    return;
+  }
   if (!isPreviewOpen() || state.previewIndex < 0) {
     return;
   }
@@ -722,14 +720,6 @@ function completeAutoAdvanceIfNeeded(loadedOk) {
   }
 }
 
-function getKioskLimit(key) {
-  const value = getKioskConfig()[key];
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-  return defaultKioskLimits[key];
-}
-
 function invalidateGridMetrics() {
   gridMetrics.rowHeight = 0;
   gridMetrics.columnCount = 0;
@@ -751,7 +741,7 @@ function markScrolling() {
       scrollState.prunePending = false;
       runPruneTopRows();
     }
-  }, getKioskLimit("scrollIdleMs"));
+  }, getKiosk().scrollIdleMs);
 }
 
 function requestLoadMore() {
@@ -788,8 +778,8 @@ function maybeScheduleBackgroundFill(loadedOk = true) {
     cancelBackgroundFill();
     return;
   }
-  const fillTarget = getKioskLimit("backgroundFillTarget");
-  if (state.done || state.photos.length >= fillTarget) {
+  const fillTarget = getKiosk().backgroundFillTarget;
+  if (fillTarget <= 0 || state.done || state.photos.length >= fillTarget) {
     cancelBackgroundFill();
     return;
   }
@@ -811,7 +801,7 @@ function maybeScheduleBackgroundFill(loadedOk = true) {
     ) {
       loadMore();
     }
-  }, getKioskLimit("backgroundFillDelayMs"));
+  }, getKiosk().backgroundFillDelayMs);
 }
 
 function appendPhotos(rows) {
@@ -842,7 +832,7 @@ function renderState() {
 }
 
 function pageBatchSize() {
-  return state.offset === 0 ? getKioskLimit("firstPageSize") : getKioskLimit("pageSize");
+  return state.offset === 0 ? getKiosk().firstPageSize : getKiosk().pageSize;
 }
 
 async function loadMore() {
@@ -959,6 +949,7 @@ function resetRuntimeState() {
   invalidateGridMetrics();
   autoAdvanceOnLoad = false;
   kioskBootPending = true;
+  resetKioskConfig();
   cancelBackgroundFill();
   cancelSlidePrefetch();
   gridImagesSuspended = false;
@@ -1236,7 +1227,8 @@ export async function bootMinimalPhotoApp(root) {
   }
   clearBootSplash();
   await ensureRuntimeConfig();
-  $fullscreen.setVirtualOnly(getKioskConfig().virtualFullscreenOnly !== false);
+  resetKioskConfig();
+  $fullscreen.setVirtualOnly(getKiosk().virtualFullscreenOnly);
   resetRuntimeState();
   buildUi(root);
   bindListeners();

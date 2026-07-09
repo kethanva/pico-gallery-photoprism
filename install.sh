@@ -556,6 +556,9 @@ transition          = "fade"
 order               = "shuffle"
 on_this_day_boost   = true
 
+[kiosk]
+profile = "pi_zero_2"
+
 [cache]
 dir    = "$CACHE_DIR"
 max_mb = 512

@@ -208,6 +208,9 @@ The Docker image's `HEALTHCHECK` polls `/api/v1/health`.
 | cache     | `PICO_CACHE_DIR=/cache`          | `cache.dir`           |
 | cache     | `PICO_CACHE_MAXMB=512`           | `cache.maxMb`         |
 | display   | `PICO_DISPLAY_SLIDEDURATIONSECS=10` | `display.slideDurationSecs` |
+| kiosk     | `PICO_KIOSK_PROFILE=pi_zero_2`       | `kiosk.profile`             |
+| kiosk     | `PICO_KIOSK_PREVIEW_SIZE=fit_720`   | `kiosk.previewSize`         |
+| kiosk     | `PICO_KIOSK_MAX_GRID_ROWS=10`     | `kiosk.maxGridRows`         |
 
 Overrides apply to existing config sections; section/array tables come from the
 TOML file. See [`config.example.toml`](../config.example.toml) for every key.
