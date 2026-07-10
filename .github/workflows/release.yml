@@ -51,6 +51,9 @@ jobs:
           
           cp package.json picogallery-release/
           cp -r scripts picogallery-release/
+          # Kiosk profile data + shared resolver: required at runtime by
+          # scripts/kiosk-config.mjs — photoprism-host crashes on boot without it.
+          cp -r config picogallery-release/
           cp install.sh uninstall.sh run.sh config.example.toml README.md picogallery-release/
 
           # Validate release bundle integrity so appliance installs do not ship
@@ -62,6 +65,8 @@ jobs:
           test -n "$APP_CSS"
           test -f "picogallery-release/frontend/dist/static/build/$APP_JS"
           test -f "picogallery-release/frontend/dist/static/build/$APP_CSS"
+          test -f picogallery-release/config/kiosk-profiles.json
+          test -f picogallery-release/config/kiosk-config-core.mjs
 
           tar -czf picogallery-release.tar.gz -C picogallery-release .
 
@@ -74,6 +79,9 @@ jobs:
           bash -n /tmp/release-verify/uninstall.sh
           bash -n /tmp/release-verify/run.sh
           node --check /tmp/release-verify/scripts/photoprism-host.mjs
+          # Execute (not just parse) the kiosk config module from the extracted
+          # archive: catches missing config/ data that `node --check` cannot.
+          (cd /tmp/release-verify && node --input-type=module -e "const m = await import('./scripts/kiosk-config.mjs'); const c = m.buildKioskConfig(); if (!c.profile || !c.thumbSize) { throw new Error('kiosk config incomplete'); } console.log('kiosk config ok:', c.profile);")
           test -f /tmp/release-verify/frontend/index.html
           test -f "/tmp/release-verify/frontend/dist/static/build/$APP_JS"
           test -f "/tmp/release-verify/frontend/dist/static/build/$APP_CSS"
