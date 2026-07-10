@@ -1,5 +1,5 @@
 import $fullscreen from "common/fullscreen";
-import { resolveKioskConfig } from "kiosk-config";
+import { resolveKioskConfig, asBool } from "kiosk-config";
 
 const config = window.__CONFIG__ || {};
 const staticUri = config.staticUri || "/static";
@@ -9,6 +9,7 @@ const previewToken = () => window.__CONFIG__?.previewToken || config.previewToke
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
 const BOTTOM_ROOT_MARGIN_PX = 200;
+const LOAD_TIMEOUT_MS = 15000;
 
 let resolvedKiosk = null;
 let bottomLoadCheckPending = false;
@@ -170,6 +171,14 @@ function resetKioskConfig() {
   resolvedKiosk = null;
 }
 
+// Reads the raw (unresolved) config on purpose: an absent value must stay
+// "off" when the app is served without the host's resolved kioskConfig.
+// asBool from the shared resolver keeps string coercion ("true"/"1")
+// identical to what the host applies.
+function isAutoSlideshowEnabled() {
+  return asBool(getKioskConfig().autoSlideshow, false);
+}
+
 function getPreviewSize() {
   return getKiosk().previewSize;
 }
@@ -307,7 +316,9 @@ function openPhotoCard(index) {
   enterPreviewFromGrid(index);
 }
 
-function beginSlideshowAt(index) {
+// Marks the slideshow active from the caller's current slide; advancing is
+// driven by state.previewIndex inside scheduleSlideshowTick().
+function beginSlideshowAt() {
   slideshow.active = true;
   slideshow.paused = false;
   if (slideshow.timer) {
@@ -323,8 +334,8 @@ function beginSlideshowAt(index) {
 function enterPreviewFromGrid(index) {
   showPreviewAt(index);
   $fullscreen.request().catch(() => {});
-  if (getKioskConfig().autoSlideshow === true) {
-    beginSlideshowAt(index);
+  if (isAutoSlideshowEnabled()) {
+    beginSlideshowAt();
   }
 }
 
@@ -344,8 +355,8 @@ function toggleFullscreen() {
     resumeSlideshow();
     return;
   }
-  if (getKioskConfig().autoSlideshow === true && !slideshow.active) {
-    beginSlideshowAt(state.previewIndex >= 0 ? state.previewIndex : 0);
+  if (isAutoSlideshowEnabled() && !slideshow.active) {
+    beginSlideshowAt();
   }
 }
 
@@ -606,7 +617,7 @@ function startSlideshow() {
     showPreviewAt(index);
     $fullscreen.request().catch(() => {});
   }
-  beginSlideshowAt(index);
+  beginSlideshowAt();
 }
 
 function toggleSlideshow() {
@@ -657,10 +668,17 @@ function closePreview() {
     state.elements.preview.src = "";
   }
   document.documentElement.classList.remove("pg-preview-open");
+  // Restore thumbnails first — resumeGridImages() is a no-op once the
+  // suspended flag is cleared — then force-clear the suspension state so the
+  // grid stays interactive even if the flag and shell class drifted apart
+  // (e.g. suspendGridInPreview was false when this preview opened).
   resumeGridImages();
+  gridImagesSuspended = false;
+  state.elements.shell?.classList.remove("is-suspended");
   stopSlideshow();
   updatePreviewMeta();
   scheduleBottomLoadCheck();
+  renderState();
   $fullscreen.exit().catch(() => {});
 }
 
@@ -730,7 +748,9 @@ function showPreviewAt(index, options = {}) {
   }
   const photo = state.photos[index];
   const src = photo.hash ? previewUrl(photo.hash) : photo.fullSrc;
-  const sameSlide = state.previewIndex === index && state.elements.preview?.src === src;
+  // Compare the raw attribute: the .src property resolves to an absolute URL
+  // and would never equal the relative content URL (dead guard otherwise).
+  const sameSlide = state.previewIndex === index && state.elements.preview?.getAttribute("src") === src;
 
   state.previewIndex = index;
   if (!sameSlide) {
@@ -886,7 +906,7 @@ function maybeStartKioskSlideshow() {
   if (!kioskBootPending || state.photos.length === 0) {
     return;
   }
-  if (getKioskConfig().autoSlideshow !== true) {
+  if (!isAutoSlideshowEnabled()) {
     return;
   }
   kioskBootPending = false;
@@ -979,7 +999,7 @@ async function loadMore() {
   const timeout = setTimeout(() => {
     timedOut = true;
     controller.abort();
-  }, 15000);
+  }, LOAD_TIMEOUT_MS);
 
   try {
     const url = new URL(`${apiUri.replace(/\/+$/, "")}/photos`, window.location.origin);
