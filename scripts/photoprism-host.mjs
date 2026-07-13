@@ -50,7 +50,7 @@ if (!existsSync(join(DIST_BUILD, 'assets.json'))) {
 }
 if (!backendRaw) {
   console.error('ERROR: no backend URL. Pass one as an argument:');
-  console.error('  ./run.sh photoprism http://192.168.68.71:2342');
+  console.error('  ./run.sh photoprism http://photoprism.local:2342');
   process.exit(1);
 }
 

@@ -15,7 +15,7 @@
 #     sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
 #   Everything on this Pi (Pi Zero 2 W / Pi 4+; needs 64-bit or armv7):
 #     sudo ./install.sh --mode all \
-#          --photoprism-url http://192.168.68.71:2342 \
+#          --photoprism-url http://photoprism.local:2342 \
 #          --photoprism-user admin --photoprism-pass 'secret'
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
@@ -56,7 +56,7 @@ readonly SERVER_PORT="8190"
 MODE="auto"                 # auto | kiosk | server | all
 SERVER_URL=""               # kiosk target; defaults to localhost in server modes
 SOURCE_KIND="photoprism"    # photoprism | webdav  (no local directory source)
-PP_URL="http://192.168.68.71:2342" PP_USER="" PP_PASS=""
+PP_URL="" PP_USER="" PP_PASS=""
 WEBDAV_URL="" WEBDAV_USER="" WEBDAV_PASS=""
 BLANK_ON="" BLANK_OFF=""
 ASSUME_YES=0
@@ -152,7 +152,7 @@ Options:
   --mode <m>                auto|kiosk|server|all
   --server-url <url>        Frame/API URL the kiosk opens (kiosk mode)
   --source <kind>           photoprism|webdav  (server modes; default: photoprism)
-  --photoprism-url <url>    PhotoPrism base URL (default: http://192.168.68.71:2342)
+  --photoprism-url <url>    PhotoPrism base URL (required for --source photoprism)
   --photoprism-user <u>     PhotoPrism username
   --photoprism-pass <p>     PhotoPrism password (or app password)
   --webdav-url <url>        WebDAV base URL
@@ -169,7 +169,7 @@ Options:
 Examples:
   sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
   sudo ./install.sh --mode all \\
-       --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass secret -y
+       --photoprism-url http://photoprism.local:2342 --photoprism-user admin --photoprism-pass secret -y
 EOF
 }
 

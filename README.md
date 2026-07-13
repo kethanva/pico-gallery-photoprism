@@ -55,7 +55,7 @@ port = 8188
 
 [[sources]]
 name     = "photoprism"
-url      = "http://192.168.68.71:2342"
+url      = "http://photoprism.local:2342"
 username = "admin"
 password = "change-me"
 order    = "newest"
@@ -98,7 +98,7 @@ tar -xzf picogallery-release.tar.gz
 rm picogallery-release.tar.gz
 
 # 3. Run the installer
-sudo ./install.sh --mode all --photoprism-url http://192.168.68.71:2342 --photoprism-user admin --photoprism-pass Password -y
+sudo ./install.sh --mode all --photoprism-url http://photoprism.local:2342 --photoprism-user admin --photoprism-pass changeme -y
 ```
 
 > [!IMPORTANT]

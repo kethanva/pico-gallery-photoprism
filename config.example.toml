@@ -72,7 +72,7 @@ port = 8188
 [[sources]]
 name     = "photoprism"
 enabled  = true
-url      = "http://192.168.68.71:2342"
+url      = "http://photoprism.local:2342"
 username = "admin"
 password = "insecure"          # or use app_password below
 # app_password = "abcd-efgh-ijkl-mnop"

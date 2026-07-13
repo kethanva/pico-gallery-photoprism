@@ -6,8 +6,6 @@ dist/
 !frontend/dist/**
 .cache/
 *.tsbuildinfo
-.env
-.env.local
 *.jpg
 *.jpeg
 *.png
@@ -17,9 +15,24 @@ dist/
 /docker/.data/
 deploy-server/
 
-# Local secrets — PhotoPrism credentials live here; never commit.
+# ── Local secrets / machine-specific config (never commit) ───────────────────
+.env
+.env.*
+!.env.example
 config.local.toml
-# Skill outputs
+*.local.toml
+frontend/config.json
+**/credentials.json
+**/secrets/
+*.pem
+*.key
+!*.example.key
+id_rsa
+id_rsa.pub
+*.p12
+*.pfx
+
+# Skill outputs / local tooling
 graphify-out/
 .cursor/*
 !.cursor/rules/
@@ -29,4 +42,3 @@ graphify-out/
 scripts/build-graphify.py
 *.eslintcache
 .eslintcache
-
