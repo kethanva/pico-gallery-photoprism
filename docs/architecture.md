@@ -1,109 +1,66 @@
 # Architecture
 
-PicoGallery V2 is a three-package pnpm monorepo. The **server** owns all state;
-the **client** is a thin renderer driven by Server-Sent Events.
+PicoGallery is a single-purpose PhotoPrism display appliance. The shipped
+runtime is intentionally small:
 
-## Dependency graph
-
-```
-@pico/shared  ──▶  @pico/server
-      └────────▶  @pico/client
-```
-
-`@pico/shared` holds Zod schemas and the types inferred from them — the single
-source of truth for the API contract. Both other packages import it; nothing in
-shared imports back.
-
-## System Architecture Flow
-
-```mermaid
-graph TD
-    subgraph Client
-        Kiosk[Kiosk Browser / Cog / WPE WebKit]
-        Remote[Phone Remote UI]
-    end
-
-    subgraph ServerApp
-        HTTP[Fastify HTTP Server]
-        Engine[Slideshow Engine]
-        ImgService[Image Service]
-        DiskCache[Disk Cache]
-        
-        HTTP --- Engine
-        Engine --> ImgService
-        ImgService --- DiskCache
-    end
-
-    subgraph ProxyApp
-        ProxyServer[Node HTTP Server]
-        PP_SPA[PhotoPrism Vue SPA]
-        ProxyServer --- PP_SPA
-    end
-
-    subgraph Sources
-        LocalDir[Local Directory]
-        WebDAV[WebDAV Server]
-        PhotoPrism[PhotoPrism Backend]
-    end
-
-    Kiosk -->|Load SPA| HTTP
-    Kiosk -->|Subscribes SSE| HTTP
-    Remote -->|Control commands| HTTP
-
-    ImgService -->|Stream Original| LocalDir
-    ImgService -->|Stream Original| WebDAV
-    ImgService -->|Query and Stream| PhotoPrism
-
-    ProxyServer -->|Proxy API and WebSocket| PhotoPrism
-    Kiosk -->|Direct Admin UI| ProxyServer
+```text
+Cog / WPE WebKit
+      │ same-origin HTTP
+      ▼
+scripts/photoprism-host.mjs
+  ├─ serves frontend/index.html and frontend/dist
+  ├─ validates kiosk configuration
+  ├─ authenticates the display gateway
+  └─ proxies a small read-only PhotoPrism route allowlist
+      │ viewer-scoped X-Auth-Token
+      ▼
+PhotoPrism
 ```
 
-## Server (`@pico/server`)
+There is no independent slideshow database, Fastify API, SSE engine, image
+transcoder, or multi-source abstraction in the current release. PhotoPrism owns
+media and metadata; `frontend/src/minimal-photo-app.js` owns pagination,
+virtualized grid rendering, preview, and slideshow state in the browser.
 
-```
-http/        Fastify app, routes, SSE, error envelope
-engine/      playlist + cursor + scheduler + event bus (pure, testable)
-images/      sharp resize, content-hash disk cache, guards, HEIC fallback
-sources/     photoprism | webdav behind one PhotoSource interface
-config/      TOML + env loader, Zod-validated RootConfig
-telemetry/   pino logger
-```
+## Trust boundaries
 
-- **Engine** is server-authoritative: it builds an ordered playlist, advances a
-  cursor on a timer, applies ordering modes (`shuffle`, `chronological`,
-  `newest_first`, `date_cluster`) plus an optional on-this-day boost, and
-  broadcasts `state` over an event bus. Control actions mutate the engine and
-  re-broadcast, so every connected frame stays in lockstep.
-- **Image service** fetches an original from the source, transcodes HEIC to JPEG
-  when needed, resizes with sharp, and caches the result on disk keyed by a
-  content hash + dimensions + format. Cache hits return immutable bytes with an
-  `ETag`; `If-None-Match` yields `304`.
-- **Sources** all implement `PhotoSource` (`listPhotos`, `getOriginal`,
-  `authStatus`, …) — read-only; adding a backend never touches the engine or HTTP
-  layer.
+- The host binds to the configured `[http].host`; `127.0.0.1` is the safe
+  same-device default.
+- Any non-loopback bind is rejected unless a gateway token of at
+  least 24 characters is configured. Opening `/?token=...` exchanges the query
+  token for an HttpOnly, SameSite cookie and redirects to remove it from the URL.
+- Upstream credentials never reach the browser. The host creates one coalesced
+  PhotoPrism session and injects its token only into allowlisted upstream calls.
+- Only `GET/HEAD /api/v1/config`, `/api/v1/photos`, and thumbnail routes used by
+  the minimal display are proxied. Account, session, administration, mutation,
+  download, and arbitrary PhotoPrism endpoints are not exposed.
+- The PhotoPrism credential must belong to a dedicated viewer account. An
+  administrator credential violates the deployment model even though mutations
+  are blocked at the gateway.
 
-`server/src/index.ts` boots the HTTP server immediately (so `/health` and the
-Vite proxy work right away), then loads sources and starts the engine in the
-background. `/ready` returns `503` until the playlist is non-empty.
+## Runtime modules
 
-## Client (`@pico/client`)
+- `scripts/photoprism-host.mjs`: HTTP boundary, static files, gateway auth,
+  upstream session lifecycle, route policy, health/readiness, and shutdown.
+- `scripts/config-loader.mjs`: strict structural parser for PicoGallery's scalar
+  TOML subset and explicit PhotoPrism source selection.
+- `config/kiosk-config-core.mjs`: shared host/browser kiosk profile resolution.
+- `frontend/src/minimal-photo-app.js`: resource-bounded display application.
+- `kiosk/cog/`: Cage/Cog launcher and systemd assets.
+- `install.sh`: appliance provisioning and migration.
 
-```
-slideshow/   stage, transitions (crossfade), preload/decode, ken burns
-overlay/     OSD pill, clock, night filter, disconnect badge
-control/     phone remote
-api/         REST client + SSE EventSource wrapper
-styles/      tokens + frame + remote CSS
-```
+## Failure model
 
-The frame opens an `EventSource` on `/events`, requests the current
-photo at display dimensions, `decode()`s the next image before swapping (no
-flash), and re-requests on window resize. The remote posts to `/control` and
-reflects live status from the same SSE stream.
+Liveness reports that the Node process can serve requests. Readiness requires a
+recent authenticated 2xx response from PhotoPrism and expires if probes stop.
+Authentication calls are coalesced and use bounded exponential backoff. Proxy
+and rewrite operations have time and size limits. Systemd restarts the host and
+recycles the WebKit process daily on constrained devices.
 
-## Configuration
+## Architectural constraints
 
-`config/loader.ts` resolves a TOML file (`$PICO_CONFIG` → user → system), applies
-`PICO_*` env overrides, normalizes `snake_case` display keys to `camelCase`, and
-validates the whole thing with `RootConfigSchema`. Invalid config fails fast with
-a readable message — there is no partial/best-effort startup.
+- One PhotoPrism source per host.
+- One Node host process; no horizontal state coordination is required.
+- WebSocket proxying is intentionally absent because the minimal frontend does
+  not use PhotoPrism WebSockets.
+- Configuration changes require a service restart.

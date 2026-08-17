@@ -1,11 +1,16 @@
 # PicoGallery V2 — Browser-First Implementation Plan
 
+> **Archive notice (2026-08-08):** Historical greenfield design, not the
+> requirements or active plan for this repository. The shipped appliance uses
+> the bounded PhotoPrism gateway and minimal Cog/WPE client documented in
+> `../../architecture.md` and root `spec.md`.
+
 > **Status:** Implementation-ready specification for a brand-new, independent repository.
 > **Audience:** An autonomous LLM coding agent (and human reviewers).
 > **Relationship to V1:** This is **not** a refactor of the existing Rust repo
 > (`/Volumes/SSD/projects/PHOTOS_RELATED/pico-gallery`). It is a clean reimplementation
 > that borrows only **product behavior** and **high-level concepts**. The original repo
-> and `plan/split_client_server_implementation.md` are references only — consult them to
+> and `split_client_server_implementation.md` are references only — consult them to
 > validate feature parity, never to copy code.
 >
 > **Self-containment guarantee:** Everything an agent needs to build V2 from zero is in
@@ -1137,6 +1142,5 @@ host has more than 512 MB RAM (else choose the Rust server, §0.1). 3. Server an
 share a trusted LAN by default; exposure beyond it enables auth (§10). 4. PhotoPrism (if
 used) is reachable on the LAN with a service/app account. 5. One logical slideshow per
 server instance by default (multi-frame shows the same cursor); per-frame independent
-playlists are out of scope for V1-parity. 6. Photo sources are read-only; uploads are an
-explicit nice-to-have, not parity.
-```
+  playlists are out of scope for V1-parity. 6. Photo sources are read-only; uploads are an
+  explicit nice-to-have, not parity.

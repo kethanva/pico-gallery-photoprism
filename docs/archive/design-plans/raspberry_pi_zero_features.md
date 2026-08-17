@@ -1,5 +1,8 @@
 # Top 20 Optimized Client-Side Features for Raspberry Pi Zero 2
 
+> **Archive notice (2026-08-08):** Research input, not committed scope. Promote
+> accepted requirements into root `spec.md` and track work in root `plan.md`.
+
 The Raspberry Pi Zero 2 W features a quad-core 1GHz processor and 512MB of RAM. While significantly faster than the original Pi Zero, it remains heavily constrained by its memory limit and basic GPU. For a PhotoPrism client to run smoothly on this hardware (especially in a browser kiosk mode), the client-side code must aggressively prioritize memory management, DOM minimization, and GPU offloading.
 
 Here are the top 20 features and architectural decisions to implement in the PicoGallery client specifically for the Raspberry Pi Zero 2:

@@ -48,12 +48,17 @@ wait_for_server() {
   # PhotoPrism backend has been reached, so on a cold boot Cog waits for
   # Wi-Fi + backend instead of opening the UI with an empty library. A
   # foreign origin without /ready (404) falls back to plain /health liveness.
-  local origin ready_url health_url code waited=0 interval=3
+  local origin ready_url health_url code start_time now interval=3
   origin="$(printf '%s' "$FRAME_URL" | sed -E 's#^(https?://[^/]+).*#\1#')"
   ready_url="${origin}/api/v1/ready"
   health_url="${origin}/api/v1/health"
   echo "[kiosk] waiting for ${ready_url} (timeout ${WAIT_TIMEOUT}s)"
-  while [ "${waited}" -lt "${WAIT_TIMEOUT}" ]; do
+  start_time="$(date +%s)"
+  while true; do
+    now="$(date +%s)"
+    if [ "$((now - start_time))" -ge "${WAIT_TIMEOUT}" ]; then
+      break
+    fi
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${ready_url}" 2>/dev/null || echo 000)"
     if [ "${code}" = "200" ]; then
       echo "[kiosk] server ready"; return 0
@@ -61,7 +66,11 @@ wait_for_server() {
     if [ "${code}" = "404" ] && curl -fsS --max-time 5 -o /dev/null "${health_url}" 2>/dev/null; then
       echo "[kiosk] server healthy (no readiness endpoint)"; return 0
     fi
-    sleep "${interval}"; waited=$(( waited + interval ))
+    now="$(date +%s)"
+    if [ "$((now - start_time))" -ge "${WAIT_TIMEOUT}" ]; then
+      break
+    fi
+    sleep "${interval}"
   done
   echo "[kiosk] server not ready after ${WAIT_TIMEOUT}s; launching anyway" >&2
 }
@@ -78,14 +87,18 @@ wait_for_server
 INPUT_WAIT="${INPUT_WAIT:-15}"
 wait_for_input() {
   [ "${INPUT_WAIT}" -gt 0 ] 2>/dev/null || return 0
-  local waited=0
-  while [ "${waited}" -lt "${INPUT_WAIT}" ]; do
+  local start_time now
+  start_time="$(date +%s)"
+  while true; do
+    now="$(date +%s)"
+    if [ "$((now - start_time))" -ge "${INPUT_WAIT}" ]; then
+      break
+    fi
     if grep -qE 'Handlers=.*(kbd|mouse)' /proc/bus/input/devices 2>/dev/null; then
-      echo "[kiosk] input devices present (waited ${waited}s)"
+      echo "[kiosk] input devices present (waited $((now - start_time))s)"
       return 0
     fi
     sleep 1
-    waited=$(( waited + 1 ))
   done
   echo "[kiosk] no keyboard/mouse after ${INPUT_WAIT}s; starting anyway (hotplug still works)" >&2
 }

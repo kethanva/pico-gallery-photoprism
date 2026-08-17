@@ -1,216 +1,112 @@
-# Deployment
+# Production Deployment
 
-PicoGallery V2 needs Node ≥ 22.13 to run the server. The client is static and is
-served by the server (or any static host / Vite dev server).
+PicoGallery requires Node.js 22 and a reachable PhotoPrism instance. The
+supported source is PhotoPrism; WebDAV and the former standalone slideshow
+server are not part of the shipped runtime.
 
-## Config resolution
+## Credentials and network boundary
 
-The server loads the first config file it finds:
+Create a dedicated PhotoPrism viewer account or viewer-scoped app password.
+Do not configure an administrator credential. Store secrets in
+`/etc/picogallery/config.toml` with mode `0640` and never commit that file.
 
-1. `$PICO_CONFIG`
-2. `~/.config/picogallery/config.toml`
-3. `/etc/picogallery/config.toml`
+Same-device kiosk deployments should use:
 
-Any key can be overridden with an env var `PICO_<SECTION>_<KEY>` (upper snake),
-e.g. `PICO_HTTP_PORT=9000`, `PICO_CACHE_DIR=/var/cache/pico`. Invalid config
-aborts startup with a readable error.
+```toml
+[http]
+host = "127.0.0.1"
+port = 8190
+```
 
-## Local (Node)
+For a display connecting over the network, explicitly bind externally and add
+a random gateway token:
+
+```toml
+[http]
+host = "0.0.0.0"
+port = 8190
+auth_token = "replace-with-at-least-24-random-characters"
+```
+
+Open the remote kiosk once with
+`http://host:8190/library/photos?token=<gateway-token>`. Put the service behind a
+VPN or TLS reverse proxy on untrusted networks; the Node host does not terminate
+TLS. Firewall port 8190 to display and monitoring addresses only.
+
+Rotate any credential that has appeared in Git history, shell history, logs, or
+process arguments. Prefer `--photoprism-pass-file` over
+`--photoprism-pass` when using the installer.
+
+## Install
 
 ```bash
-./run.sh setup
-./run.sh build
-PICO_CONFIG=./config.local.toml ./run.sh start
+sudo ./install.sh --mode all \
+  --photoprism-url http://photoprism.internal:2342 \
+  --photoprism-user frame-viewer \
+  --photoprism-pass-file /root/picogallery-app-password
 ```
 
-`run.sh dev` instead runs the server with `tsx --watch` plus the Vite dev server
-(frame on :5173 proxying the API to :8188).
+`all` mode binds the host to loopback because Cog runs on the same device.
+`server` mode binds externally and generates a gateway token in the protected
+configuration file. Configure remote kiosk URLs using that token.
 
-## Docker
+The installer copies a root-owned runtime to `/opt/picogallery`, provisions a
+dedicated non-login server account, and creates a hardened Node systemd unit. It
+also provisions Cage/Cog, seat/input rules, a dedicated kiosk user, readiness
+waiting, crash-loop limits, and optional display-power schedules.
+
+## Manual development and verification
 
 ```bash
-docker compose -f docker/docker-compose.yml up --build
+npm ci --ignore-scripts
+npm --prefix frontend ci --ignore-scripts
+npm run audit:security
+npm run lint
+npm test
+npm --prefix frontend run lint
+npm --prefix frontend run security:scan
+npm --prefix frontend test
+npm --prefix frontend run test:host-smoke
+npm --prefix frontend run build
+git diff --exit-code -- frontend/dist
 ```
 
-- The image builds all packages and runs `server/dist/index.js`.
-- Mount your config at `/config/config.toml`.
-- Image cache persists in the `pico-cache` named volume (`cache.dir = "/cache"`).
-- The compose file brings up a `photoprism` service alongside the frame; the
-  bundled config points its `photoprism` source at `http://photoprism:2342`.
-  Point it at your own PhotoPrism host instead if you already run one.
-
-Standalone build:
+Start the host with a development configuration:
 
 ```bash
-docker build -f docker/Dockerfile -t picogallery:latest .
-docker run -p 8188:8188 \
-  -v "$PWD/docker/config:/config:ro" \
-  -v pico-cache:/cache picogallery:latest
+PICO_CONFIG=./config.local.toml ./run.sh photoprism
 ```
 
-## Raspberry Pi kiosk (Cog + Cage / WPE WebKit)
+## Health and operations
 
-The canonical display surface is **Cog (WPE WebKit)** under the **Cage** Wayland
-kiosk compositor — no X11, no desktop. Cage opens DRM/KMS directly via `seatd`
-and forces its single client (Cog) fullscreen.
+- `GET /api/v1/health`: Node process liveness.
+- `GET /api/v1/ready`: recent authenticated PhotoPrism reachability.
+- `GET /api/v1/metrics`: gateway-authenticated request/error counters and RSS.
+- Logs: `journalctl -u picogallery-photoprism -f`.
+- Kiosk logs: `journalctl -u picogallery-kiosk -f`.
 
-### One surface: the PhotoPrism UI with native slideshow
+Alert on prolonged readiness failure, repeated host restarts, upstream
+authentication failures, memory pressure, swap exhaustion, and WebKit restart
+frequency. The host emits no secrets or session tokens in normal logs.
 
-The appliance runs **one** service unit:
-`picogallery-photoprism.service` → [`scripts/photoprism-host.mjs`](../scripts/photoprism-host.mjs)
-serves the PhotoPrism Vue UI (`frontend/dist`) on **`:8190`** and reverse-proxies
-its API/WebSocket to the real backend.
-
-- **Boot → slideshow.** `FRAME_URL=http://…:8190/library/photos?kiosk=true`, so
-  the SPA auto-opens its native lightbox slideshow in (virtual) fullscreen as
-  soon as photos load. The boot slideshow walks the **whole library** in a
-  random order and repeats a photo only after every photo has been shown
-  (albums targets play the whole album in its curated order instead). Slide
-  duration comes from `slide_duration_secs` in the config (served to the SPA
-  as `kioskConfig.slideDuration`).
-- **Inside the slideshow (lightbox):** `F` or **double right-click** exits to
-  the PhotoPrism photo grid (a lone right-click only pauses and never opens
-  the browser menu); arrows navigate; single middle-click toggles the virtual
-  fullscreen backing WPE's missing native API.
-- **On the grid:** `F` or **double right-click** (both injected by the host,
-  plus the floating **"▶ Slideshow"** link — hidden while the lightbox is
-  open) jump back into the autoplaying slideshow via `/__slideshow` → `302` →
-  `/library/photos?kiosk=true`. `F` is ignored while typing in PhotoPrism
-  inputs. **Clicking any photo** on the grid resumes the fullscreen slideshow
-  starting from that photo.
-
-The unit is only installed for a `photoprism` source (a `webdav` source has no
-PhotoPrism UI). **`frontend/dist` freshness matters**: all of the above is
-compiled into the SPA bundles. The installer tracks a source-tree stamp inside
-`dist`; when stale it rebuilds (hosts with ≥1.5 GB RAM) or downloads the
-prebuilt dist from the latest GitHub release (Pi Zero-class boards).
-
-- **Display-only (read-only) by default.** The PhotoPrism host signs requests with
-  an admin session, so it enforces read-only itself: non-`GET/HEAD/OPTIONS` API
-  requests are rejected with `403`, and the served config hides every mutating UI
-  surface (upload, edit, delete, archive, share, download, library, settings) via
-  `readonly`, a browse-only ACL, and feature flags. Photos can only be *viewed*
-  from the frame. Set `PICO_PP_READONLY=0` in the unit only for a trusted manage
-  box.
+After every Raspberry Pi install, upgrade, or operating-system update, reboot
+the device and run the strict hardware canary:
 
 ```bash
-sudo ./install.sh http://<server-host>:8188
-sudo systemctl start picogallery-kiosk
-journalctl -u picogallery-kiosk -f
+sudo /opt/picogallery/scripts/pi-canary.sh
 ```
 
-`install.sh` (the V2 replacement for V1's `install.sh`) options:
+It exits nonzero unless the host and kiosk services are enabled and active, the
+authenticated PhotoPrism backend is ready, the deep SPA route and built assets
+are valid, DRM/KMS is available, the current boot has no known Cage/libinput
+errors, and a keyboard or mouse is visible to the kernel. For a deliberately
+display-only appliance, pass `--allow-no-input`. Use
+`scripts/pi-e2e-diagnose.sh` for a detailed, non-failing diagnostic dump.
 
-* `--with-server` — also install a systemd unit for the server from this repo.
-* `--blank-on=HH:MM` / `--blank-off=HH:MM` — install a nightly display-blank
-  schedule (both required together; omitted = display always on).
+## Upgrade and rollback
 
-What it sets up:
-
-1. Installs `cog`, `cage`, `seatd`; creates the `picokiosk` user in the
-   `video`, `render`, `input`, `seat` groups; enables `seatd`.
-2. **Launcher** `/usr/local/bin/picogallery-kiosk` (from `kiosk/cog/`): waits for
-   the server's **`/api/v1/health`** (up to `WAIT_TIMEOUT`s, then launches anyway)
-   so the frame never opens on a "network error" page, then runs
-   `cage -- cog --platform=wl <FRAME_URL>`.
-3. **`picogallery-kiosk.service`** — system unit, runs as `picokiosk` on `tty1`
-   via `seatd`, `Restart=always` for 24/7 reliability.
-4. **`/etc/sudoers.d/picogallery-kiosk`** — tight passwordless allowlist
-   (restart kiosk/server, reboot/poweroff only).
-5. **`pico-display-power`** + `pico-display-{on,off}.timer` (only with the blank
-   flags) — daily display power via `vcgencmd display_power`,
-   `/sys/class/backlight/rpi_backlight/bl_power`, or `/sys/class/drm/*/dpms`.
-6. Sets `gpu_mem=128` in `config.txt` if unset.
-
-Change the frame URL or wait timeout by editing `/etc/picogallery/kiosk.env` and
-`systemctl restart picogallery-kiosk`, or re-run `install.sh`.
-
-Source for the launcher / unit / sudoers / display-power lives in
-[`kiosk/cog/`](../kiosk/cog/). The old Qt/QtWebEngine kiosk under `kiosk/src/` is
-deprecated — see [`kiosk/DEPRECATED.md`](../kiosk/DEPRECATED.md).
-
-### Keyboard / mouse detection
-
-Input reaches the page through four layers, each of which the installer now sets
-up and `install.sh` verifies layer by layer:
-
-1. **Kernel/USB** — the Pi Zero 2 W has a single micro-B OTG port; leftover
-   USB-gadget config (`dtoverlay=dwc2` in peripheral mode, `g_ether` in
-   `cmdline.txt` or `/etc/modules`) switches it to *device* mode and the kernel
-   never enumerates a keyboard/mouse at all. The installer's **USB host-mode
-   guard** detects this, pins `dtoverlay=dwc2,dr_mode=host`, strips gadget
-   module autoloads (with `.picogallery.bak` backups), and tells you to reboot.
-   A udev rule also disables USB autosuspend so a mouse can't be powered off
-   mid-session.
-2. **udev seat tag** — wlroots/libinput only opens devices tagged onto `seat0`;
-   the installer ships `72-picogallery-seat.rules` and re-triggers input+usb.
-3. **Compositor startup race** — the kiosk unit now runs
-   `udevadm trigger … + settle` as `ExecStartPre=`, so every kiosk (re)start
-   re-applies the seat tag and waits for udev before Cage enumerates. Cold-boot
-   ordering can no longer produce a frame with dead input, and hotplugged
-   devices are picked up live via the persistent seat rule.
-4. **Cog** — `--platform=wl` wires the compositor's `wl_seat` into the page
-   (arrow keys, Space, Esc, clicks).
-
-If input is dead, run `sudo ./install.sh` again and read the "Verifying" output:
-it distinguishes *kernel sees nothing* (hardware/OTG/power) from *devices
-untagged* (udev) from *compositor errors* (kiosk journal).
-
-### Mimicking the kiosk off-device
-
-Cog+Cage are Linux/Wayland-only. On macOS (or any non-Wayland host) use the host
-browser to preview the production frame (served by the server on port 8188):
-
-```bash
-./run.sh kiosk        # opens the frame URL in the default browser; runs real
-                      # Cog+Cage instead when invoked on a Linux box that has them
-./run.sh appliance    # builds, starts the server, waits for /health, opens the kiosk
-```
-
-### Server on the same Pi
-
-If the Pi also runs the server, add a unit like:
-
-```ini
-# /etc/systemd/system/picogallery.service
-[Unit]
-Description=PicoGallery server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Environment=NODE_ENV=production
-Environment=PICO_CONFIG=/etc/picogallery/config.toml
-ExecStart=/usr/bin/node /opt/picogallery/server/dist/index.js
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then point the kiosk at `http://localhost:8188`.
-
-## Health & monitoring
-
-- `GET /api/v1/health` — liveness (up as soon as the process binds).
-- `GET /api/v1/ready` — readiness (`503` until the playlist is populated).
-
-The Docker image's `HEALTHCHECK` polls `/api/v1/health`.
-
-## Environment variable reference
-
-| Section   | Example env                      | Config key            |
-|-----------|----------------------------------|-----------------------|
-| http      | `PICO_HTTP_PORT=8188`            | `http.port`           |
-| http      | `PICO_HTTP_HOST=0.0.0.0`         | `http.host`           |
-| http      | `PICO_HTTP_AUTHTOKEN=secret`     | `http.authToken`      |
-| cache     | `PICO_CACHE_DIR=/cache`          | `cache.dir`           |
-| cache     | `PICO_CACHE_MAXMB=512`           | `cache.maxMb`         |
-| display   | `PICO_DISPLAY_SLIDEDURATIONSECS=10` | `display.slideDurationSecs` |
-| kiosk     | `PICO_KIOSK_PROFILE=pi_zero_2`       | `kiosk.profile`             |
-| kiosk     | `PICO_KIOSK_PREVIEW_SIZE=fit_720`   | `kiosk.previewSize`         |
-| kiosk     | `PICO_KIOSK_MAX_GRID_ROWS=10`     | `kiosk.maxGridRows`         |
-
-Overrides apply to existing config sections; section/array tables come from the
-TOML file. See [`config.example.toml`](../config.example.toml) for every key.
+CI rebuilds the committed frontend from source and refuses a release if the
+bundle differs. Release archives are smoke-tested after extraction and shipped
+with SHA-256 checksums. Keep the previous archive and configuration backup for
+rollback; configuration remains backward compatible except that externally
+bound legacy installations are migrated to require a gateway token.

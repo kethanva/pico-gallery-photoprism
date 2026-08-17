@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 # Read-only diagnostics for blank-screen issues on Pi appliances.
 # Usage:
-#   sudo ./scripts/pi-e2e-diagnose.sh [/path/to/repo]
+#   sudo /opt/picogallery/scripts/pi-e2e-diagnose.sh [/path/to/runtime]
 # Default repo path:
 #   /opt/picogallery
 

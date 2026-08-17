@@ -1,175 +1,124 @@
-# Raspberry Pi Zero Installation Guide
+# PicoGallery installation quick reference
 
-This guide provides end-to-end instructions for installing **PicoGallery V2** from scratch on a Raspberry Pi Zero.
+PicoGallery is a PhotoPrism display appliance. PhotoPrism remains the system
+of record; this project serves the display UI and a narrow, read-only gateway.
+For architecture, API, and operational details, use
+[`docs/architecture.md`](docs/architecture.md), [`docs/api.md`](docs/api.md),
+and [`docs/deployment.md`](docs/deployment.md).
 
-> [!WARNING]
-> **Hardware Recommendation:** We strongly recommend the **Raspberry Pi Zero 2 W** running a **64-bit OS**. Modern Node.js versions (≥ 22.13) and the Debian packages required for the kiosk (`cog`, `cage`) require 64-bit support. The original Pi Zero 1 (W) is 32-bit only; if you must use it, it can only act as a "Kiosk-only" client display connecting to a server hosted on a different, more powerful machine.
+## Requirements
 
----
+- Raspberry Pi Zero 2 W or another supported 64-bit/ARMv7 board for server
+  modes.
+- Raspberry Pi OS Lite 64-bit, network access to PhotoPrism, and a display for
+  `all` or `kiosk` mode.
+- A dedicated least-privilege PhotoPrism viewer account or app password.
+- A protected one-line password file on the Pi; do not place credentials in
+  shell history, this repository, or a unit command line.
 
-## 1. Flash the Operating System
+The original ARMv6 Pi Zero/Zero W can run `kiosk` mode only, with the server on
+another host.
 
-1. Download and open the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
-2. **Choose OS:** Select `Raspberry Pi OS (Other)` -> **`Raspberry Pi OS Lite (64-bit)`** (no desktop environment is needed).
-3. **Choose Storage:** Select your microSD card (16GB minimum recommended).
-4. **Advanced Settings (Gear Icon):**
-   - **Set hostname:** e.g., `picogallery.local`
-   - **Enable SSH:** Use password authentication or provide your public SSH key.
-   - **Configure wireless LAN:** Enter your WiFi network SSID and password.
-   - **Set locale settings:** Select your correct time zone.
-5. Write the image, insert the SD card into your Pi Zero 2 W, and power it on.
+## Install from a release archive
 
----
-
-## 2. Connect and Prepare the System
-
-SSH into your Pi from your terminal:
-```bash
-ssh pi@picogallery.local
-```
-
-Update the system packages and install Git:
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y git curl
-```
-
----
-
-## 3. Install PicoGallery V2
-
-You can install PicoGallery V2 either using a pre-built release artifact (recommended, faster, saves RAM/CPU on Pi Zeros) or compile it from source.
-
-### Option A: Pre-built Release Artifact (Recommended)
-
-Run these exact commands on your Pi to install from the latest pre-built release:
+On the Pi, install the OS updates and prerequisites, then extract the release
+archive. The archive contains the built frontend and the installer, so it does
+not build the frontend on the constrained device.
 
 ```bash
-# 1. Create the persistent directory and navigate into it
+sudo apt update
+sudo apt install -y curl ca-certificates tar
+curl -fsSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
+curl -fsSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/SHA256SUMS
+grep 'picogallery-release.tar.gz$' SHA256SUMS | sha256sum -c -
 sudo mkdir -p /opt/picogallery
-sudo chown -R $USER:$USER /opt/picogallery
-cd /opt/picogallery
-
-# 2. Download and extract the latest release
-curl -sSLO https://github.com/kethanva/pico-gallery-photoprism/releases/latest/download/picogallery-release.tar.gz
-tar -xzf picogallery-release.tar.gz
-rm picogallery-release.tar.gz
-
-# 3. Run the installer
-sudo ./install.sh --mode all --photoprism-url http://photoprism.local:2342 --photoprism-user admin --photoprism-pass changeme -y
+sudo tar -xzf picogallery-release.tar.gz -C /opt/picogallery
+rm picogallery-release.tar.gz SHA256SUMS
 ```
 
----
-
-### Option B: From Source (For Developers)
-
-Use this method if you want to run from a live git checkout and compile files locally.
-
-1. Clone the repository:
-   ```bash
-   sudo mkdir -p /opt/picogallery
-   sudo chown -R $USER:$USER /opt/picogallery
-   git clone https://github.com/kethanva/pico-gallery-photoprism.git /opt/picogallery
-   cd /opt/picogallery
-   ```
-
-2. Install Node.js v22 and `pnpm`:
-   ```bash
-   curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-   sudo apt install -y nodejs
-   sudo npm install -g pnpm
-   ```
-
-3. Install workspace dependencies and compile:
-   ```bash
-   pnpm install
-   pnpm build
-   ```
-
----
-
-## 5. Configure the Server
-
-Create the configuration directory and file:
-```bash
-sudo mkdir -p /etc/picogallery
-sudo cp config.sample.toml /etc/picogallery/config.toml
-```
-
-Edit the configuration file:
-```bash
-sudo nano /etc/picogallery/config.toml
-```
-
-Configure the server settings and PhotoPrism/WebDAV sources:
-```toml
-[http]
-port = 8188
-host = "0.0.0.0"
-
-[cache]
-dir = "/var/cache/picogallery"
-
-[[sources]]
-name     = "photoprism"
-enabled  = true
-url      = "http://photoprism.local:2342"
-username = "admin"
-password = "please-change"
-```
-
----
-
-## 6. Install the Wayland Kiosk
-
-PicoGallery includes an automated installer for Raspberry Pi that provisions the **Cog (WPE WebKit)** browser and **Cage** Wayland compositor. It configures the display environment directly on top of DRM/KMS without an X11 desktop, ensuring maximum performance.
-
-Run the installer based on your setup:
-
-### Option A: Standalone Setup (Server runs on the Pi)
-This installs the kiosk and creates a systemd service for the local server.
-```bash
-sudo ./install.sh --with-server http://localhost:8188
-```
-
-### Option B: Display Only (Server runs elsewhere)
-Point the kiosk to the IP of the machine hosting the server (e.g. `192.168.1.100`).
-```bash
-sudo ./install.sh http://192.168.1.100:8188
-```
-
-### Display Sleep Schedule
-You can optionally configure the display to turn off at night to save power:
-```bash
-sudo ./install.sh --with-server --blank-off="08:00" --blank-on="23:00" http://localhost:8188
-```
-*(In this example, the screen turns off at 23:00 and turns back on at 08:00).*
-
----
-
-## 7. Service Management & Troubleshooting
-
-After installation, the kiosk (and server, if enabled) will start automatically on boot. 
-
-**Useful Commands:**
+Create the protected app-password file and install the combined appliance:
 
 ```bash
-# Check kiosk logs for rendering or connection issues
-journalctl -u picogallery-kiosk -f
-
-# Check server logs
-journalctl -u picogallery-server -f
-
-# Restart the display kiosk
-sudo systemctl restart picogallery-kiosk
+sudo install -m 0600 /dev/null /root/picogallery-app-password
+sudo editor /root/picogallery-app-password
+sudo /opt/picogallery/install.sh --mode all \
+  --photoprism-url http://photoprism.local:2342 \
+  --photoprism-user frame-viewer \
+  --photoprism-pass-file /root/picogallery-app-password
 ```
 
-### Changing the Kiosk URL or Timeout
-If you need to change the server IP the kiosk connects to, or adjust the boot wait-timeout:
+The installer copies a root-owned runtime to `/opt/picogallery`, creates the
+non-login `picogallery` service account, installs the hardened systemd units,
+and verifies liveness, backend readiness, the public-mode config rewrite, SPA
+assets, and kiosk display/input prerequisites.
+
+## Other modes
+
+Install only the Node host (for a separate display device):
+
 ```bash
-sudo nano /etc/picogallery/kiosk.env
+sudo /opt/picogallery/install.sh --mode server \
+  --photoprism-url http://photoprism.local:2342 \
+  --photoprism-user frame-viewer \
+  --photoprism-pass-file /root/picogallery-app-password
 ```
-Apply changes by restarting the service:
+
+Install only the Cog/Cage display pointed at an existing PicoGallery host:
+
 ```bash
-sudo systemctl restart picogallery-kiosk
+sudo /opt/picogallery/install.sh --mode kiosk \
+  --server-url http://gallery-host:8190/library/photos
 ```
+
+Use `sudo /opt/picogallery/install.sh --help` for all supported flags. Prefer
+`--photoprism-pass-file`; `--photoprism-pass` is retained only for controlled
+non-interactive environments and may leak through shell history or process
+inspection.
+
+## Verify after reboot
+
+Reboot after installation, then run the strict hardware acceptance test:
+
+```bash
+sudo reboot
+sudo /opt/picogallery/scripts/pi-canary.sh
+```
+
+The canary returns nonzero if the host or kiosk is inactive, PhotoPrism is not
+authenticated and ready, the deep SPA route or assets are broken, DRM/KMS is
+missing, the current boot has display/input errors, or no keyboard/mouse is
+visible. For an intentionally display-only setup, use `--allow-no-input`. For
+detailed non-failing diagnostics:
+
+```bash
+sudo /opt/picogallery/scripts/pi-e2e-diagnose.sh /opt/picogallery
+```
+
+Useful checks:
+
+```bash
+curl -fsS http://127.0.0.1:8190/api/v1/health
+curl -fsS http://127.0.0.1:8190/api/v1/ready
+journalctl -u picogallery-photoprism -n 60 --no-pager
+journalctl -u picogallery-kiosk -n 60 --no-pager
+```
+
+`/api/v1/health` proves only that the Node host is alive. `/api/v1/ready` also
+requires a recent authenticated PhotoPrism response. A PhotoPrism `SIGN IN`
+page means the upstream credentials or `/api/v1/config` public-mode rewrite
+needs attention.
+
+## Development install
+
+For a checkout on a development machine, keep credentials in the ignored
+`config.local.toml` and run:
+
+```bash
+./run.sh setup
+./run.sh build
+PICO_CONFIG=./config.local.toml ./run.sh photoprism
+```
+
+Open <http://127.0.0.1:8190/library/photos>. Run the complete verification
+commands from [`docs/deployment.md`](docs/deployment.md) before producing a
+release.

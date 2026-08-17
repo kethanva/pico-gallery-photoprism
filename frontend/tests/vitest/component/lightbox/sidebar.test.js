@@ -7,6 +7,7 @@ import $util from "common/util";
 import { Album } from "model/album";
 import typeaheadCache from "common/typeahead-cache";
 import { $faceMarkers } from "common/face-markers";
+import { directive as sanitizeDirective } from "vue-sanitize-directive";
 
 // Max name length used by the validation pipeline (matches the production
 // "clip" client-config value). Override the global $config.get mock so the
@@ -114,6 +115,7 @@ function mountSidebar(options = {}) {
     props,
     global: {
       ...global,
+      directives: { sanitize: sanitizeDirective, ...(global.directives || {}) },
       stubs: { PMap: true, ...stubs },
       mocks: {
         $view: { getData: () => legacy, enter: () => {}, leave: () => {}, isActive: () => true },

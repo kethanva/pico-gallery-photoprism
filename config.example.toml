@@ -59,11 +59,11 @@ max_mb = 256
 # dir  = "/var/cache/picogallery"
 
 [http]
-host = "0.0.0.0"
-port = 8188
-# When set, POST /api/v1/control requires this token (Authorization: Bearer …
-# or X-Pico-Token). Open the remote once with ?token=… to persist it locally.
-# auth_token  = "change-me-on-exposed-networks"
+# Same-device kiosk default. For a remote display, use 0.0.0.0 and set a
+# random auth_token of at least 24 characters; then open ?token=<value> once.
+host = "127.0.0.1"
+port = 8190
+# auth_token = "replace-with-at-least-24-random-characters"
 
 # ─── Sources ─────────────────────────────────────────────────────────────────
 # Photos come from a PhotoPrism backend over the network. There is no local
@@ -73,9 +73,8 @@ port = 8188
 name     = "photoprism"
 enabled  = true
 url      = "http://photoprism.local:2342"
-username = "admin"
-password = "insecure"          # or use app_password below
-# app_password = "abcd-efgh-ijkl-mnop"
+username = "frame-viewer"      # dedicated least-privilege viewer account
+app_password = "replace-me"    # never use an administrator password
 #
 # # Filtering (all optional, combined with AND)
 # # album       = "january-2024"
@@ -96,12 +95,4 @@ include_archived = false
 order    = "newest"
 skip_tls_verify = false
 
-# [[sources]]
-# name     = "webdav"
-# enabled  = false
-# url      = "https://nextcloud.local/remote.php/dav/files/admin/Photos"
-# username = "admin"
-# password = "password"
-# # token     = "bearer-token"
-# recursive = true
-# skip_tls_verify = false
+# WebDAV and local-directory sources are not implemented by the shipped host.

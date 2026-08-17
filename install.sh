@@ -12,11 +12,11 @@
 #
 # QUICK START
 #   Display only (server runs elsewhere):
-#     sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
+#     sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8190
 #   Everything on this Pi (Pi Zero 2 W / Pi 4+; needs 64-bit or armv7):
 #     sudo ./install.sh --mode all \
 #          --photoprism-url http://photoprism.local:2342 \
-#          --photoprism-user admin --photoprism-pass 'secret'
+#          --photoprism-user frame-viewer --photoprism-pass-file /root/picogallery-app-password
 #
 # Photos come exclusively from a PhotoPrism backend over the network; the Pi
 # never scans a local photo directory. One on-device surface:
@@ -46,6 +46,7 @@ readonly KIOSK_ASSETS="$REPO_ROOT/kiosk/cog"
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
 readonly STATE_DIR="/var/lib/picogallery"
+readonly RUNTIME_DIR="/opt/picogallery"
 readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
 readonly SERVER_USER="picogallery"
@@ -56,7 +57,7 @@ readonly SERVER_PORT="8190"
 MODE="auto"                 # auto | kiosk | server | all
 SERVER_URL=""               # kiosk target; defaults to localhost in server modes
 SOURCE_KIND="photoprism"    # photoprism | webdav  (no local directory source)
-PP_URL="" PP_USER="" PP_PASS=""
+PP_URL="" PP_USER="" PP_PASS="" PP_PASS_FILE=""
 WEBDAV_URL="" WEBDAV_USER="" WEBDAV_PASS=""
 BLANK_ON="" BLANK_OFF=""
 ASSUME_YES=0
@@ -67,7 +68,7 @@ VERBOSE=0
 # Detected at runtime
 ARCH="" MODEL="" IS_PI=0 RAM_MB=0 DISK_FREE_MB=0 OS_ID="" OS_CODENAME="" BOOT_CFG=""
 NODE_OK_ARCH=0              # 1 if this arch can run Node
-RUN_USER="" RUN_GROUP=""    # account the server service runs as (repo owner)
+RUN_USER="" RUN_GROUP=""    # dedicated account the server service runs as
 MODE_WANTS_SERVER=0 MODE_WANTS_KIOSK=0
 REBOOT_REQUIRED=0
 
@@ -134,6 +135,7 @@ confirm() {
 
 valid_url()  { [[ "$1" =~ ^https?://[^[:space:]]+$ ]]; }
 valid_hhmm() { [[ "$1" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; }
+toml_string() { node -e 'process.stdout.write(JSON.stringify(process.argv[1]))' "$1"; }
 
 # ── Usage ────────────────────────────────────────────────────────────────────
 usage() {
@@ -155,6 +157,7 @@ Options:
   --photoprism-url <url>    PhotoPrism base URL (required for --source photoprism)
   --photoprism-user <u>     PhotoPrism username
   --photoprism-pass <p>     PhotoPrism password (or app password)
+  --photoprism-pass-file <f> Read the PhotoPrism app password from a protected file
   --webdav-url <url>        WebDAV base URL
   --webdav-user <u>         WebDAV username
   --webdav-pass <p>         WebDAV password
@@ -167,9 +170,9 @@ Options:
   -h, --help                This help
 
 Examples:
-  sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8188
+  sudo ./install.sh --mode kiosk --server-url http://192.168.1.50:8190
   sudo ./install.sh --mode all \\
-       --photoprism-url http://photoprism.local:2342 --photoprism-user admin --photoprism-pass secret -y
+       --photoprism-url http://photoprism.local:2342 --photoprism-user frame-viewer --photoprism-pass-file /root/picogallery-app-password -y
 EOF
 }
 
@@ -182,7 +185,8 @@ parse_args() {
       --source)          SOURCE_KIND="${2:?}"; shift 2 ;;
       --photoprism-url)  PP_URL="${2:?}"; shift 2 ;;
       --photoprism-user) PP_USER="${2:?}"; shift 2 ;;
-      --photoprism-pass) PP_PASS="${2:?}"; shift 2 ;;
+      --photoprism-pass) PP_PASS="${2:?}"; warn "--photoprism-pass can leak through shell history; prefer --photoprism-pass-file"; shift 2 ;;
+      --photoprism-pass-file) PP_PASS_FILE="${2:?}"; shift 2 ;;
       --webdav-url)      WEBDAV_URL="${2:?}"; shift 2 ;;
       --webdav-user)     WEBDAV_USER="${2:?}"; shift 2 ;;
       --webdav-pass)     WEBDAV_PASS="${2:?}"; shift 2 ;;
@@ -247,6 +251,12 @@ resolve_mode() {
 
   case "$MODE" in kiosk|server|all) ;; *) die "Invalid --mode '$MODE'";; esac
 
+  if [[ -n "$PP_PASS_FILE" ]]; then
+    [[ -r "$PP_PASS_FILE" ]] || die "Cannot read --photoprism-pass-file: $PP_PASS_FILE"
+    PP_PASS="$(<"$PP_PASS_FILE")"
+    [[ "$PP_PASS" != *$'\n'* && "$PP_PASS" != *$'\r'* ]] || die "Password file must contain exactly one line"
+  fi
+
   local wants_server=0 wants_kiosk=0
   [[ "$MODE" == server || "$MODE" == all ]] && wants_server=1
   [[ "$MODE" == kiosk  || "$MODE" == all ]] && wants_kiosk=1
@@ -256,6 +266,9 @@ resolve_mode() {
   fi
   if [[ "$wants_server" -eq 1 && ! -f "$REPO_ROOT/package.json" ]]; then
     die "Server mode must run from a full repo checkout (no package.json at $REPO_ROOT)."
+  fi
+  if [[ "$wants_server" -eq 1 && "$SOURCE_KIND" != "photoprism" ]]; then
+    die "The shipped server supports only --source photoprism; WebDAV is not implemented."
   fi
 
   # Frame URL: local server in server modes; explicit in kiosk-only.
@@ -305,7 +318,7 @@ preflight() {
     die "Low disk space: ${DISK_FREE_MB} MB free, need ~${need_mb} MB. Expand the filesystem (raspi-config) or free space."
   fi
 
-  # Network: apt + NodeSource + npm registry must be reachable.
+  # Network: apt + the signed NodeSource repository must be reachable.
   if ! run_quiet getent hosts deb.debian.org && ! ping -c1 -W2 deb.debian.org >/dev/null 2>&1; then
     warn "Could not resolve deb.debian.org — check networking/DNS before installing packages."
   fi
@@ -380,12 +393,14 @@ step_swap() {
     if [[ -f /etc/dphys-swapfile ]]; then
       # Remember the pre-install size so uninstall restores the user's value,
       # not a hardcoded default.
-      local orig_size
-      orig_size="$(grep -E '^#?CONF_SWAPSIZE=' /etc/dphys-swapfile 2>/dev/null | head -1 | cut -d= -f2 || true)"
-      state_set DPHYS_ORIG_SWAPSIZE "${orig_size:-100}"
-      run sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
-      run dphys-swapfile setup
-      run dphys-swapfile swapon
+      if ! grep -q "^CONF_SWAPSIZE=1024" /etc/dphys-swapfile 2>/dev/null; then
+        local orig_size
+        orig_size="$(grep -E '^#?CONF_SWAPSIZE=' /etc/dphys-swapfile 2>/dev/null | head -1 | cut -d= -f2 || true)"
+        state_set DPHYS_ORIG_SWAPSIZE "${orig_size:-100}"
+        run sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+        run dphys-swapfile setup
+        run dphys-swapfile swapon
+      fi
     fi
   else
     local sf=/var/swap.picogallery
@@ -405,7 +420,7 @@ step_swap() {
   ok "Swap ready (build + runtime cushion)."
 }
 
-# Install Node (NodeSource) for arm64/armv7/x86_64; gate ARMv6 out.
+# Install Node from NodeSource's signed APT repository for supported arches.
 step_node() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
 
@@ -414,12 +429,21 @@ step_node() {
     ok "Node $(node -v) already installed"
   else
     [[ "$NODE_OK_ARCH" -eq 1 ]] || die "No Node $NODE_MAJOR build for arch $ARCH."
-    info "Installing Node $NODE_MAJOR from NodeSource"
-    run bash -c "curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x -o /tmp/nodesource_setup.sh"
-    run bash /tmp/nodesource_setup.sh
+    info "Configuring the signed NodeSource Node $NODE_MAJOR repository"
+    local key_download="/tmp/picogallery-nodesource-key-$$.gpg"
+    run curl --proto '=https' --tlsv1.2 -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "$key_download"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      gpg --batch --yes --dearmor --output /usr/share/keyrings/nodesource.gpg "$key_download"
+      printf 'deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_%s.x nodistro main\n' "$NODE_MAJOR" \
+        >/etc/apt/sources.list.d/nodesource.list
+      chmod 0644 /usr/share/keyrings/nodesource.gpg /etc/apt/sources.list.d/nodesource.list
+    fi
+    run rm -f "$key_download"
+    APT_REFRESHED=0
     apt_install nodejs
-    run rm -f /tmp/nodesource_setup.sh
     have node || die "Node install failed."
+    [[ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge "$NODE_MAJOR" ]] || \
+      die "NodeSource installed an unsupported Node version: $(node -v 2>/dev/null || echo unknown)"
     ok "Installed Node $(node -v)"
   fi
 }
@@ -500,7 +524,18 @@ step_server_config() {
     # cannot autologin, the public-mode masquerade turns off, and the kiosk
     # lands on the SIGN IN screen after every reinstall.
     if [[ "$SOURCE_KIND" == "photoprism" && -z "$PP_PASS" ]]; then
-      info "Config exists and no --photoprism-pass was given — keeping existing config (credentials preserved)."
+      info "Config exists and no --photoprism-pass was given — keeping existing credentials."
+      # Existing installations may listen externally without gateway auth. The
+      # host now fails closed in that state, so migrate them before returning.
+      local existing_host existing_token
+      existing_host="$(awk '/^\[http\]/{in_http=1;next} /^\[/{in_http=0} in_http && /^host[[:space:]]*=/{line=$0; sub(/^[^=]*=[[:space:]]*\"/,"",line); sub(/\".*/,"",line); print line; exit}' "$cfg")"
+      existing_token="$(awk '/^\[http\]/{in_http=1;next} /^\[/{in_http=0} in_http && /^auth_token[[:space:]]*=/{sub(/^[^=]*=[[:space:]]*\"/,""); sub(/\"[[:space:]]*$/,""); print; exit}' "$cfg")"
+      if [[ "$existing_host" != "127.0.0.1" && "$existing_host" != "::1" && "$existing_host" != "localhost" ]] && [[ ${#existing_token} -lt 24 ]]; then
+        local generated_token
+        generated_token="$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))')"
+        sed -i "/^\[http\]/a auth_token = $(toml_string "$generated_token")" "$cfg"
+        warn "Added a gateway auth token to the existing externally-bound server config. Remote kiosk URLs must include ?token=<value from [http].auth_token>."
+      fi
       return 0
     fi
     if ! confirm "Config exists at $cfg — overwrite?"; then
@@ -520,9 +555,9 @@ step_server_config() {
 [[sources]]
 name             = "photoprism"
 enabled          = true
-url              = "$PP_URL"
-username         = "$PP_USER"
-password         = "$PP_PASS"
+url              = $(toml_string "$PP_URL")
+username         = $(toml_string "$PP_USER")
+app_password     = $(toml_string "$PP_PASS")
 include_private  = false
 include_archived = false
 EOF
@@ -544,11 +579,20 @@ EOF
     *) die "Invalid --source '$SOURCE_KIND' (photoprism|webdav)";;
   esac
 
+  local http_host="127.0.0.1" auth_line=""
+  if [[ "$MODE" == "server" ]]; then
+    http_host="0.0.0.0"
+    local gateway_token
+    gateway_token="$(node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))')"
+    auth_line="auth_token = $(toml_string "$gateway_token")"
+  fi
+
   if [[ "$DRY_RUN" -eq 1 ]]; then
     printf '%s[dry-run]%s would write %s\n' "$C_DIM" "$C_RESET" "$cfg"
   else
-    umask 027
-    cat >"$cfg" <<EOF
+    (
+      umask 027
+      cat >"$cfg" <<EOF
 # PicoGallery V2 — generated by install.sh on $(_ts). Edit and restart the service.
 [display]
 slide_duration_secs = 10
@@ -564,32 +608,40 @@ dir    = "$CACHE_DIR"
 max_mb = 512
 
 [http]
-host = "0.0.0.0"
+host = "$http_host"
 port = $SERVER_PORT
+$auth_line
 
 $source_block
 EOF
-    chmod 0640 "$cfg"
+      chmod 0640 "$cfg"
+    )
   fi
   ok "Wrote $cfg (source: $SOURCE_KIND)"
 }
 
-# Run the server as the *owner of the repo*, not a fresh system user: a system
-# user can't traverse a clone under /home/<user> (plain Unix dir perms), so it
-# couldn't read server/dist. The repo owner always can. Cache + config are made
-# readable/writable to that account.
+# Install a minimal, root-owned runtime outside the checkout and run it under a
+# dedicated non-login account. This avoids granting a network service access to
+# the developer's home directory or recursively changing checkout ownership.
 step_server_user() {
   [[ "$MODE_WANTS_SERVER" -eq 1 ]] || return 0
-  step "Server run-user + cache"
-  RUN_USER="$(stat -c '%U' "$REPO_ROOT" 2>/dev/null || true)"
-  [[ -z "$RUN_USER" || "$RUN_USER" == "UNKNOWN" ]] && RUN_USER="${SUDO_USER:-root}"
-  RUN_GROUP="$(id -gn "$RUN_USER" 2>/dev/null || echo "$RUN_USER")"
-  info "Server will run as '$RUN_USER:$RUN_GROUP' (owner of $REPO_ROOT)"
-  
-  # Ensure the entire repo root is owned by the run-user so the service can read it
-  if [[ "$DRY_RUN" -ne 1 ]] && [[ "$RUN_USER" != "root" ]]; then
-    info "Ensuring all files in $REPO_ROOT are owned by $RUN_USER:$RUN_GROUP"
-    chown -R "$RUN_USER:$RUN_GROUP" "$REPO_ROOT"
+  step "Dedicated server runtime + cache"
+  RUN_USER="$SERVER_USER"
+  RUN_GROUP="$SERVER_USER"
+  if ! id "$SERVER_USER" >/dev/null 2>&1; then
+    run useradd --system --user-group --home-dir /nonexistent --shell /usr/sbin/nologin "$SERVER_USER"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    info "[dry-run] would install the minimal runtime at $RUNTIME_DIR"
+  else
+    rm -rf "$RUNTIME_DIR/scripts" "$RUNTIME_DIR/config" "$RUNTIME_DIR/frontend"
+    install -d -o root -g root -m 0755 "$RUNTIME_DIR/scripts" "$RUNTIME_DIR/config" "$RUNTIME_DIR/frontend"
+    cp -a "$REPO_ROOT/scripts/." "$RUNTIME_DIR/scripts/"
+    cp -a "$REPO_ROOT/config/." "$RUNTIME_DIR/config/"
+    cp -a "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/static" "$REPO_ROOT/frontend/dist" "$RUNTIME_DIR/frontend/"
+    chown -R root:root "$RUNTIME_DIR"
+    chmod -R go-w "$RUNTIME_DIR"
   fi
 
   run install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 0750 "$CACHE_DIR"
@@ -662,14 +714,26 @@ Environment=NODE_ENV=production
 Environment=PICO_CONFIG=$CONFIG_DIR/config.toml
 Environment=PICO_PP_PORT=8190
 $pp_runtime_env
-WorkingDirectory=$REPO_ROOT
-ExecStart=$node_bin $REPO_ROOT/scripts/photoprism-host.mjs
+WorkingDirectory=$RUNTIME_DIR
+ExecStart=$node_bin $RUNTIME_DIR/scripts/photoprism-host.mjs
 Restart=always
 RestartSec=3
 # Hardening (read-only: serves PhotoPrism UI + proxies to the backend).
 NoNewPrivileges=true
 ProtectSystem=strict
+ProtectHome=read-only
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+TasksMax=64
+MemoryMax=192M
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target
@@ -898,7 +962,7 @@ EOF
   run visudo -cf /etc/sudoers.d/picogallery-kiosk
 
   # All-mode: the kiosk targets the local server, so order it after the server.
-  # (The launcher also waits on /health, so this just makes the common case clean.)
+  # (The launcher also waits on /api/v1/health, so this just makes the common case clean.)
   if [[ "$MODE" == "all" && "$DRY_RUN" -eq 0 ]]; then
     install -d -m 0755 /etc/systemd/system/picogallery-kiosk.service.d
     cat >/etc/systemd/system/picogallery-kiosk.service.d/10-after-server.conf <<EOF
@@ -1081,8 +1145,11 @@ step_verify() {
     fi
   fi
 
-  [[ "$failures" -eq 0 ]] || warn "$failures check(s) failed — see $LOG_FILE and the hints above."
-  return 0
+  if [[ "$failures" -ne 0 ]]; then
+    err "$failures required verification check(s) failed — see $LOG_FILE and the hints above."
+    return 1
+  fi
+  ok "All required installation checks passed."
 }
 
 # ── Uninstall ────────────────────────────────────────────────────────────────
@@ -1130,7 +1197,7 @@ do_uninstall() {
     run sed -i '\#/var/swap.picogallery#d' /etc/fstab 2>/dev/null || true
     run rm -f /var/swap.picogallery
   fi
-  run rm -rf "$CONFIG_DIR" "$CACHE_DIR"
+  run rm -rf "$CONFIG_DIR" "$CACHE_DIR" "$RUNTIME_DIR"
   run rm -f "$LOG_FILE"
   id "$KIOSK_USER" >/dev/null 2>&1 && run userdel -r "$KIOSK_USER" 2>/dev/null || true
   id "$SERVER_USER" >/dev/null 2>&1 && run userdel "$SERVER_USER" 2>/dev/null || true

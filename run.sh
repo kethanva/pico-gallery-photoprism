@@ -25,14 +25,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
-# ── Locate Node 20+ ──────────────────────────────────────────────────────────
+# ── Locate Node 22+ ──────────────────────────────────────────────────────────
 pick_node() {
   if command -v node >/dev/null 2>&1; then
     local major
     major="$(node -e 'process.stdout.write(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
-    if [ "$major" -ge 20 ]; then return 0; fi
+    if [ "$major" -ge 22 ]; then return 0; fi
   fi
-  for nvmdir in "$HOME/.nvm/versions/node"/v{22,21,20}.*/bin; do
+  for nvmdir in "$HOME/.nvm/versions/node"/v22.*/bin; do
     if [ -x "$nvmdir/node" ]; then
       export PATH="$nvmdir:$PATH"
       return 0
@@ -44,7 +44,7 @@ pick_node() {
       return 0
     fi
   done
-  echo "ERROR: Node 20+ required. Install via nvm: nvm install 22" >&2
+  echo "ERROR: Node 22+ required. Install via nvm: nvm install 22" >&2
   exit 1
 }
 pick_node

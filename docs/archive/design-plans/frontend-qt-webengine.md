@@ -1,6 +1,10 @@
-Project: Standalone Qt WebEngine Kiosk Client for PhotoPrism
+# Archived design: standalone Qt WebEngine kiosk client
 
-Objective
+> **Archive notice (2026-08-08):** Superseded proposal. The current product
+> uses Cage + Cog/WPE WebKit and a minimal first-party display client. This file
+> is retained only as design history and is not implementation guidance.
+
+## Objective
 
 Build a standalone kiosk application that reuses the existing PhotoPrism frontend without rewriting it.
 

@@ -1,5 +1,8 @@
 # PicoGallery V2 — Pi Zero 2 W Optimized Client Features Backlog
 
+> **Archive notice (2026-08-08):** Historical idea backlog. Items are not
+> approved scope unless they are promoted into root `spec.md` and `plan.md`.
+
 This backlog outlines the **top 20 lightweight, memory-optimized, and CPU-efficient features** designed specifically for running the PicoGallery browser client on resource-constrained hardware like the **Raspberry Pi Zero 2 W** (512MB RAM, shared GPU, underclocked quad-core CPU). 
 
 Rather than proposing resource-heavy widgets, these features focus on **reducing RAM overhead, preventing Out-Of-Memory (OOM) browser crashes, minimizing CPU wakeups, and offloading processing to the GPU compostior.**

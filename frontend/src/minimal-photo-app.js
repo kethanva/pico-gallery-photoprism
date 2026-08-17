@@ -68,6 +68,7 @@ const slidePrefetch = {
   index: -1,
   url: "",
   image: null,
+  timer: null,
 };
 
 const touch = {
@@ -145,7 +146,7 @@ function prefetchThumbUrls(urls) {
     }
   };
   const workers = Math.min(concurrency, urls.length);
-  void Promise.all(Array.from({ length: workers }, runWorker));
+  void Promise.all(Array.from({ length: workers }, runWorker)).catch((e) => console.error("Prefetch error:", e));
 }
 
 function assignThumbPriority(img, index) {
@@ -412,7 +413,11 @@ function createPhotoCard(photo, index) {
   // The grid is a capped virtual window (~maxGridRows); lazy + content-visibility
   // made WPE load thumbs one-by-one as each card entered view.
   img.loading = "eager";
-  img.src = photoThumbSrc(photo);
+  if (gridImagesSuspended) {
+    img.dataset.pgSavedSrc = photoThumbSrc(photo);
+  } else {
+    img.src = photoThumbSrc(photo);
+  }
   assignThumbPriority(img, index);
   card.appendChild(img);
   return card;
@@ -471,8 +476,28 @@ function pruneTopRowsIfNeeded() {
   const spacerDelta = rowsToRemove * rowHeight;
   gridWindow.topSpacerPx += spacerDelta;
   updateTopSpacer();
-  window.scrollBy(0, -spacerDelta);
+  if (!isPreviewOpen()) {
+    window.scrollBy(0, -spacerDelta);
+  }
   pruneCooldownUntil = Date.now() + getKiosk().pruneCooldownMs;
+}
+
+function pruneBottomRowsIfNeeded() {
+  const grid = state.elements.grid;
+  const ncol = getColumnCount();
+  const maxCards = getKiosk().maxGridRows * ncol;
+  const cardNodes = grid.querySelectorAll(".pg-card");
+  const cardCount = cardNodes.length;
+  if (cardCount <= maxCards) {
+    return;
+  }
+  const excess = cardCount - maxCards;
+  const rowsToRemove = Math.ceil(excess / ncol);
+  const removeCount = rowsToRemove * ncol;
+  for (let i = 0; i < removeCount; i += 1) {
+    const card = cardNodes[cardCount - 1 - i];
+    if (card) removeCardNode(card);
+  }
 }
 
 function runPruneTopRows() {
@@ -507,7 +532,10 @@ function restoreTopRowsIfNeeded() {
   gridWindow.startIndex = start;
   gridWindow.topSpacerPx = Math.max(0, gridWindow.topSpacerPx - rowsRestored * rowHeight);
   updateTopSpacer();
-  window.scrollBy(0, rowsRestored * rowHeight);
+  if (!isPreviewOpen()) {
+    window.scrollBy(0, rowsRestored * rowHeight);
+  }
+  pruneBottomRowsIfNeeded();
 }
 
 function scheduleRestoreTopRows() {
@@ -683,6 +711,10 @@ function closePreview() {
 }
 
 function cancelSlidePrefetch() {
+  if (slidePrefetch.timer) {
+    clearTimeout(slidePrefetch.timer);
+    slidePrefetch.timer = null;
+  }
   if (slidePrefetch.image) {
     slidePrefetch.image.onload = null;
     slidePrefetch.image.onerror = null;
@@ -705,10 +737,19 @@ function prefetchSlideAt(index) {
   cancelSlidePrefetch();
   slidePrefetch.index = index;
   slidePrefetch.url = url;
-  const img = new Image();
-  img.decoding = "async";
-  slidePrefetch.image = img;
-  img.src = url;
+  // Debounce rapid keyboard/swipe navigation so stale full-size requests do not
+  // compete with the currently visible slide on constrained Wi-Fi/WPE devices.
+  slidePrefetch.timer = setTimeout(() => {
+    slidePrefetch.timer = null;
+    if (slidePrefetch.index !== index || slidePrefetch.url !== url) {
+      return;
+    }
+    const img = new Image();
+    img.decoding = "async";
+    img.fetchPriority = "low";
+    slidePrefetch.image = img;
+    img.src = url;
+  }, 150);
 }
 
 function scheduleSlidePrefetch() {
@@ -1119,7 +1160,7 @@ function resetAndReload() {
   resetRuntimeState();
   kioskBootPending = false;
   if (state.elements.grid) {
-    state.elements.grid.querySelectorAll(".pg-card").forEach((node) => node.remove());
+    state.elements.grid.querySelectorAll(".pg-card").forEach(removeCardNode);
   }
   closePreview();
   setError("");
@@ -1375,8 +1416,8 @@ export async function bootMinimalPhotoApp(root) {
   if (!root) {
     return;
   }
-  clearBootSplash();
   await ensureRuntimeConfig();
+  clearBootSplash();
   resetKioskConfig();
   $fullscreen.setVirtualOnly(getKiosk().virtualFullscreenOnly);
   resetRuntimeState();

@@ -1,4 +1,8 @@
-# Performance & Security Optimizations
+# Archived performance and security optimizations
+
+> **Archive notice (2026-08-08):** This document describes the superseded
+> Fastify/sharp implementation, not the current PhotoPrism gateway. It is kept
+> only for historical rationale.
 
 Latest optimizations for Pi Zero 2 W (512 MB RAM, VideoCore IV GPU) and security hardening.
 

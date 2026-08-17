@@ -1,77 +1,46 @@
-# API (v1)
+# Display Host HTTP Contract
 
-Base path: `/api/v1`. All responses are JSON unless noted. Errors use a
-consistent envelope:
+The host exposes a narrow kiosk contract, not the full PhotoPrism API.
 
-```json
-{ "error": { "code": "NOT_FOUND", "message": "Photo not found" } }
+## Authentication
+
+Loopback-only installations may omit gateway authentication. External binds
+must configure `[http].auth_token` or `PICO_PP_AUTH_TOKEN` with at least 24
+characters. A kiosk initially opens:
+
+```text
+http://frame-host:8190/library/photos?token=<gateway-token>
 ```
 
-If `http.authToken` is configured, every `/api/*` request must send
-`Authorization: Bearer <token>` or receive `401`.
+The host responds with a `303`, stores the token in an HttpOnly SameSite cookie,
+and removes it from the visible URL. API clients may instead send
+`Authorization: Bearer <gateway-token>`.
 
-## Health
+Health endpoints deliberately do not require the gateway token so local service
+managers can probe them. Do not expose them as an Internet monitoring surface.
 
-| Method | Path        | Notes                                                        |
-|--------|-------------|--------------------------------------------------------------|
-| GET    | `/health`   | `{ "status": "ok", "ts": "…" }` once the process is up.      |
-| GET    | `/ready`    | `200 { status:"ready", total }` or `503` until playlist filled.|
+## Local endpoints
 
-## Slideshow
+| Method | Path | Result |
+|---|---|---|
+| GET | `/api/v1/health` | Process liveness and uptime. |
+| GET | `/api/v1/ready` | `200` only after a recent authenticated PhotoPrism probe; otherwise `503`. |
+| GET | `/api/v1/metrics` | Gateway-authenticated counters, readiness, uptime, and RSS. |
+| GET | `/config.json` | Resolved, non-secret kiosk configuration. |
+| GET | `/library/photos` | Minimal display SPA history fallback. |
 
-| Method | Path                  | Notes                                              |
-|--------|-----------------------|----------------------------------------------------|
-| GET    | `/slideshow/state`    | Current `{ index, total, paused, displayOn, photo, startedAt }`. |
-| GET    | `/events`             | **SSE** stream. Emits `state` (and `display`) events. |
+## Allowlisted PhotoPrism reads
 
-SSE example:
+| Method | Path | Purpose |
+|---|---|---|
+| GET/HEAD | `/api/v1/config` | Runtime preview token and public display configuration. |
+| GET/HEAD | `/api/v1/photos?...` | Paginated photo metadata for the grid/slideshow. |
+| GET/HEAD | `/api/v1/t/:hash/:token/fit_720` | Thumbnail/preview bytes. |
+| GET/HEAD | `/api/v1/t/:hash/:token/fit_1280` | Optional higher-resolution preview bytes. |
 
-```
-event: state
-data: {"index":1,"total":9,"paused":false,"photo":{"id":"photoprism:…","filename":"…",…}}
-```
+Every other `/api/*` route returns `403`. Upstream session and administrator
+objects are never exposed. Non-GET/HEAD requests are rejected.
 
-## Control
-
-| Method | Path        | Body                                                       |
-|--------|-------------|------------------------------------------------------------|
-| POST   | `/control`  | `{ "action": "next" \| "prev" \| "pause" \| "resume" \| "toggle_pause" \| "goto", "id"?: string }` |
-
-Acks with `{ "ok": true }` and broadcasts the new state to all SSE clients via a
-`state` event. Actions are local slideshow navigation only (read-only viewer; the
-PhotoPrism backend is never modified). `goto` with an unknown `id` → `404`; `goto`
-requires `id`.
-
-## Photos
-
-| Method | Path                     | Notes                                            |
-|--------|--------------------------|--------------------------------------------------|
-| GET    | `/photos?offset&limit`   | `{ items, total, offset, limit }` page of the playlist. |
-| GET    | `/photos/:id/meta`       | One `PhotoMeta`, or `404`. `id` is URL-encoded.  |
-| GET    | `/photos/:id/image?w&h&fit&fmt` | Resized image bytes.                      |
-
-Image query params: `w`, `h` (target box), `fit` = `cover` \| `contain`,
-`fmt` = `auto` \| `webp` \| `jpeg` \| `avif` (`auto` negotiates from `Accept`).
-
-Responses:
-- `200` with `ETag`, `Cache-Control: public, max-age=31536000, immutable`, and
-  `X-Cache: HIT|MISS`.
-- `304` when `If-None-Match` matches the `ETag`.
-- `413 PAYLOAD_TOO_LARGE` when an original exceeds the MB / megapixel guard.
-- `502 SOURCE_ERROR` when the source fetch or decode fails.
-- `404 NOT_FOUND` / `503 UNAVAILABLE` as applicable.
-
-## Sources & auth
-
-| Method | Path                   | Notes                                              |
-|--------|------------------------|----------------------------------------------------|
-| GET    | `/sources`             | `[{ name, displayName, auth, photoCount }]`.       |
-| POST   | `/sources/:name/auth`  | Triggers auth; returns `{ status, message?, pollSecs?, error? }`. |
-
-`auth` / `status` is one of `authenticated` \| `pending` \| `unauthenticated`.
-
-## Config
-
-| Method | Path              | Notes                          |
-|--------|-------------------|--------------------------------|
-| GET    | `/config`         | Effective display settings.    |
+Upstream authentication failure returns `503` with `Retry-After`; upstream
+network failure returns `502`. Malformed request URLs return `400` without
+terminating the process.

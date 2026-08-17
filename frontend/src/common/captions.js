@@ -418,7 +418,7 @@ class PhotoSwipeDynamicCaption {
       return;
     }
 
-    if (slide.dynamicCaption.element.innerHTML === captionHTML) {
+    if (slide.dynamicCaption.element.innerHTML === captionHTML) { // security-reviewed: equality check only; no DOM write.
       return;
     }
 

@@ -26,6 +26,7 @@ set -Eeuo pipefail
 readonly CONFIG_DIR="/etc/picogallery"
 readonly CACHE_DIR="/var/cache/picogallery"
 readonly STATE_DIR="/var/lib/picogallery"
+readonly RUNTIME_DIR="/opt/picogallery"
 readonly STATE_FILE="$STATE_DIR/state"
 readonly LOG_FILE="/var/log/picogallery-install.log"
 readonly KIOSK_USER="picokiosk"
@@ -157,7 +158,7 @@ run rm -rf "/home/$KIOSK_USER/.cache" "/home/$KIOSK_USER/.local" "/home/$KIOSK_U
 # 6. Configuration, cache, install-state manifest, install log, and the
 #    installer's NodeSource bootstrap script if a failed run left it behind.
 info "Removing configuration, cache, state, and install log..."
-run rm -rf "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR"
+run rm -rf "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR" "$RUNTIME_DIR"
 run rm -f "$LOG_FILE" /tmp/nodesource_setup.sh
 
 # 7. Users. WPE WebKit child processes (WPEWebProcess/WPENetworkProcess) can
@@ -323,7 +324,7 @@ check_gone "binaries/sudoers/udev rule" \
   /usr/local/bin/picogallery-kiosk /usr/local/bin/pico-display-power \
   /etc/sudoers.d/picogallery-kiosk "$SEAT_UDEV_RULE"
 check_gone "config/cache/state/log" \
-  "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR" "$LOG_FILE"
+  "$CONFIG_DIR" "$CACHE_DIR" "$STATE_DIR" "$RUNTIME_DIR" "$LOG_FILE"
 check_gone "swapfile" /var/swap.picogallery
 check_gone "kiosk home directory" "/home/$KIOSK_USER"
 if id "$KIOSK_USER" >/dev/null 2>&1; then

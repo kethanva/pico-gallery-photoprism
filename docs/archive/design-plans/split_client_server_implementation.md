@@ -1,5 +1,9 @@
 # Implementation Plan: Split Client-Server Architecture for PicoGallery
 
+> **Archive notice (2026-08-08):** Rejected historical architecture. It is not
+> the active plan and must not be used as implementation guidance for the
+> current single-source PhotoPrism appliance.
+
 This plan details the implementation of a robust **Split Client-Server Architecture** for PicoGallery. The heavy backend logic (directory scanning, third-party plugin syncing, database caching, web remote admin, and image resizing) runs on a **Raspberry Pi 4 (Server)**, while a lightweight rendering loop runs on a **Raspberry Pi Zero 2 W (Client)**.
 
 ---
