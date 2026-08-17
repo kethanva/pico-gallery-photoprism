@@ -60,4 +60,45 @@ describe('structural PicoGallery config loader', () => {
     assert.throws(() => parsePicoConfig('[safe.__proto__]\npolluted = true'), /prototype pollution vector blocked/);
     assert.throws(() => parsePicoConfig('[[__proto__]]\npolluted = true'), /prototype pollution vector blocked/);
   });
+
+  it('parses single-quoted strings and preserves literal hashes inside quotes', () => {
+    const config = parsePicoConfig(`
+      [http]
+      auth_token = 'secret-token-with-single-quotes-24chars'
+      host = '127.0.0.1' # inline comment
+
+      [[sources]]
+      name = 'photoprism'
+      url = 'https://photos.example.test/app#gallery' # comment with hash
+      username = 'single-user'
+      password = 'p@ss#word!'
+    `);
+    assert.equal(config.http.auth_token, 'secret-token-with-single-quotes-24chars');
+    assert.equal(config.http.host, '127.0.0.1');
+    const source = selectPhotoPrismSource(config);
+    assert.equal(source.url, 'https://photos.example.test/app#gallery');
+    assert.equal(source.password, 'p@ss#word!');
+  });
+
+  it('selectPhotoPrismSource ignores sources with enabled = false', () => {
+    const config = parsePicoConfig(`
+      [[sources]]
+      name = "photoprism"
+      enabled = false
+      url = "https://disabled.example.test"
+
+      [[sources]]
+      name = "photoprism"
+      enabled = true
+      url = "https://active.example.test"
+    `);
+    assert.equal(selectPhotoPrismSource(config).url, 'https://active.example.test');
+  });
+
+  it('rejects nested array tables with an explicit error', () => {
+    assert.throws(
+      () => parsePicoConfig('[[sources.nested]]\nname = "invalid"'),
+      /nested array tables are not supported/,
+    );
+  });
 });

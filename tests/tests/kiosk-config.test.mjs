@@ -39,4 +39,46 @@ background_fill_target = 0
     assert.equal(cfg.slideDuration, 12);
     assert.equal(cfg.thumbLoadConcurrency, 4);
   });
+
+  it('supports single-quoted values in [kiosk] section', () => {
+    const toml = `
+[kiosk]
+profile = 'pi_zero_2'
+preview_size = 'fit_1280'
+`;
+    const overrides = parseKioskTomlOverrides(toml);
+    assert.equal(overrides.profile, 'pi_zero_2');
+    assert.equal(overrides.previewSize, 'fit_1280');
+  });
+
+  it('supports environment variable overrides for profile parameters', () => {
+    const env = {
+      PICO_KIOSK_PROFILE: 'quality',
+      PICO_KIOSK_PREVIEW_SIZE: 'fit_1280',
+      PICO_KIOSK_THUMB_SIZE: 'fit_720',
+      PICO_KIOSK_MAX_GRID_ROWS: '16',
+      PICO_KIOSK_BACKGROUND_FILL_TARGET: '50',
+    };
+    const cfg = buildKioskConfig({ env });
+    assert.equal(cfg.profile, 'quality');
+    assert.equal(cfg.previewSize, 'fit_1280');
+    assert.equal(cfg.thumbSize, 'fit_720');
+    assert.equal(cfg.maxGridRows, 16);
+    assert.equal(cfg.backgroundFillTarget, 50);
+  });
+
+  it('clamps extreme and negative values to safe profile bounds', () => {
+    const toml = `
+[kiosk]
+max_grid_rows = 999
+slide_duration = 1
+restore_row_batch = 0
+thumb_load_concurrency = 99
+`;
+    const cfg = buildKioskConfig({ toml });
+    assert.equal(cfg.maxGridRows, 24);
+    assert.equal(cfg.slideDuration, 3);
+    assert.equal(cfg.restoreRowBatch, 1);
+    assert.equal(cfg.thumbLoadConcurrency, 8);
+  });
 });

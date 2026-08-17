@@ -360,6 +360,38 @@ describe('photoprism-host — gateway authentication', { skip: !existsSync(ASSET
     assert.ok(body.requests >= 1);
     assert.ok(body.rssBytes > 0);
   });
+
+  it('handles HEAD request for token exchange with 303 redirect and set-cookie', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/library/photos?token=${token}`, {
+      method: 'HEAD',
+      redirect: 'manual',
+    });
+    assert.equal(res.status, 303);
+    assert.ok(res.headers.get('set-cookie')?.includes('pico_auth='));
+  });
+
+  it('gracefully handles malformed percent-encoded cookie without crashing', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/library/photos`, {
+      headers: { cookie: 'pico_auth=%ZZmalformed' },
+    });
+    assert.equal(res.status, 401);
+  });
+
+  it('strictly enforces ALLOWED_API_ROUTES regex pinned thumbnail sizes', async () => {
+    const fit720 = await fetch(`http://127.0.0.1:${port}/api/v1/t/abc123/token/fit_720`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.notEqual(fit720.status, 403);
+    const fit1280 = await fetch(`http://127.0.0.1:${port}/api/v1/t/abc123/token/fit_1280`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.notEqual(fit1280.status, 403);
+
+    const fit2048 = await fetch(`http://127.0.0.1:${port}/api/v1/t/abc123/token/fit_2048`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(fit2048.status, 403);
+  });
 });
 
 describe('photoprism-host — unsafe external startup', () => {

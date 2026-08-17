@@ -58,8 +58,8 @@ printf '200'
   return { root, runtime, bin, proc, dev, etc };
 }
 
-function runCanary(f, extraEnv = {}) {
-  return spawnSync(CANARY, [], {
+function runCanary(f, extraEnv = {}, args = []) {
+  return spawnSync(CANARY, args, {
     encoding: 'utf8',
     env: {
       ...process.env,
@@ -89,5 +89,23 @@ describe('Raspberry Pi post-reboot canary', () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /picogallery-kiosk\.service is not active/);
     assert.match(result.stderr, /CANARY FAILED/);
+  });
+
+  it('supports --server-only flag to bypass display/input checks', () => {
+    const f = fixture();
+    rmSync(join(f.dev, 'dri/card0'));
+    writeFileSync(join(f.proc, 'bus/input/devices'), '');
+
+    const result = runCanary(f, {}, ['--server-only']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /CANARY PASSED/);
+  });
+
+  it('fails when conflicting legacy systemd services exist in /etc', () => {
+    const f = fixture();
+    writeFileSync(join(f.etc, 'systemd/system/photoprism-kiosk.service'), '');
+    const result = runCanary(f);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /conflicting legacy kiosk unit exists: photoprism-kiosk\.service/);
   });
 });

@@ -541,7 +541,12 @@ function restoreTopRowsIfNeeded() {
   const rowsRestored = Math.ceil(restoreCount / ncol);
   insertPhotoCards(state.photos.slice(start, gridWindow.startIndex), start, false);
   gridWindow.startIndex = start;
-  gridWindow.topSpacerPx = Math.max(0, gridWindow.topSpacerPx - rowsRestored * rowHeight);
+  if (gridWindow.startIndex <= 0) {
+    gridWindow.startIndex = 0;
+    gridWindow.topSpacerPx = 0;
+  } else {
+    gridWindow.topSpacerPx = Math.max(0, gridWindow.topSpacerPx - rowsRestored * rowHeight);
+  }
   updateTopSpacer();
   pruneBottomRowsIfNeeded();
 }
@@ -550,7 +555,9 @@ function scheduleRestoreTopRows() {
   if (restorePending || gridWindow.startIndex <= 0 || isPreviewOpen()) {
     return;
   }
-  if (Date.now() < pruneCooldownUntil) {
+  const remainingCooldown = pruneCooldownUntil - Date.now();
+  if (remainingCooldown > 0) {
+    setTimeout(scheduleRestoreTopRows, remainingCooldown + 10);
     return;
   }
   if (window.scrollY > gridWindow.topSpacerPx + 250) {
@@ -903,6 +910,9 @@ function markScrolling() {
     if (scrollState.prunePending) {
       scrollState.prunePending = false;
       runPruneTopRows();
+    }
+    if (gridWindow.startIndex > 0 && window.scrollY <= gridWindow.topSpacerPx + 250) {
+      scheduleRestoreTopRows();
     }
     scheduleBottomLoadCheck();
   }, getKiosk().scrollIdleMs);

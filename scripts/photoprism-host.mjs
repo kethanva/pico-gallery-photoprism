@@ -9,7 +9,7 @@ import { buildKioskConfig } from './kiosk-config.mjs';
 import { loadPicoConfig, selectPhotoPrismSource } from './config-loader.mjs';
 import http from 'node:http';
 import https from 'node:https';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual, createHash } from 'node:crypto';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join, dirname, normalize, extname, resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -274,9 +274,10 @@ const ALLOWED_API_ROUTES = [
 ];
 
 function safeEqual(left, right) {
-  const a = Buffer.from(String(left || ''));
-  const b = Buffer.from(String(right || ''));
-  return a.length === b.length && a.length > 0 && timingSafeEqual(a, b);
+  if (!left || !right) return false;
+  const h1 = createHash('sha256').update(String(left)).digest();
+  const h2 = createHash('sha256').update(String(right)).digest();
+  return timingSafeEqual(h1, h2);
 }
 
 function requestToken(req) {
@@ -417,6 +418,18 @@ async function proxyRequest(req, res) {
     target,
     { method: req.method, headers, rejectUnauthorized, agent: keepAliveAgent },
     (up) => {
+      up.on('error', (err) => {
+        metrics.upstreamErrors += 1;
+        const code = err.code || err.message;
+        console.error(`[proxy] ${req.method} ${req.url} response stream error: ${code}`);
+        if (res.headersSent) {
+          res.destroy(err);
+          return;
+        }
+        res.writeHead(502, { 'content-type': 'text/plain' });
+        res.end('Bad gateway');
+      });
+
       if (sessionId && (up.statusCode === 401 || up.statusCode === 403)) {
         if (activeSessionId === sessionId) {
           console.log(`[proxy] session expired (HTTP ${up.statusCode}), clearing active session`);

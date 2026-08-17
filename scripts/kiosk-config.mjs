@@ -23,7 +23,7 @@ export function resolveKioskConfig(input = {}) {
 }
 
 function readTomlValue(body, key) {
-  const str = body.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]+)"`, 'm'));
+  const str = body.match(new RegExp(`^\\s*${key}\\s*=\\s*["']([^"']+)["']`, 'm'));
   if (str) {
     return str[1];
   }

@@ -38,4 +38,40 @@ describe('dependency audit exception', () => {
     ]);
     assert.equal(unwaivedVulnerabilities(report, ['1.1.16']).some((item) => item.name === 'brace-expansion'), true);
   });
+
+  it('does not waive packages with direct non-brace advisory objects', () => {
+    const report = {
+      vulnerabilities: {
+        'brace-expansion': { name: 'brace-expansion', severity: 'high', via: braceVia },
+        minimatch: {
+          name: 'minimatch',
+          severity: 'high',
+          via: [
+            'brace-expansion',
+            { url: 'https://github.com/advisories/GHSA-unrelated-advisory' },
+          ],
+        },
+      },
+    };
+    const unpatched = unwaivedVulnerabilities(report, ['1.1.18']);
+    assert.deepEqual(unpatched, [{ name: 'minimatch', severity: 'high' }]);
+  });
+
+  it('filters out vulnerabilities below minimumSeverity threshold', () => {
+    const report = {
+      vulnerabilities: {
+        lowVuln: { name: 'lowVuln', severity: 'low', via: [{ url: 'https://example.com' }] },
+        modVuln: { name: 'modVuln', severity: 'moderate', via: [{ url: 'https://example.com' }] },
+        highVuln: { name: 'highVuln', severity: 'high', via: [{ url: 'https://example.com' }] },
+      },
+    };
+    const highOnly = unwaivedVulnerabilities(report, [], 'high');
+    assert.deepEqual(highOnly, [{ name: 'highVuln', severity: 'high' }]);
+
+    const modAndAbove = unwaivedVulnerabilities(report, [], 'moderate');
+    assert.deepEqual(modAndAbove, [
+      { name: 'modVuln', severity: 'moderate' },
+      { name: 'highVuln', severity: 'high' },
+    ]);
+  });
 });
