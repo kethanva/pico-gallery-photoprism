@@ -19,15 +19,15 @@ can make a copied change count stale.
 
 ## Release integrity work
 
-- [ ] **Commit the runtime changes atomically.** The working tree contains the
+- [x] **Commit the runtime changes atomically.** The working tree contains the
       host hardening, strict config loader, security audit, installer/kiosk tools,
       tests, and rebuilt frontend assets. Stage the dependent source, package-lock,
       test, and generated-bundle changes together; a partial commit can create a
       tree that no longer installs or builds.
-- [ ] **Complete the root-to-`scripts/` diagnostic move atomically.** The root
+- [x] **Complete the root-to-`scripts/` diagnostic move atomically.** The root
       copy of `pi-e2e-diagnose.sh` is deleted and the shipped copy is under
       `scripts/`; stage both sides of the move.
-- [ ] **Commit rebuilt frontend bundles with their manifest.** `assets.json`
+- [x] **Commit rebuilt frontend bundles with their manifest.** `assets.json`
       must resolve every generated `app.js`, `app.css`, and share asset in the same
       commit, and CI must continue to enforce reproducibility.
 - [x] Documentation topology and required root files reconciled (2026-08-08):
@@ -37,7 +37,7 @@ can make a copied change count stale.
 
 ## Open items
 
-- [ ] **`frontend/` is a vendored PhotoPrism fork with no recorded provenance.** Nothing in the repo states which upstream commit it was taken from, what was changed, or how to re-sync. Add a `frontend/NOTICE`-adjacent provenance note (upstream ref + list of local modifications) — without it, a security patch upstream cannot be applied with any confidence.
+- [x] **`frontend/` provenance recorded (2026-08-17).** Added `frontend/PROVENANCE.md` detailing upstream origins, first-party custom entrypoints, and maintenance/re-sync procedures.
 - [x] **`frontend/AGENTS.md` guidance clarification (2026-08-17).** Added a prominent vendored-upstream banner to direct agents to the root `AGENTS.md`.
 - [x] **Zero-byte placeholder files removed (2026-08-17).** Removed `PhotoPrism`, `pages`, `slideshow`, `thumbnails`.
 - [x] **Obsolete `OPTIMIZATIONS.md` archived (2026-08-08).** It described the
