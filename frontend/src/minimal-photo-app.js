@@ -892,15 +892,45 @@ function markScrolling() {
   }, getKiosk().scrollIdleMs);
 }
 
+function advanceGridOrLoadMore() {
+  if (isPreviewOpen()) {
+    return;
+  }
+  const grid = state.elements.grid;
+  if (!grid) {
+    return;
+  }
+  const cardNodes = grid.querySelectorAll(".pg-card");
+  const currentEnd = gridWindow.startIndex + cardNodes.length;
+  if (currentEnd < state.photos.length) {
+    const ncol = getColumnCount();
+    const batch = Math.min(ncol * getKiosk().restoreRowBatch, state.photos.length - currentEnd);
+    const photosToInsert = state.photos.slice(currentEnd, currentEnd + batch);
+    insertPhotoCards(photosToInsert, currentEnd, true);
+    schedulePruneTopRows();
+    scheduleBottomLoadCheck();
+    return;
+  }
+  if (!state.loading && !state.done) {
+    loadMore();
+  }
+}
+
 function requestLoadMore() {
-  if (state.loading || state.done || isPreviewOpen()) {
+  if (state.loading || isPreviewOpen()) {
+    return;
+  }
+  const grid = state.elements.grid;
+  const cardNodes = grid ? grid.querySelectorAll(".pg-card") : [];
+  const currentEnd = gridWindow.startIndex + cardNodes.length;
+  if (state.done && currentEnd >= state.photos.length) {
     return;
   }
   if (scrollState.active) {
     scrollState.loadPending = true;
     return;
   }
-  loadMore();
+  advanceGridOrLoadMore();
 }
 
 function isBottomSentinelNearViewport() {
@@ -921,7 +951,13 @@ function refreshBottomObserver() {
 }
 
 function ensureMoreIfBottomVisible() {
-  if (state.loading || state.done || isPreviewOpen()) {
+  if (state.loading || isPreviewOpen()) {
+    return;
+  }
+  const grid = state.elements.grid;
+  const cardNodes = grid ? grid.querySelectorAll(".pg-card") : [];
+  const currentEnd = gridWindow.startIndex + cardNodes.length;
+  if (state.done && currentEnd >= state.photos.length) {
     return;
   }
   if (isBottomSentinelNearViewport()) {
@@ -995,8 +1031,13 @@ function maybeScheduleBackgroundFill(loadedOk = true) {
 function appendPhotos(rows) {
   const baseIndex = state.photos.length;
   state.photos.push(...rows);
-  insertPhotoCards(rows, baseIndex, true);
-  schedulePruneTopRows();
+  const grid = state.elements.grid;
+  const cardNodes = grid ? grid.querySelectorAll(".pg-card") : [];
+  const currentEnd = gridWindow.startIndex + cardNodes.length;
+  if (currentEnd === baseIndex) {
+    insertPhotoCards(rows, baseIndex, true);
+    schedulePruneTopRows();
+  }
 }
 
 function renderState() {

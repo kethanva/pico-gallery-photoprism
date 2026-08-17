@@ -1,4 +1,8 @@
-# Frontend Guidelines
+# Frontend Guidelines (Vendored PhotoPrism Upstream Guidance)
+
+> [!WARNING]
+> **VENDORED UPSTREAM GUIDANCE:** This document describes upstream PhotoPrism's full Go/Makefile build environment (`make build-js`, `assets/templates/*.gohtml`, etc.), which does **NOT** exist in PicoGallery.
+> In PicoGallery, the single source of truth for coding agents is [`/AGENTS.md`](../AGENTS.md). First-party display code lives in `frontend/src/minimal-photo-app.js` and `frontend/src/kiosk-config.js`. Build via `./run.sh build` or `(cd frontend && npm run build)`.
 
 **Last Updated:** June 10, 2026
 

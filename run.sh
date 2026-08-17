@@ -80,8 +80,8 @@ cmd_test() {
 }
 
 cmd_clean() {
-  rm -rf node_modules frontend/node_modules frontend/dist
-  echo "✓ Cleaned"
+  rm -rf node_modules frontend/node_modules
+  echo "✓ Cleaned node_modules (tracked frontend/dist preserved)"
 }
 
 cmd_photoprism() {
@@ -160,7 +160,7 @@ case "${1:-}" in
     echo "  photoprism [backend]  Serve PhotoPrism UI + proxy /api/v1"
     echo "  kiosk [url]           Open the UI (Cog+Cage on Pi, browser elsewhere)"
     echo "  appliance [backend]   Host + kiosk together (end-to-end mimic)"
-    echo "  clean                 Remove node_modules and frontend/dist"
+    echo "  clean                 Remove node_modules (preserves frontend/dist)"
     exit 1
     ;;
 esac

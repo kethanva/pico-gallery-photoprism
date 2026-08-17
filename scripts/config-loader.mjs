@@ -64,7 +64,7 @@ export function parsePicoConfig(raw) {
     const arrayTable = line.match(/^\[\[([A-Za-z0-9_.-]+)\]\]$/);
     if (arrayTable) {
       const key = arrayTable[1];
-      if (key === '__proto__' || key === 'constructor') throw new Error(`prototype pollution vector blocked on line ${lineNumber}`);
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error(`prototype pollution vector blocked on line ${lineNumber}`);
       if (key.includes('.')) throw new Error(`nested array tables are not supported on line ${lineNumber}`);
       if (!result[key]) result[key] = [];
       if (!Array.isArray(result[key])) throw new Error(`table ${key} is already defined`);
@@ -78,7 +78,7 @@ export function parsePicoConfig(raw) {
       const parts = namedTable[1].split('.');
       table = result;
       for (const part of parts) {
-        if (part === '__proto__' || part === 'constructor') throw new Error(`prototype pollution vector blocked on line ${lineNumber}`);
+        if (part === '__proto__' || part === 'constructor' || part === 'prototype') throw new Error(`prototype pollution vector blocked on line ${lineNumber}`);
         if (!table[part]) table[part] = {};
         if (typeof table[part] !== 'object' || Array.isArray(table[part])) {
           throw new Error(`table ${namedTable[1]} conflicts with an existing value`);
@@ -90,10 +90,12 @@ export function parsePicoConfig(raw) {
 
     const assignment = line.match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/);
     if (!assignment) throw new Error(`invalid TOML syntax on line ${lineNumber}`);
-    if (Object.hasOwn(table, assignment[1])) {
-      throw new Error(`duplicate key ${assignment[1]} on line ${lineNumber}`);
+    const key = assignment[1];
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') throw new Error(`prototype pollution vector blocked on line ${lineNumber}`);
+    if (Object.hasOwn(table, key)) {
+      throw new Error(`duplicate key ${key} on line ${lineNumber}`);
     }
-    table[assignment[1]] = parseValue(assignment[2], lineNumber);
+    table[key] = parseValue(assignment[2], lineNumber);
   }
   return result;
 }

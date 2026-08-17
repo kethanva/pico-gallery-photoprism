@@ -301,6 +301,9 @@ preflight() {
   fi
 
   mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
+  if [[ -f "$LOG_FILE" ]] && (( $(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null || echo 0) > 2097152 )); then
+    mv -f "$LOG_FILE" "${LOG_FILE}.1" 2>/dev/null || true
+  fi
   : >>"$LOG_FILE" 2>/dev/null || true
   info "Logging to $LOG_FILE"
 

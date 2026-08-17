@@ -51,4 +51,13 @@ describe('structural PicoGallery config loader', () => {
       name = "photoprism"
     `)), /multiple enabled/);
   });
+
+  it('rejects prototype pollution vectors across tables and keys', () => {
+    assert.throws(() => parsePicoConfig('__proto__ = "polluted"'), /prototype pollution vector blocked/);
+    assert.throws(() => parsePicoConfig('prototype = "polluted"'), /prototype pollution vector blocked/);
+    assert.throws(() => parsePicoConfig('constructor = "polluted"'), /prototype pollution vector blocked/);
+    assert.throws(() => parsePicoConfig('[__proto__]\npolluted = true'), /prototype pollution vector blocked/);
+    assert.throws(() => parsePicoConfig('[safe.__proto__]\npolluted = true'), /prototype pollution vector blocked/);
+    assert.throws(() => parsePicoConfig('[[__proto__]]\npolluted = true'), /prototype pollution vector blocked/);
+  });
 });

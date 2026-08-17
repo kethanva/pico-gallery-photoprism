@@ -38,19 +38,18 @@ can make a copied change count stale.
 ## Open items
 
 - [ ] **`frontend/` is a vendored PhotoPrism fork with no recorded provenance.** Nothing in the repo states which upstream commit it was taken from, what was changed, or how to re-sync. Add a `frontend/NOTICE`-adjacent provenance note (upstream ref + list of local modifications) — without it, a security patch upstream cannot be applied with any confidence.
-- [ ] **`frontend/AGENTS.md` is upstream's and actively misleading** here: it points at `make build-js`, `assets/templates/*.gohtml`, TestCafe acceptance targets, and gettext extraction, none of which exist in this repo's root. Either prefix it with a "this is vendored upstream guidance" banner or delete it, so agents stop following it.
-- [ ] **Zero-byte placeholder files at repo root**: `PhotoPrism`, `pages`, `slideshow`, `thumbnails`. All 0 bytes, all committed, all apparently accidental. Confirm and remove.
+- [x] **`frontend/AGENTS.md` guidance clarification (2026-08-17).** Added a prominent vendored-upstream banner to direct agents to the root `AGENTS.md`.
+- [x] **Zero-byte placeholder files removed (2026-08-17).** Removed `PhotoPrism`, `pages`, `slideshow`, `thumbnails`.
 - [x] **Obsolete `OPTIMIZATIONS.md` archived (2026-08-08).** It described the
       superseded Fastify/sharp architecture and now lives with historical designs.
-- [ ] **Review `diff.patch` (35K).** It is not documentation; determine whether
-      it contains any unlanded change before removing it.
+- [x] **Reviewed and removed `diff.patch` (2026-08-17).** Checked that changes are already merged.
 - [x] **Unfilled scaffolding templates deleted** (2026-08-06). `plans/plan.md` and `plans/spec.md` were pure `[bracketed placeholder]` templates with zero project content, and untracked. This file and `spec.md` at root are now the single answer to "where is the plan".
 - [x] **Historical plans consolidated (2026-08-08).** The former `plan/` and
       `plans/` trees now live in `docs/archive/design-plans/` with a status index;
       root `plan.md` is the only active plan.
 - [ ] **No coverage measurement.** The test suites exercise the route allowlist
       and token exchange, but CI does not publish a coverage threshold or report.
-- [ ] **No log rotation story for `/var/log/picogallery-install.log`.** It grows across every upgrade.
+- [x] **Log rotation added for `/var/log/picogallery-install.log` (2026-08-17).** Rotates at 2MB in `install.sh`.
 
 ## Verification
 
