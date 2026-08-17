@@ -9,6 +9,7 @@ Cmnd_Alias PICO_KIOSK = \
     /usr/bin/systemctl restart picogallery-kiosk.service, \
     /usr/bin/systemctl stop picogallery-kiosk.service, \
     /usr/bin/systemctl start picogallery-kiosk.service, \
+    /usr/bin/systemctl restart picogallery-photoprism.service, \
     /usr/bin/systemctl restart picogallery.service, \
     /sbin/reboot, \
     /sbin/poweroff

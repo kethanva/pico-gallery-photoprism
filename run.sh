@@ -32,16 +32,16 @@ pick_node() {
     major="$(node -e 'process.stdout.write(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
     if [ "$major" -ge 22 ]; then return 0; fi
   fi
-  for nvmdir in "$HOME/.nvm/versions/node"/v22.*/bin; do
+  for nvmdir in "$HOME/.nvm/versions/node"/v2[2-9].*/bin; do
     if [ -x "$nvmdir/node" ]; then
-      export PATH="$nvmdir:$PATH"
-      return 0
+      local major; major="$("$nvmdir/node" -e 'process.stdout.write(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
+      if [ "$major" -ge 22 ]; then export PATH="$nvmdir:$PATH"; return 0; fi
     fi
   done
   for d in /opt/homebrew/opt/node*/bin /usr/local/opt/node*/bin; do
     if [ -x "$d/node" ]; then
-      export PATH="$d:$PATH"
-      return 0
+      local major; major="$("$d/node" -e 'process.stdout.write(process.versions.node.split(".")[0])' 2>/dev/null || echo 0)"
+      if [ "$major" -ge 22 ]; then export PATH="$d:$PATH"; return 0; fi
     fi
   done
   echo "ERROR: Node 22+ required. Install via nvm: nvm install 22" >&2
@@ -75,7 +75,7 @@ cmd_build() {
 }
 
 cmd_test() {
-  TZ=UTC node --test tests/**/*.test.mjs
+  TZ=UTC node --test 'tests/**/*.test.mjs'
   (cd frontend && npm run test)
 }
 
@@ -110,7 +110,8 @@ cmd_kiosk() {
   if [ "$os" = "Linux" ] && command -v cage >/dev/null 2>&1 && command -v cog >/dev/null 2>&1; then
     echo "Launching Cog+Cage kiosk → $url"
     PICO_KIOSK_ENV="${PICO_KIOSK_ENV:-/etc/picogallery/kiosk.env}" \
-      FRAME_URL="$url" exec "$ROOT/kiosk/cog/picogallery-kiosk.sh"
+      FRAME_URL="$url" "$ROOT/kiosk/cog/picogallery-kiosk.sh"
+    return
   fi
   if [ "$os" = "Darwin" ]; then
     echo "macOS: Cog+Cage is Linux-only. Opening PhotoPrism UI in your browser → $url"

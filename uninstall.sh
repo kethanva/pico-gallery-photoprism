@@ -210,6 +210,7 @@ fi
 # 8. Boot Config additions and backups
 info "Restoring boot configuration backups or reverting appended settings..."
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
+  [[ -L "$cfg" ]] && continue
   if [[ -f "$cfg.picogallery.bak" ]]; then
     # USB host-mode guard saved a full backup before editing — restoring it also
     # reverts any KMS/gpu_mem block we appended to the same file.

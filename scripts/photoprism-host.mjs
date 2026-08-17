@@ -38,7 +38,7 @@ try {
 }
 const PORT = Number(process.env.PICO_PP_PORT || loadedConfig.config?.http?.port || 8190);
 const HOST = process.env.PICO_PP_HOST || loadedConfig.config?.http?.host || '127.0.0.1';
-const GATEWAY_TOKEN = process.env.PICO_PP_AUTH_TOKEN || loadedConfig.config?.http?.auth_token || '';
+const GATEWAY_TOKEN = String(process.env.PICO_PP_AUTH_TOKEN || loadedConfig.config?.http?.auth_token || '');
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
 
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
@@ -184,6 +184,7 @@ function fetchSession() {
           reject(new Error(`PhotoPrism login failed with HTTP ${res.statusCode}`));
         }
       });
+      res.on('error', reject);
     });
     req.on('error', reject);
     req.setTimeout(10000, () => req.destroy(new Error('ETIMEDOUT')));
@@ -454,6 +455,9 @@ async function proxyRequest(req, res) {
           out = rewriteAuthPayload(target.pathname, body);
         } catch (e) {
           console.warn(`[proxy] config rewrite failed for ${target.pathname}: ${e.message}`);
+          res.writeHead(502, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ error: 'failed to rewrite configuration' }));
+          return;
         }
         const outHeaders = stripHopByHop(up.headers);
         delete outHeaders['content-length'];
@@ -468,7 +472,11 @@ async function proxyRequest(req, res) {
     metrics.upstreamErrors += 1;
     const code = err.code || err.message;
     console.error(`[proxy] ${req.method} ${req.url} → ${backend.origin} FAILED: ${code}`);
-    if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' });
+    if (res.headersSent) {
+      res.destroy(err);
+      return;
+    }
+    res.writeHead(502, { 'content-type': 'text/plain' });
     res.end('Bad gateway');
   });
   upstream.setTimeout(15000, () => upstream.destroy(new Error('ETIMEDOUT')));
@@ -572,7 +580,11 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (parsedUrl.pathname.startsWith('/api/')) {
-    proxyRequest(req, res);
+    proxyRequest(req, res).catch((err) => {
+      log('error', 'proxy_unhandled_error', { message: err.message });
+      if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' });
+      res.end('Internal server error');
+    });
   } else {
     serveStatic(req, res);
   }
@@ -580,6 +592,12 @@ const server = http.createServer((req, res) => {
 
 const configuredProbeMs = Number(process.env.PICO_PP_PROBE_MS || 15000);
 const PROBE_RETRY_MS = Number.isFinite(configuredProbeMs) && configuredProbeMs >= 50 ? configuredProbeMs : 15000;
+let probeTimer = null;
+
+function scheduleNextProbe(ms = PROBE_RETRY_MS) {
+  if (probeTimer) clearTimeout(probeTimer);
+  probeTimer = setTimeout(probeBackend, ms).unref();
+}
 
 async function probeBackend() {
   const target = new URL('/api/v1/config', backend);
@@ -588,7 +606,7 @@ async function probeBackend() {
     sessionId = await getSessionId();
   } catch {
     readiness = { ok: false, checkedAt: Date.now(), reason: 'authentication_failed' };
-    setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+    scheduleNextProbe();
     return;
   }
   const headers = { host: backend.host };
@@ -612,14 +630,17 @@ async function probeBackend() {
       up.on('error', (error) => {
         readiness = { ok: false, checkedAt: Date.now(), reason: tooLarge ? 'upstream_response_too_large' : 'upstream_response_error' };
         log('warn', 'readiness_probe_failed', { message: error.message });
-        setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+        scheduleNextProbe();
       });
       up.on('end', () => {
         if ((up.statusCode || 0) < 200 || (up.statusCode || 0) >= 300) {
+          if (up.statusCode === 401 || up.statusCode === 403) {
+            activeSessionId = null;
+          }
           backendMode = null;
           readiness = { ok: false, checkedAt: Date.now(), reason: `upstream_http_${up.statusCode}` };
           console.error(`  probe:    GET ${target.href} → HTTP ${up.statusCode} ✗ (retry in ${PROBE_RETRY_MS / 1000}s)`);
-          setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+          scheduleNextProbe();
           return;
         }
         let parsed;
@@ -628,26 +649,26 @@ async function probeBackend() {
         } catch {
           backendMode = null;
           readiness = { ok: false, checkedAt: Date.now(), reason: 'invalid_upstream_config' };
-          setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+          scheduleNextProbe();
           return;
         }
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           backendMode = null;
           readiness = { ok: false, checkedAt: Date.now(), reason: 'invalid_upstream_config' };
-          setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+          scheduleNextProbe();
           return;
         }
         backendMode = typeof parsed.mode === 'string' && parsed.mode ? parsed.mode : 'unknown';
         readiness = { ok: true, checkedAt: Date.now(), reason: `upstream mode ${backendMode}` };
         console.log(`  probe:    GET ${target.href} → HTTP ${up.statusCode} (mode: ${backendMode}) ✓`);
-        setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+        scheduleNextProbe();
       });
     },
   );
   req.on('error', (err) => {
     readiness = { ok: false, checkedAt: Date.now(), reason: 'upstream_unreachable' };
     console.error(`  probe:    GET ${target.href} → FAILED: ${err.code || err.message} ✗ (retry in ${PROBE_RETRY_MS / 1000}s)`);
-    setTimeout(probeBackend, PROBE_RETRY_MS).unref();
+    scheduleNextProbe();
   });
   req.setTimeout(8000, () => req.destroy(new Error('ETIMEDOUT')));
   req.end();

@@ -401,6 +401,7 @@ step_swap() {
         orig_size="$(grep -E '^#?CONF_SWAPSIZE=' /etc/dphys-swapfile 2>/dev/null | head -1 | cut -d= -f2 || true)"
         state_set DPHYS_ORIG_SWAPSIZE "${orig_size:-100}"
         run sed -i 's/^#\?CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+        run dphys-swapfile swapoff 2>/dev/null || true
         run dphys-swapfile setup
         run dphys-swapfile swapon
       fi
@@ -532,6 +533,7 @@ step_server_config() {
       # host now fails closed in that state, so migrate them before returning.
       local existing_host existing_token
       existing_host="$(awk '/^\[http\]/{in_http=1;next} /^\[/{in_http=0} in_http && /^host[[:space:]]*=/{line=$0; sub(/^[^=]*=[[:space:]]*\"/,"",line); sub(/\".*/,"",line); print line; exit}' "$cfg")"
+      existing_host="${existing_host:-127.0.0.1}"
       existing_token="$(awk '/^\[http\]/{in_http=1;next} /^\[/{in_http=0} in_http && /^auth_token[[:space:]]*=/{sub(/^[^=]*=[[:space:]]*\"/,""); sub(/\"[[:space:]]*$/,""); print; exit}' "$cfg")"
       if [[ "$existing_host" != "127.0.0.1" && "$existing_host" != "::1" && "$existing_host" != "localhost" ]] && [[ ${#existing_token} -lt 24 ]]; then
         local generated_token
@@ -644,7 +646,7 @@ step_server_user() {
     cp -a "$REPO_ROOT/config/." "$RUNTIME_DIR/config/"
     cp -a "$REPO_ROOT/frontend/index.html" "$REPO_ROOT/frontend/static" "$REPO_ROOT/frontend/dist" "$RUNTIME_DIR/frontend/"
     chown -R root:root "$RUNTIME_DIR"
-    chmod -R go-w "$RUNTIME_DIR"
+    chmod -R u=rwX,go=rX "$RUNTIME_DIR"
   fi
 
   run install -d -o "$RUN_USER" -g "$RUN_GROUP" -m 0750 "$CACHE_DIR"
@@ -787,7 +789,7 @@ step_usb_host_mode() {
   step "USB host-mode guard (keyboard/mouse enumeration)"
   local cfg fixed=0
   for cfg in /boot/firmware/config.txt /boot/config.txt; do
-    [[ -f "$cfg" ]] || continue
+    [[ -f "$cfg" && ! -L "$cfg" ]] || continue
     # dtoverlay=dwc2 without an explicit dr_mode forces the port out of host mode
     # (its default is peripheral/otg on most kernels). Pin it to host.
     if grep -Eq '^\s*dtoverlay=dwc2\s*$|^\s*dtoverlay=dwc2,dr_mode=(peripheral|otg)' "$cfg"; then
@@ -1066,7 +1068,7 @@ step_verify() {
 
       # Appliance contract 1: with credentials configured, the proxy must
       # masquerade the config as public or the SPA bounces to the login screen.
-      if grep -Eq 'password[[:space:]]*=[[:space:]]*"[^"]+"' "$CONFIG_DIR/config.toml" 2>/dev/null; then
+      if grep -Eq '(^|[[:space:]_])password[[:space:]]*=[[:space:]]*"[^"]+"' "$CONFIG_DIR/config.toml" 2>/dev/null; then
         if curl -fsS --max-time 5 "http://localhost:8190/api/v1/config" 2>/dev/null | grep -q '"mode":"public"'; then
           ok "proxy masquerades config as public (no login screen on the kiosk)"
         else

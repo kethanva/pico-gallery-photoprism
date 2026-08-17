@@ -31,7 +31,7 @@ function parseValue(raw, lineNumber) {
       throw new Error(`invalid quoted string on line ${lineNumber}`);
     }
   }
-  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
   if (value.startsWith('[') && value.endsWith(']')) {
     try {
       const parsed = JSON.parse(value.replace(/,\s*]/, ']'));

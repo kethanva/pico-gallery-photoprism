@@ -8,7 +8,7 @@ const contentUri = config.contentUri || apiUri;
 const previewToken = () => window.__CONFIG__?.previewToken || config.previewToken || "public";
 const DOUBLE_CLICK_MS = 400;
 const SWIPE_MIN_PX = 48;
-const BOTTOM_ROOT_MARGIN_PX = 200;
+const BOTTOM_ROOT_MARGIN_PX = 80;
 const LOAD_TIMEOUT_MS = 15000;
 
 let resolvedKiosk = null;
@@ -365,25 +365,37 @@ function getColumnCount() {
   if (gridMetrics.columnCount > 0) {
     return gridMetrics.columnCount;
   }
-  const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
-  if (!template || template === "none") {
-    gridMetrics.columnCount = 1;
+  if (!state.elements.grid) {
     return 1;
   }
-  gridMetrics.columnCount = template.split(" ").filter(Boolean).length;
-  return gridMetrics.columnCount;
+  const template = getComputedStyle(state.elements.grid).gridTemplateColumns;
+  if (!template || template === "none") {
+    return 1;
+  }
+  const cols = template.split(" ").filter(Boolean).length;
+  if (cols > 0 && !isPreviewOpen()) {
+    gridMetrics.columnCount = cols;
+  }
+  return cols || 1;
 }
 
 function measureRowHeight() {
   if (gridMetrics.rowHeight > 0) {
     return gridMetrics.rowHeight;
   }
+  if (!state.elements.grid || isPreviewOpen()) {
+    return 128;
+  }
   const card = state.elements.grid.querySelector(".pg-card");
   if (!card) {
     return 128;
   }
+  const rect = card.getBoundingClientRect();
+  if (rect.height <= 0) {
+    return 128;
+  }
   const gap = parseFloat(getComputedStyle(state.elements.grid).rowGap) || 8;
-  gridMetrics.rowHeight = card.getBoundingClientRect().height + gap;
+  gridMetrics.rowHeight = rect.height + gap;
   return gridMetrics.rowHeight;
 }
 
@@ -438,7 +450,9 @@ function insertPhotoCards(photos, startIndex, atEnd) {
       state.elements.topSentinel.after(frag);
     }
   }
-  prefetchThumbUrls(photos.map(photoThumbSrc));
+  if (gridImagesSuspended) {
+    prefetchThumbUrls(photos.map(photoThumbSrc));
+  }
 }
 
 function removeCardNode(card) {
@@ -476,9 +490,6 @@ function pruneTopRowsIfNeeded() {
   const spacerDelta = rowsToRemove * rowHeight;
   gridWindow.topSpacerPx += spacerDelta;
   updateTopSpacer();
-  if (!isPreviewOpen()) {
-    window.scrollBy(0, -spacerDelta);
-  }
   pruneCooldownUntil = Date.now() + getKiosk().pruneCooldownMs;
 }
 
@@ -532,17 +543,17 @@ function restoreTopRowsIfNeeded() {
   gridWindow.startIndex = start;
   gridWindow.topSpacerPx = Math.max(0, gridWindow.topSpacerPx - rowsRestored * rowHeight);
   updateTopSpacer();
-  if (!isPreviewOpen()) {
-    window.scrollBy(0, rowsRestored * rowHeight);
-  }
   pruneBottomRowsIfNeeded();
 }
 
 function scheduleRestoreTopRows() {
-  if (restorePending || gridWindow.startIndex <= 0) {
+  if (restorePending || gridWindow.startIndex <= 0 || isPreviewOpen()) {
     return;
   }
   if (Date.now() < pruneCooldownUntil) {
+    return;
+  }
+  if (window.scrollY > gridWindow.topSpacerPx + 250) {
     return;
   }
   restorePending = true;
@@ -688,6 +699,7 @@ function resumeGridImages() {
 }
 
 function closePreview() {
+  const lastIndex = state.previewIndex;
   state.previewIndex = -1;
   state.elements.overlay?.classList.remove("is-open");
   cancelSlidePrefetch();
@@ -708,6 +720,10 @@ function closePreview() {
   scheduleBottomLoadCheck();
   renderState();
   $fullscreen.exit().catch(() => {});
+  if (lastIndex >= 0 && state.elements.grid) {
+    const targetCard = state.elements.grid.querySelector(`.pg-card[data-photo-index="${lastIndex}"]`);
+    targetCard?.focus?.({ preventScroll: true });
+  }
 }
 
 function cancelSlidePrefetch() {
@@ -813,7 +829,7 @@ function showPreviewAt(index, options = {}) {
     !state.done &&
     !state.loading
   ) {
-    requestLoadMore();
+    loadMore();
   } else if (
     slideshow.active &&
     index >= state.photos.length - 2 &&
@@ -1198,6 +1214,7 @@ function resetRuntimeState() {
 }
 
 function resetAndReload() {
+  window.scrollTo(0, 0);
   resetRuntimeState();
   kioskBootPending = false;
   if (state.elements.grid) {
@@ -1283,10 +1300,13 @@ function onContextMenu(ev) {
   }
 }
 
+let touchSwiped = false;
+
 function onTouchStart(ev) {
   if (!isPreviewOpen() || !ev.changedTouches?.length) {
     return;
   }
+  touchSwiped = false;
   const t = ev.changedTouches[0];
   touch.x = t.clientX;
   touch.y = t.clientY;
@@ -1302,6 +1322,7 @@ function onTouchEnd(ev) {
   if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy)) {
     return;
   }
+  touchSwiped = true;
   if (dx < 0) {
     previewNext();
   } else {
@@ -1353,8 +1374,8 @@ function buildUi(root) {
   const preview = el("img", "pg-preview");
   preview.decoding = "async";
   preview.loading = "eager";
-  preview.addEventListener("touchstart", onTouchStart, { passive: true });
-  preview.addEventListener("touchend", onTouchEnd, { passive: true });
+  overlay.addEventListener("touchstart", onTouchStart, { passive: true });
+  overlay.addEventListener("touchend", onTouchEnd, { passive: true });
 
   const chrome = el("div", "pg-overlay-chrome");
   const prevBtn = el("button", "pg-nav pg-nav-prev", "‹");
@@ -1377,6 +1398,10 @@ function buildUi(root) {
   chrome.append(prevBtn, nextBtn, counter, caption, close);
   overlay.append(preview, chrome);
   overlay.addEventListener("pointerup", (ev) => {
+    if (touchSwiped) {
+      touchSwiped = false;
+      return;
+    }
     if (ev.target === overlay) {
       closePreview();
     }
@@ -1435,7 +1460,7 @@ function setupInfiniteObservers() {
         scheduleRestoreTopRows();
       }
     },
-    { rootMargin: "120px 0px 0px 0px" }
+    { rootMargin: "40px 0px 0px 0px" }
   );
   state.topObserver.observe(state.elements.topSentinel);
 

@@ -14,15 +14,31 @@ set -euo pipefail
 ACTION="${1:?Usage: pico-display-power on|off}"
 
 turn_on() {
-  if command -v vcgencmd >/dev/null 2>&1 && vcgencmd display_power 1 >/dev/null 2>&1; then return 0; fi
-  if [ -f /sys/class/backlight/rpi_backlight/bl_power ]; then echo 0 >/sys/class/backlight/rpi_backlight/bl_power && return 0; fi
-  for dpms in /sys/class/drm/*/dpms; do [ -w "$dpms" ] && echo on >"$dpms"; done
+  if command -v vcgencmd >/dev/null 2>&1; then
+    local out; out="$(vcgencmd display_power 1 2>/dev/null || true)"
+    if [[ "$out" == "display_power=1" ]]; then return 0; fi
+  fi
+  if [ -f /sys/class/backlight/rpi_backlight/bl_power ]; then
+    echo 0 >/sys/class/backlight/rpi_backlight/bl_power 2>/dev/null && return 0 || true
+  fi
+  for dpms in /sys/class/drm/*/dpms; do
+    if [ -w "$dpms" ]; then echo on >"$dpms" 2>/dev/null || true; fi
+  done
+  return 0
 }
 
 turn_off() {
-  if command -v vcgencmd >/dev/null 2>&1 && vcgencmd display_power 0 >/dev/null 2>&1; then return 0; fi
-  if [ -f /sys/class/backlight/rpi_backlight/bl_power ]; then echo 1 >/sys/class/backlight/rpi_backlight/bl_power && return 0; fi
-  for dpms in /sys/class/drm/*/dpms; do [ -w "$dpms" ] && echo off >"$dpms"; done
+  if command -v vcgencmd >/dev/null 2>&1; then
+    local out; out="$(vcgencmd display_power 0 2>/dev/null || true)"
+    if [[ "$out" == "display_power=0" ]]; then return 0; fi
+  fi
+  if [ -f /sys/class/backlight/rpi_backlight/bl_power ]; then
+    echo 1 >/sys/class/backlight/rpi_backlight/bl_power 2>/dev/null && return 0 || true
+  fi
+  for dpms in /sys/class/drm/*/dpms; do
+    if [ -w "$dpms" ]; then echo off >"$dpms" 2>/dev/null || true; fi
+  done
+  return 0
 }
 
 case "$ACTION" in

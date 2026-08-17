@@ -19,10 +19,11 @@
 set -euo pipefail
 
 ENV_FILE="${PICO_KIOSK_ENV:-/etc/picogallery/kiosk.env}"
+CALLER_FRAME_URL="${FRAME_URL:-}"
 # shellcheck disable=SC1090
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
 
-FRAME_URL="${FRAME_URL:-http://localhost:8190/library/photos}"
+FRAME_URL="${CALLER_FRAME_URL:-${FRAME_URL:-http://localhost:8190/library/photos}}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-120}"
 
 # Cage/WPE needs a writable XDG_RUNTIME_DIR for its Wayland socket. The systemd
